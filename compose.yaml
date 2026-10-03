@@ -1,0 +1,18 @@
+services:
+  assister:
+    build:
+      context: .
+      dockerfile: docker/Assister.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${ASSISTER_PORT:-8080}:8080"
+    volumes:
+      - assister-data:/data
+    environment:
+      Assister__DataPath: /data
+      HomeAssistant__Url: ${HOME_ASSISTANT_URL:-}
+      HomeAssistant__Token: ${HOME_ASSISTANT_TOKEN:-}
+      LanguageModel__BaseUrl: ${LLM_BASE_URL:-}
+      LanguageModel__ApiKey: ${LLM_API_KEY:-}
+volumes:
+  assister-data:
