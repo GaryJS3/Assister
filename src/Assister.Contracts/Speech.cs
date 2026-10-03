@@ -1,0 +1,18 @@
+namespace Assister.Contracts;
+
+public sealed record AudioChunk(ReadOnlyMemory<byte> Pcm, int SampleRate, int SampleWidth, int Channels);
+public sealed record SpeechToTextOptions(string Language = "en");
+public sealed record TextToSpeechOptions(string? Voice = null);
+public sealed record TranscriptionResult(string Text, string? Language);
+
+public interface ISpeechToTextProvider
+{
+    Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio,
+        SpeechToTextOptions Options, CancellationToken CancellationToken);
+}
+
+public interface ITextToSpeechProvider
+{
+    IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text,
+        TextToSpeechOptions Options, CancellationToken CancellationToken);
+}
