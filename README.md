@@ -15,6 +15,8 @@ The database defaults to `data/assister.db`. Environment variables override ASP.
 
 ## Docker / Dockhand
 
+Integration settings are listed in `.env.example` and mapped in `compose.yaml`. In Dockhand, add overrides using the names from `.env.example`: `STT_HOST`, `STT_PORT`, `STT_LANGUAGE`, `TTS_HOST`, `TTS_PORT`, `TTS_VOICE`, and `LLM_MODEL`, alongside the HA/LLM URL and credential settings. Mark credentials as secret. `ESPHOME_*` settings reserve configuration for the upcoming bridge; they are not consumed yet. Speech settings likewise prepare deployment configuration; the providers are not yet connected to the application pipeline. Adding settings does not activate these integrations.
+
 Build with `docker compose build`; start with `docker compose up -d`. The container runs as `app`, listens on 8080, and persists SQLite under `/data` in a named volume. Startup migrations run before serving requests. Run one replica.
 
 Target: Dockhand **Automation (8)**, host `auto@10.44.0.33`. Git stack: https://github.com/GaryJS3/Assister, branch `main`, compose file `compose.yaml`. Set secrets through Dockhand environment overrides. STT, TTS, LLM and Home Assistant remain external.

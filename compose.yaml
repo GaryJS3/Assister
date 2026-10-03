@@ -14,5 +14,18 @@ services:
       HomeAssistant__Token: ${HOME_ASSISTANT_TOKEN:-}
       LanguageModel__BaseUrl: ${LLM_BASE_URL:-}
       LanguageModel__ApiKey: ${LLM_API_KEY:-}
+      LanguageModel__Model: ${LLM_MODEL:-qwen}
+      SpeechToText__Host: ${STT_HOST:-}
+      SpeechToText__Port: ${STT_PORT:-10300}
+      SpeechToText__Language: ${STT_LANGUAGE:-en}
+      TextToSpeech__Host: ${TTS_HOST:-}
+      TextToSpeech__Port: ${TTS_PORT:-10200}
+      TextToSpeech__Voice: ${TTS_VOICE:-}
+      # Reserved until the satellite bridge is implemented.
+      EspHome__Host: ${ESPHOME_HOST:-}
+      EspHome__Port: ${ESPHOME_PORT:-6053}
+      EspHome__EncryptionKey: ${ESPHOME_ENCRYPTION_KEY:-}
+      EspHome__Name: ${ESPHOME_NAME:-}
+      EspHome__Area: ${ESPHOME_AREA:-}
 volumes:
   assister-data:
