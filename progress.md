@@ -124,3 +124,23 @@ no error, with voice ownership OwnedByAssister. The user confirmed that the LED 
 correctly and the audible reply was accurate. Successful request/playback/LED completion is
 physically verified. Cancellation LED cleanup is a separate check; deterministic brightness,
 media duck/resume, conflict and reboot remain pending.
+
+## Satellite diagnostics and hardening without device interaction
+
+Implemented and tested locally after the physical reply confirmation: request traces retain
+activation/wake word, provider arrival timestamp, transport/session identity and dispatch
+latency. Microphone traces include first audio arrival and source-channel metadata; bounded
+satellite microphone/playback events carry request trace IDs. Ownership/media events include
+meaningful observed values, and the satellite UI links correlated events directly to traces.
+The UI explains unavailable runtime wake-word configuration. Terminal exception results now
+include their transport session ID; repeated playback-start events are ignored.
+
+A new in-process gRPC test disconnects during capture, verifies cancellation and session
+cleanup, reconnects and verifies refreshed capabilities/unknown ownership. It also verifies
+secret redaction in activation traces, event history and the satellite API. A fake adapter test
+verifies retry delays 5/10/20/40/60/60 seconds and that cancellation stops retries. Strengthened
+existing transport tests verify ordered activation stages, durations, request/event correlation,
+and duplicate playback-start suppression. Validation: 63 unit tests, 9 C# integration tests
+and 12 adapter tests pass (84 total), JavaScript syntax and git diff --check pass.
+No device playback, ownership changes, restarts or physical tests were performed for this
+increment. These changes are not deployed; the running voice services remain revision ed8d918.

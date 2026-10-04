@@ -5,6 +5,11 @@ using Assister.Diagnostics;
 namespace Assister.Satellites;
 
 public sealed record SatelliteEvent(string Type, string? Text = null, Guid? SessionId = null, Guid? ConversationId = null);
+public sealed record VoiceActivation(string TransportSessionId, string? WakeWord, DateTimeOffset ReceivedAt);
+public interface IVoiceActivationContext
+{
+    VoiceActivation? Activation { get; }
+}
 public interface ISatelliteConnection
 {
     string SatelliteId { get; }
@@ -55,11 +60,11 @@ public sealed class SatelliteManager
         Runtime.AddOrUpdate(Id, _ => Apply(new()), (_, State) => Apply(State));
         SatelliteRuntimeState Apply(SatelliteRuntimeState State) => Seen ? Change(State) with { LastSeen = DateTimeOffset.UtcNow } : Change(State);
     }
-    public void Record(string Id, string Type, string? Detail = null, Guid? SessionId = null)
+    public void Record(string Id, string Type, string? Detail = null, Guid? SessionId = null, Guid? TraceId = null)
     {
         var Events = History.GetOrAdd(Id, _ => new());
         Events.Enqueue(new(DateTimeOffset.UtcNow, Sanitizer.Text(Type, 128), Detail is null ? null : Sanitizer.Text(Detail, 512),
-            SessionId, RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId));
+            SessionId, TraceId ?? (RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId)));
         while (Events.Count > 100) { Events.TryDequeue(out _); }
     }
     public SatelliteHistoryEvent[] Events(string Id) => History.TryGetValue(Id, out var Events) ? Events.ToArray() : [];

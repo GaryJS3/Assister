@@ -70,6 +70,8 @@ transcripts, routing/tool/model details and raw/spoken responses. Audio is not d
 | --- | --- |
 | Existing button/microphone → temperature → physical response | Prior deployment/user confirmation in progress.md; not a new wake test |
 | Authenticated gRPC microphone/WAV and duplicate/late event guards | Automated C# integration tests |
+| Disconnect during capture, fresh capabilities on reconnect, bounded retry delays | In-process gRPC and fake adapter tests; physical reboot remains pending |
+| Activation, microphone and playback trace correlation | Automated tests verify wake word, transport/session IDs, timestamps, durations, redaction and duplicate playback-start suppression |
 | Connection success vs voice conflict; wake proves ownership | Fake ESPHome/gRPC adapter tests |
 | Capabilities refresh and wake configuration/drift | Automated manager/configuration and adapter tests |
 | Announcements unsupported/busy/failing | Fake provider tests |

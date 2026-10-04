@@ -34,7 +34,7 @@ public sealed class SatelliteTransportTests
         using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
         Assert.Equal("registered", Call.ResponseStream.Current.Type);
-        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "transport-session" });
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "transport-session", WakeWord = "Hey Jarvis" });
         await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "transport-session" });
         await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "old-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
         await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "transport-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
@@ -61,6 +61,7 @@ public sealed class SatelliteTransportTests
                 Assert.False(BeforeStart.Metadata!.Value.TryGetProperty("playbackStartedAt", out _));
                 StartSentAt = DateTimeOffset.UtcNow;
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-started", PlaybackId = Id, SessionId = "transport-session" });
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-started", PlaybackId = Id, SessionId = "transport-session" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = Id, SessionId = "transport-session", Text = "succeeded" });
                 Assert.True(await Next);
                 Events.Add(Call.ResponseStream.Current);
@@ -73,6 +74,22 @@ public sealed class SatelliteTransportTests
         Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Wave, 0, 4));
         Assert.Equal("succeeded", Events.Last().Text);
         var Run = Factory.Services.GetRequiredService<RunStore>().Get(RunId)!;
+        var Activation = Assert.Single(Run.Steps, Step => Step.Name == "Voice activation");
+        Assert.Equal("Hey Jarvis", Activation.Metadata!.Value.GetProperty("wakeWord").GetString());
+        Assert.Equal("transport-session", Activation.Metadata.Value.GetProperty("transportSessionId").GetString());
+        Assert.Equal(Run.VoiceSessionId, Activation.Metadata.Value.GetProperty("voiceSessionId").GetGuid());
+        Assert.True(Activation.Metadata.Value.GetProperty("dispatchLatencyMilliseconds").GetDouble() >= 0);
+        Assert.True(Activation.Sequence < Run.Steps.Single(Step => Step.Name == "Speech to text").Sequence);
+        Assert.All(Run.Steps, Step => Assert.True(Step.DurationMilliseconds >= 0));
+        var History = Factory.Services.GetRequiredService<SatelliteManager>().Events("voice");
+        var Created = Assert.Single(History, Event => Event.Type == "Voice session created");
+        Assert.Equal(RunId, Created.TraceId);
+        Assert.Equal(Run.VoiceSessionId, Created.SessionId);
+        Assert.Equal("Hey Jarvis", Created.Detail);
+        Assert.Equal(RunId, Assert.Single(History, Event => Event.Type == "Playback finished").TraceId);
+        Assert.Equal(RunId, Assert.Single(History, Event => Event.Type == "Playback started").TraceId);
+        Assert.Single(History, Event => Event.Type == "Microphone started");
+        Assert.Single(History, Event => Event.Type == "Microphone stopped");
         var Playback = Assert.Single(Run.Steps, Step => Step.Name == "Satellite playback");
         var StartedAt = Playback.Metadata!.Value.GetProperty("playbackStartedAt").GetDateTimeOffset();
         Assert.True(StartedAt >= StartSentAt);
@@ -133,6 +150,48 @@ public sealed class SatelliteTransportTests
     private static async Task WaitAsync(Func<bool> Ready, CancellationToken Token)
     {
         while (!Ready()) { await Task.Delay(10, Token); }
+    }
+
+    [Fact]
+    public async Task DisconnectCancelsCaptureAndReconnectRefreshesObservedCapabilities()
+    {
+        await using var Factory = new Application();
+        using var Http = Factory.CreateDefaultClient();
+        using var Channel = GrpcChannel.ForAddress(Http.BaseAddress!, new() { HttpClient = Http });
+        var Client = new SatelliteTransport.SatelliteTransportClient(Channel);
+        var Manager = Factory.Services.GetRequiredService<SatelliteManager>();
+        using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using (var First = Client.Connect(new Metadata { { "authorization", "Bearer test-bridge-secret" } }))
+        {
+            await First.RequestStream.WriteAsync(new() { Type = "register", SatelliteId = "voice" });
+            Assert.True(await First.ResponseStream.MoveNext(Timeout.Token));
+            await First.RequestStream.WriteAsync(new() { Type = "metadata", Capabilities = new() { MultiChannelMicrophone = true }, Device = new() { EsphomeVersion = "old" } });
+            await First.RequestStream.WriteAsync(new() { Type = "start", SessionId = "disconnected-session", WakeWord = "authorization=test-bridge-secret" });
+            Assert.True(await First.ResponseStream.MoveNext(Timeout.Token));
+            Assert.Equal("transcribing", First.ResponseStream.Current.Type);
+            Assert.Equal(1, Manager.ActiveSessionCount);
+            await First.RequestStream.CompleteAsync();
+            Assert.False(await First.ResponseStream.MoveNext(Timeout.Token));
+        }
+        Assert.Equal(0, Manager.ActiveSessionCount);
+        Assert.Equal(VoiceSessionState.Disconnected, Manager.State("voice").Activity);
+        Assert.Null(Manager.State("voice").CurrentVoiceSessionId);
+        var Cancelled = Assert.Single(Factory.Services.GetRequiredService<RunStore>().Snapshot());
+        Assert.Equal("cancelled", Cancelled.Outcome);
+        Assert.DoesNotContain("test-bridge-secret", System.Text.Json.JsonSerializer.Serialize(Factory.Services.GetRequiredService<RunStore>().Get(Cancelled.RunId)));
+        Assert.DoesNotContain("test-bridge-secret", await Http.GetStringAsync("/api/satellites/voice/events", Timeout.Token));
+        Assert.DoesNotContain("test-bridge-secret", await Http.GetStringAsync("/api/satellites/voice", Timeout.Token));
+        using var Second = Client.Connect(new Metadata { { "authorization", "Bearer test-bridge-secret" } });
+        await Second.RequestStream.WriteAsync(new() { Type = "register", SatelliteId = "voice" });
+        Assert.True(await Second.ResponseStream.MoveNext(Timeout.Token));
+        Assert.Equal(VoiceOwnership.Unknown, Manager.State("voice").VoiceOwnership);
+        Assert.False(Manager.State("voice").Capabilities.MultiChannelMicrophone);
+        await Second.RequestStream.WriteAsync(new() { Type = "metadata", Capabilities = new() { Microphone = true }, Device = new() { EsphomeVersion = "new" } });
+        await WaitAsync(() => Manager.State("voice").ESPHomeVersion == "new", Timeout.Token);
+        Assert.True(Manager.State("voice").Capabilities.Microphone);
+        Assert.False(Manager.State("voice").Capabilities.MultiChannelMicrophone);
+        await Second.RequestStream.CompleteAsync();
+        Assert.False(await Second.ResponseStream.MoveNext(Timeout.Token));
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 import asyncio
 from types import SimpleNamespace as Object
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 import main as adapter
 
 
@@ -163,6 +163,19 @@ class FakeStub:
 
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reconnect_backoff_is_bounded_and_cancellation_stops_retries(self):
+        delays = []
+        async def sleep(delay):
+            delays.append(delay)
+            if len(delays) == 6:
+                raise asyncio.CancelledError()
+        with patch.object(adapter, "connect_once", AsyncMock(side_effect=IOError("fake disconnect"))) as connect, \
+                patch.object(adapter.asyncio, "sleep", sleep), patch.object(adapter.sys, "argv", ["main.py"]):
+            with self.assertRaises(asyncio.CancelledError):
+                await adapter.main()
+        self.assertEqual([5, 10, 20, 40, 60, 60], delays)
+        self.assertEqual(6, connect.await_count)
+
     async def run_bridge(self, mode):
         FakeClient.conflict = mode in ("conflict", "recovery")
         FakeCall.mode = mode

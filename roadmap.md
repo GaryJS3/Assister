@@ -6,7 +6,16 @@ Updated: October 4, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md)
 
 Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use native C# for Wyoming and SQLite/EF Core for persistence. Prefer deterministic intents over LLM calls. Retrieve only relevant context and expose only relevant tools. Home Assistant remains an external automation/data platform. Separate voice sessions, conversations and trace IDs.
 
-## Next: LLM and tools
+## Next: satellite realignment acceptance
+
+The manager, provider boundary, runtime UI and core physical request path are deployed.
+An accurate audible reply and correct LED completion are user-confirmed. Before further
+physical checks, finish trace correlation and automated disconnect/reconnect/backoff tests.
+Remaining hardware checks: cancellation LEDs, deterministic spoken brightness, standalone
+announcement/media duck/resume, ownership conflict/recovery and satellite reboot. Runtime
+wake-word editing is unavailable on the installed device firmware; do not invent model IDs.
+
+### Earlier LLM and tool checkpoints
 
 - HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
 - The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.

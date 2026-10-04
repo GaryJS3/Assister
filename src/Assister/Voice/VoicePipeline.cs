@@ -16,6 +16,16 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
     {
         var Session = new VoiceSession(Guid.NewGuid(), Satellite.SatelliteId, Satellite.Area, ConversationId, DateTimeOffset.UtcNow);
         using var Run = RunTracing.BeginRun(Diagnostics ?? new RunStore(), "voice", Satellite.SatelliteId, Satellite.Area, Session.Id, ConversationId);
+        using (var Activation = RunTracing.Start("Input", "Voice activation", "Create a voice session from a provider activation; a missing wake word may indicate a button or another device trigger."))
+        {
+            var Observed = (Satellite as IVoiceActivationContext)?.Activation;
+            Activation.Metadata(new { voiceSessionId = Session.Id, ConversationId,
+                transportSessionId = Observed?.TransportSessionId, wakeWord = Observed?.WakeWord,
+                activationReceivedAt = Observed?.ReceivedAt, sessionCreatedAt = Session.StartedAt,
+                dispatchLatencyMilliseconds = Observed is null ? (double?)null : Math.Max(0, (Session.StartedAt - Observed.ReceivedAt).TotalMilliseconds) });
+            Activation.Complete();
+            Satellites.Record(Satellite.SatelliteId, "Voice session created", Observed?.WakeWord, Session.Id);
+        }
         if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id)) { Run.Complete("busy"); return new(Session, null, "busy"); }
         Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.CapturingAudio);
         RequestResult? Result = null;
@@ -29,6 +39,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
                 : Satellite.ReceiveAudioAsync(Timeout.Token);
             DateTimeOffset? AudioEnded = null;
+            DateTimeOffset? FirstAudioAt = null;
             long PcmBytes = 0;
             double AudioMilliseconds = 0;
             AudioChunk? Format = null;
@@ -38,6 +49,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 Capture.Metadata(new { Session.SatelliteId, Session.Area, voiceSessionId = Session.Id, Session.ConversationId });
                 await foreach (var Chunk in Input.WithCancellation(Token))
                 {
+                    if (FirstAudioAt is null)
+                    {
+                        FirstAudioAt = DateTimeOffset.UtcNow;
+                        Satellites.Record(Satellite.SatelliteId, "Microphone started", SessionId: Session.Id);
+                    }
                     Format ??= Chunk;
                     PcmBytes += Chunk.Pcm.Length;
                     if (Chunk.SampleRate > 0 && Chunk.Channels > 0 && Chunk.SampleWidth > 0)
@@ -45,9 +61,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     yield return Chunk;
                 }
                 AudioEnded = DateTimeOffset.UtcNow;
+                Satellites.Record(Satellite.SatelliteId, "Microphone stopped", SessionId: Session.Id);
                 Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Transcribing);
                 Capture.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
-                    pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, audioInputCompletedAt = AudioEnded });
+                    pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, firstAudioReceivedAt = FirstAudioAt,
+                    sourceChannels = Satellites.State(Satellite.SatelliteId).MicrophoneSourceChannels, audioInputCompletedAt = AudioEnded });
                 Capture.Complete();
             }
             TranscriptionResult Transcript;

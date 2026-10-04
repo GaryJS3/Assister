@@ -80,9 +80,11 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     SessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(Lifetime.Token);
                     TransportSession = Frame.SessionId;
                     Connection.TransportSession = Frame.SessionId;
+                    var WakeWord = string.IsNullOrWhiteSpace(Frame.WakeWord) ? null : new DiagnosticSanitizer(Configuration).Text(Frame.WakeWord, 128);
+                    Connection.Activation = new(Frame.SessionId, WakeWord, DateTimeOffset.UtcNow);
                     Connection.StartAudio();
                     Manager.Update(Connection.SatelliteId, State => State with { VoiceOwnership = VoiceOwnership.OwnedByAssister,
-                        WakeWord = Frame.WakeWord.Length > 0 ? Frame.WakeWord : State.WakeWord,
+                        WakeWord = WakeWord ?? State.WakeWord,
                         Capabilities = State.Capabilities with { WakeWord = State.Capabilities.WakeWord || Frame.WakeWord.Length > 0 } });
                     Manager.Record(Connection.SatelliteId, "Voice session requested", Frame.WakeWord.Length <= 128 ? Frame.WakeWord : null);
                     Session = RunAsync(Frame.ConversationId, SessionCancellation.Token);
@@ -104,8 +106,16 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                 {
                     var Current = Manager.State(Connection.SatelliteId).CurrentVoiceSessionId;
                     if (Current is { } Id) { Manager.Stage(Connection.SatelliteId, Id, VoiceSessionState.PlayingResponse); }
+                    Manager.Record(Connection.SatelliteId, "Playback started", SessionId: Current, TraceId: Connection.PlaybackRunId);
                 }
-                if (Frame.Type == "playback-finished") { Connection.PlaybackFinished(Frame.PlaybackId, Frame.SessionId, Frame.Text == "succeeded"); }
+                if (Frame.Type == "playback-finished")
+                {
+                    var PlaybackSession = Manager.State(Connection.SatelliteId).CurrentVoiceSessionId;
+                    var PlaybackRun = Connection.PlaybackRunId;
+                    if (Connection.PlaybackFinished(Frame.PlaybackId, Frame.SessionId, Frame.Text == "succeeded"))
+                        Manager.Record(Connection.SatelliteId, Frame.Text == "succeeded" ? "Playback finished" : "Playback failed",
+                            SessionId: PlaybackSession, TraceId: PlaybackRun);
+                }
             }
         }
         finally
@@ -143,7 +153,12 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                             VolumeControl = Cap.VolumeControl, MuteControl = Cap.MuteControl, Timers = Cap.Timers, StartConversation = Cap.StartConversation } };
                 return State;
             });
-            Manager.Record(Connection.SatelliteId, Frame.Type);
+            Manager.Record(Connection.SatelliteId, Frame.Type switch
+            {
+                "ownership" => "Voice ownership changed", "configuration" => "Voice configuration updated",
+                "metadata" => "Device capabilities refreshed", "media-state" => "Playback state changed",
+                _ => Frame.Type
+            }, Frame.Type switch { "ownership" => Frame.Ownership, "media-state" => Frame.Text, "device-error" => Frame.Text, _ => null });
         }
         async Task SendAsync()
         {
@@ -167,13 +182,13 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             catch (Exception Error)
             {
                 Logger.LogWarning("Satellite session failed ({FailureType}).", Error.GetType().Name);
-                await Outgoing.Writer.WriteAsync(new() { Type = "session-result", Text = "failed" }, Lifetime.Token);
+                await Outgoing.Writer.WriteAsync(new() { Type = "session-result", Text = "failed", SessionId = Connection.TransportSession }, Lifetime.Token);
             }
         }
     }
 
     private sealed class BridgeConnection(BridgeFrame Registration, ChannelWriter<BridgeFrame> Outgoing, VoiceAudioStore Audio,
-        IConfiguration Configuration) : ISatelliteConnection
+        IConfiguration Configuration) : ISatelliteConnection, IVoiceActivationContext
     {
         private Channel<AudioChunk>? Incoming;
         private bool Receiving;
@@ -183,10 +198,11 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         private string PlaybackSession = "";
         private RunTracing.TraceStep? PlaybackTrace;
         private bool StartedPlayback;
+        public Guid? PlaybackRunId { get; private set; }
         public bool IsCurrentPlayback(string Id, string Session) => Playback is not null && Session == PlaybackSession && Id == PlaybackId;
         public bool PlaybackStarted(string Id, string Session)
         {
-            if (!IsCurrentPlayback(Id, Session)) { return false; }
+            if (!IsCurrentPlayback(Id, Session) || StartedPlayback) { return false; }
             if (!StartedPlayback)
             {
                 StartedPlayback = true;
@@ -196,6 +212,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         }
         public string SatelliteId => Registration.SatelliteId;
         public string TransportSession { get; set; } = "";
+        public VoiceActivation? Activation { get; set; }
         public string Name => Registration.Name;
         public string? Area => Registration.Area;
         public void StartAudio() { Incoming = Channel.CreateBounded<AudioChunk>(128); Receiving = true; }
@@ -205,9 +222,10 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             { Incoming.Writer.TryComplete(new IOException("Microphone buffer overflow.")); Receiving = false; }
         }
         public void StopAudio() { Receiving = false; Incoming?.Writer.TryComplete(); }
-        public void PlaybackFinished(string Id, string Session, bool Succeeded)
+        public bool PlaybackFinished(string Id, string Session, bool Succeeded)
         {
-            if (Session == PlaybackSession && (Id == PlaybackId || (Id.Length == 0 && !Announcement))) { Playback?.TrySetResult(Succeeded); }
+            return Session == PlaybackSession && (Id == PlaybackId || (Id.Length == 0 && !Announcement)) &&
+                Playback?.TrySetResult(Succeeded) == true;
         }
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken CancellationToken) => Incoming?.Reader.ReadAllAsync(CancellationToken)
             ?? throw new InvalidOperationException();
@@ -228,6 +246,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             Playback = new(TaskCreationOptions.RunContinuationsAsynchronously);
             PlaybackId = Guid.NewGuid().ToString();
             PlaybackSession = Announcement ? "" : TransportSession;
+            PlaybackRunId = RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId;
             using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Publish audio-ready and wait for the satellite's explicit playback acknowledgement.");
             Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow });
             StartedPlayback = false;

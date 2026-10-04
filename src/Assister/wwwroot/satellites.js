@@ -45,6 +45,7 @@ async function renderDetail() {
         panel.append(action('Set volume', () => api(path + '/volume', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({volume:Number(volume.value)/100})}), supported && r.capabilities.volumeControl));
     } else if (selectedTab === 'Configuration') {
         panel.append(element('h3', 'Runtime · active wake words'), element('p', `Maximum active models: ${config.maxActiveWakeWords}. Only models reported by the device can be selected.`));
+        if (!r.capabilities.wakeWordConfiguration) panel.append(element('p', 'The device currently reports no wake-word models that this runtime API can configure. Physical wake detection may still work. Firmware changes are outside this page.'));
         const choices = [];
         for (const word of config.availableWakeWords) { const label = element('label'), checkbox = element('input'); checkbox.type = 'checkbox'; checkbox.checked = config.activeWakeWords.includes(word.id); checkbox.disabled = !supported || r.voiceOwnership !== 2; label.append(checkbox, document.createTextNode(word.name)); panel.append(label); choices.push({checkbox, id:word.id}); }
         panel.append(action('Apply wake words', () => { const words = choices.filter(c => c.checkbox.checked).map(c => c.id); if (words.length > config.maxActiveWakeWords) throw Error('Too many active wake words.'); return api(path + '/wake-words', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(words)}); }, supported && r.capabilities.wakeWordConfiguration && r.voiceOwnership === 2));
@@ -57,7 +58,11 @@ async function renderDetail() {
         panel.append(element('h3', 'Bounded satellite events'));
         panel.append(action('Read device warnings for 60 seconds', () => api(path + '/logs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:true})}), supported));
         panel.append(action('Stop device logs', () => api(path + '/logs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:false})}), supported));
-        for (const event of events.slice().reverse()) panel.append(element('p', `${new Date(event.at).toLocaleString()} · ${event.type}${event.detail ? ' · ' + event.detail : ''}`));
+        for (const event of events.slice().reverse()) {
+            const line = element('p', `${new Date(event.at).toLocaleString()} · ${event.type}${event.detail ? ' · ' + event.detail : ''}`);
+            if (event.traceId) { const link = element('a', ' · Request trace'); link.href = `/?run=${encodeURIComponent(event.traceId)}`; line.append(link); }
+            panel.append(line);
+        }
     }
 }
 async function refresh() {
