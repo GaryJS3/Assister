@@ -10,7 +10,7 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 
 - HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
 - The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
-- Implement milestone 5: bounded OpenAI-compatible completion/streaming, selected tools and a validating broker. Keep direct intents independent of LLM availability.
+- Continue milestone 5: completion/streaming client and function-call assembly are implemented and fake-HTTP tested. Next implement selected tools, a validating broker and bounded tool loop, then connect unmatched requests to that path. Keep direct intents independent of LLM availability.
 - Recheck HA authentication after the user's credential rotation. Registry metadata currently refreshes on reconnect.
 ## Remaining milestones
 

@@ -10,6 +10,10 @@ Milestone 2 includes native C# Wyoming framing, bounded message parsing, describ
 
 Home Assistant now has a persistent authenticated connection, state subscriptions, registry/area joins, and reconnecting cache. Direct intents support light/switch on/off, light brightness and cached temperature/state queries through a shared request coordinator. Ambiguous targets require clarification; stale HA connectivity blocks actions. LLM, persisted conversations, satellites, timers and memory remain pending. See PROJECT.md for the full brief and acceptance criteria.
 
+Milestone 5 has started: an injectable native C# `ILanguageModel` client supports OpenAI-compatible completions, SSE text streaming and function-call assembly. Requests use fixed content lengths; redirects are disabled. Request/response sizes, tool counts and duration are bounded, and incomplete responses cannot publish completed tool calls. This client is registered but not routed from text requests yet; the validating broker and selected HA tools are the next step. Wire-format behavior follows the [official function-calling documentation](https://developers.openai.com/api/docs/guides/function-calling).
+
+Configure `LanguageModel:BaseUrl` (including `/v1`), `Model` and optional `ApiKey`. Optional `Temperature`, `MaxTokens` and `TimeoutSeconds` default to 0.2, 500 and 30; tokens are capped at 4096 and timeout at 120 seconds. Each request/response is limited to 256 KiB, with at most 64 messages and 16 tools. Streaming requires a finish reason and `[DONE]`; truncated or filtered responses fail explicitly. Tool arguments remain untrusted strings for broker validation.
+
 ## Text requests
 
 `POST /api/test/message` accepts `message`, `satelliteId` (defaults to `test`), `area` and optional `conversationId`:

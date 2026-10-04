@@ -3,6 +3,7 @@ using Assister.Modules.HomeAssistant;
 using Assister.Contracts;
 using Assister.Intents;
 using Assister.Voice;
+using Assister.Llm;
 using Microsoft.EntityFrameworkCore;
 
 var Builder = WebApplication.CreateBuilder(args);
@@ -25,6 +26,8 @@ Builder.Services.AddSingleton<IntentClassifier>();
 Builder.Services.AddSingleton<IEntityResolver, HomeAssistantEntityResolver>();
 Builder.Services.AddTransient<DirectIntentHandler>();
 Builder.Services.AddTransient<IRequestCoordinator, RequestCoordinator>();
+Builder.Services.AddHttpClient<ILanguageModel, OpenAiCompatibleLanguageModel>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 var App = Builder.Build();
 await using (var Scope = App.Services.CreateAsyncScope())
 {
