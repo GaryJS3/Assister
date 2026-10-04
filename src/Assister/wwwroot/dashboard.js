@@ -57,20 +57,20 @@ function renderDetail(r) {
     const info=node('div',null,'facts');for(const [name,value]of [['RunId',r.runId],['Handled by',r.handledBy],['Satellite',r.satelliteId],['Area',r.area],['Conversation ID',r.conversationId],['Voice session ID',r.voiceSessionId],['Total duration',time(r.durationMilliseconds)],['Infrastructure trace',r.activityTraceId]]){const f=node('div',null,'fact');f.append(node('span',name),node('strong',value || '—'));if(name==='RunId')f.append(copyButton(r.runId,'RunId'));info.append(f);}card.append(info);d.append(card);
     const timings=node('section',null,'timings');timings.append(node('h3','Where the time went'),node('p','Audio capture and STT finalization are shown separately. Nested timings can overlap.','muted'));
     const audio=r.steps.find(s=>s.name==='Microphone audio'); const stt=r.steps.find(s=>s.kind==='SpeechToText');
+    const lanes=[];
     if(audio){
         const ended=Date.parse(audio.output?.audioInputCompletedAt ?? stt?.metadata?.audioInputCompletedAt);
         const playback=r.steps.find(s=>s.name==='Satellite playback');
-        const began=Date.parse(playback?.metadata?.playbackStartedAt);
-        const available=Number.isFinite(ended)&&Number.isFinite(began)&&began>=ended;
-        const highlight=node('div',null,'response-latency');
-        highlight.append(node('span','End of speech → playback'),node('strong',available?time(began-ended):'Unavailable'));
-        highlight.append(node('small',available?'From audio input completion to the satellite’s playback-start signal.':r.finishedAt?'Playback start timing was not recorded for this run.':'Waiting for audio completion and playback start.'));
-        timings.append(highlight);
+        const signaled=Date.parse(playback?.metadata?.playbackStartedAt);
+        const estimated=!Number.isFinite(signaled);
+        const began=estimated?Date.parse(playback?.metadata?.audioReadyAt ?? playback?.startedAt):signaled;
+        if(Number.isFinite(ended)&&Number.isFinite(began)&&began>=ended)lanes.push({name:'Request to Response',duration:began-ended,offset:ended-Date.parse(r.startedAt),cls:'request-response',estimated,
+            title:estimated?'Estimated from audio input completion to satellite delivery start; actual playback start was not recorded.':'From audio input completion to the satellite’s playback-start signal.'});
     }
-    const lanes=[];if(audio)lanes.push({name:'Audio (PCM)',duration:audio.output?.audioDurationMilliseconds || 0,offset:0,cls:''});
+    if(audio)lanes.push({name:'Audio (PCM)',duration:audio.output?.audioDurationMilliseconds || 0,offset:0,cls:''});
     if(stt&&stt.metadata?.postAudioLatencyMilliseconds!=null)lanes.push({name:'STT finalize',duration:stt.metadata.postAudioLatencyMilliseconds,offset:Date.parse(stt.metadata.audioInputCompletedAt)-Date.parse(r.startedAt),cls:'stt'});
     for(const s of r.steps){if(['IntentClassification','EntityResolution','ToolSelection','LanguageModel','ToolCall','TextToSpeech'].includes(s.kind)||s.kind==='Playback'&&s.name!=='Playback delivery')lanes.push({name:s.name,duration:s.durationMilliseconds,offset:Date.parse(s.startedAt)-Date.parse(r.startedAt),cls:s.kind==='ToolCall'?'tools':s.kind==='LanguageModel'?'stt':''});}
-    for(const lane of lanes){const row=node('div',null,'timing-row '+lane.cls),track=node('div',null,'track'),bar=node('i');bar.style.marginLeft=`${Math.max(0,Math.min(99,100*lane.offset/Math.max(1,r.durationMilliseconds)))}%`;bar.style.width=`${Math.max(.2,Math.min(100,100*lane.duration/Math.max(1,r.durationMilliseconds)))}%`;track.append(bar);row.append(node('span',lane.name),track,node('span',time(lane.duration)));timings.append(row);}d.append(timings);
+    for(const lane of lanes){const row=node('div',null,'timing-row '+lane.cls),track=node('div',null,'track'),bar=node('i');if(lane.title)row.title=lane.title;bar.style.marginLeft=`${Math.max(0,Math.min(99,100*lane.offset/Math.max(1,r.durationMilliseconds)))}%`;bar.style.width=`${Math.max(.2,Math.min(100,100*lane.duration/Math.max(1,r.durationMilliseconds)))}%`;track.append(bar);row.append(node('span',lane.name),track,node('span',(lane.estimated?'≈ ':'')+time(lane.duration)));timings.append(row);}d.append(timings);
     const groups=[['Input',['Input','SpeechToText']],['Routing',['IntentClassification','EntityResolution','ToolSelection','IntentExecution']],['LLM / Tools',['LanguageModel','ToolCall']],['Output',['ResponseFormatting','TextToSpeech','Playback','Error']]];
     let sectionNumber=0;for(const [name,kinds]of groups){const entries=r.steps.filter(s=>kinds.includes(s.kind));if(!entries.length)continue;
         // A cross-section parent is rendered at its own location with children, avoiding duplicate stages.
