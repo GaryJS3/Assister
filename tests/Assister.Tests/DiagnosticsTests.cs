@@ -107,6 +107,22 @@ public sealed class DiagnosticsTests
     }
 
     [Fact]
+    public async Task FailedAndRejectedToolsRetainExactlyTheResultReturnedToTheModel()
+    {
+        using var Store = new RunStore();
+        using var Run = RunTracing.BeginRun(Store, "debug");
+        var Broker = new ToolBroker(new ToolRegistry([new SearchTool()]));
+        var Context = new ToolExecutionContext(new("office"), []);
+        var Rejected = await Broker.ExecuteAsync(new("rejected", new("ha_search", "{\"query\":\"office\"}")), new HashSet<string>(), Context, CancellationToken.None);
+        var Failed = await Broker.ExecuteAsync(new("failed", new("ha_search", "{\"query\":7}")), new HashSet<string> { "ha_search" }, Context, CancellationToken.None);
+        var Trace = Store.Get(RunTracing.RunId)!;
+        Assert.True(Trace.HasFailures);
+        Assert.Equal(JsonDocument.Parse(Rejected).RootElement.GetProperty("error").GetString(), Trace.Steps[0].Output!.Value.GetProperty("error").GetString());
+        Assert.Equal(JsonDocument.Parse(Failed).RootElement.GetProperty("error").GetString(), Trace.Steps[1].Output!.Value.GetProperty("error").GetString());
+        Assert.Equal("InvalidDataException", Trace.Steps[1].Metadata!.Value.GetProperty("failureCategory").GetString());
+    }
+
+    [Fact]
     public void DisabledPayloadCaptureKeepsSemanticMetadata()
     {
         using var Store = new RunStore(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

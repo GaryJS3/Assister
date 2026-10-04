@@ -41,7 +41,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
         if (!Selected.Contains(Call.Function.Name) || !Registry.All.TryGetValue(Call.Function.Name, out var Tool))
         {
             Trace.Complete("rejected");
-            Trace.Output(new { error = "Tool not selected for this request." });
+            Trace.Output(new { error = "Tool was not selected for this request." });
             await Audit("rejected");
             return "{\"error\":\"Tool was not selected for this request.\"}";
         }
@@ -68,12 +68,13 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
         catch (Exception Error) when (Error is JsonException or InvalidDataException or InvalidOperationException or HttpRequestException or OperationCanceledException or KeyNotFoundException or FormatException or ArgumentException)
         {
             Trace.Complete("failed");
-            Trace.Output(new { failureCategory = Error.GetType().Name, error = Tool.StateChanging
-                ? "Control rejected or completion unconfirmed. Do not retry automatically." : "Invalid arguments or unavailable data source." });
-            await Audit("failed");
-            return JsonSerializer.Serialize(new { error = Tool.StateChanging
+            Trace.Detail("failureCategory", Error.GetType().Name);
+            var ErrorResult = JsonSerializer.Serialize(new { error = Tool.StateChanging
                 ? "Control was rejected or completion could not be confirmed. Do not retry automatically."
                 : "Tool request was invalid or the data source is unavailable." });
+            Trace.Output(DiagnosticSanitizer.ParseJson(ErrorResult));
+            await Audit("failed");
+            return ErrorResult;
         }
     }
 

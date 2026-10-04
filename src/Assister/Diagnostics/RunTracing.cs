@@ -12,7 +12,10 @@ public sealed record DiagnosticStep(Guid Id, Guid? ParentId, int Sequence, strin
 public sealed record DiagnosticRun(Guid RunId, string Source, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
     double DurationMilliseconds, string Outcome, string? SatelliteId, string? Area, Guid? VoiceSessionId,
     Guid? ConversationId, string? ActivityTraceId, string? UserText, string? RawResponse, string? SpokenResponse,
-    string? HandledBy, IReadOnlyList<DiagnosticStep> Steps);
+    string? HandledBy, IReadOnlyList<DiagnosticStep> Steps)
+{
+    public bool HasFailures { get; init; }
+}
 
 // Every diagnostic write passes through this sanitizer, including summary fields and persisted data.
 public sealed class DiagnosticSanitizer(IConfiguration? Configuration = null)
@@ -153,6 +156,7 @@ public static class RunTracing
         internal DiagnosticRun Run;
         internal readonly List<TraceStep> Steps = [];
         internal int PayloadBytes;
+        internal int SemanticBytes;
         private readonly RunScope? Previous;
         private readonly TraceStep? PreviousParent;
         private bool Disposed;
@@ -169,6 +173,7 @@ public static class RunTracing
         internal DiagnosticRun Snapshot(bool IncludeSteps) => Run with
         {
             DurationMilliseconds = ((Run.FinishedAt ?? DateTimeOffset.UtcNow) - Run.StartedAt).TotalMilliseconds,
+            HasFailures = Steps.Any(Step => Step.Snapshot().Status is "failed" or "rejected" or "unavailable" or "interrupted-or-failed"),
             Steps = IncludeSteps ? Steps.Select(Step => Step.Snapshot()).ToArray() : []
         };
         public void Dispose()
@@ -206,8 +211,11 @@ public static class RunTracing
         private (JsonElement? Value, bool Truncated) Bound(object? Value, bool Detailed)
         {
             if (Scope is null) { return (null, false); }
-            var Result = Scope.Store.Sanitizer.Payload(Value, Detailed, Math.Max(0, Math.Min(32768, 131072 - Scope.PayloadBytes)));
-            Scope.PayloadBytes += Result.Value is { } Element ? System.Text.Encoding.UTF8.GetByteCount(Element.GetRawText()) : 0;
+            var Budget = Detailed ? Math.Max(0, Math.Min(32768, 131072 - Scope.PayloadBytes))
+                : Math.Max(0, Math.Min(4096, 32768 - Scope.SemanticBytes));
+            var Result = Scope.Store.Sanitizer.Payload(Value, Detailed, Budget);
+            var Bytes = Result.Value is { } Element ? System.Text.Encoding.UTF8.GetByteCount(Element.GetRawText()) : 0;
+            if (Detailed) { Scope.PayloadBytes += Bytes; } else { Scope.SemanticBytes += Bytes; }
             return Result;
         }
         public void Input(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Input = Data.Value, InputTruncated = Data.Truncated }; });
@@ -216,7 +224,7 @@ public static class RunTracing
         public void Detail(string Key, object? Value) => Change(() =>
         {
             var Data = Step.Metadata is { } Element ? JsonNode.Parse(Element.GetRawText())!.AsObject() : new JsonObject();
-            var Safe = Scope!.Store.Sanitizer.Payload(new Dictionary<string, object?> { [Key] = Value }, false);
+            var Safe = Bound(new Dictionary<string, object?> { [Key] = Value }, false);
             if (Safe.Value is { } SafeElement && SafeElement.TryGetProperty(Key, out var Item)) { Data[Key] = JsonNode.Parse(Item.GetRawText()); }
             Step = Step with { Metadata = JsonSerializer.SerializeToElement(Data) };
         });

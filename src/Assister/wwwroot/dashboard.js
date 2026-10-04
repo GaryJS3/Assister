@@ -5,7 +5,7 @@ function node(tag, text, cls) { const e = document.createElement(tag); if (text 
 function pretty(value) { return JSON.stringify(value, null, 2); }
 function time(n) { return n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${Math.max(0, n || 0).toFixed(1)} ms`; }
 function label(value) { return value.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' '); }
-function badge(status) { return node('span', label(status || 'unknown'), 'badge' + (['succeeded','Healthy','Connected','matched','resolved'].includes(status) ? ' good' : ['failed','unavailable','rejected','stt-failed','playback-failed','interrupted-or-failed'].includes(status) ? ' bad' : '')); }
+function badge(status) { return node('span', label(status || 'unknown'), 'badge' + (['succeeded','Healthy','Connected','matched','resolved'].includes(status) ? ' good' : ['failed','unavailable','rejected','stt-failed','playback-failed','interrupted-or-failed','stage-failure'].includes(status) ? ' bad' : '')); }
 function copyButton(value, description) {
     const b = node('button', 'Copy', 'copy'); b.type = 'button'; b.setAttribute('aria-label', `Copy ${description}`);
     b.onclick = async () => { try { const text = typeof value === 'string' ? value : pretty(value); if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text); else { const area = node('textarea'); area.value = text; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.append(area); area.select(); const ok = document.execCommand('copy'); area.remove(); if (!ok) throw Error(); } b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1200); } catch { b.textContent = 'Copy failed'; } }; return b;
@@ -23,13 +23,13 @@ function filteredRuns() {
         && (! $('satellite-filter').value || (r.satelliteId || '').toLowerCase().includes($('satellite-filter').value.toLowerCase()))
         && (! $('conversation-filter').value || (r.conversationId || '').includes($('conversation-filter').value.toLowerCase()))
         && (! $('run-filter').value || r.runId.includes($('run-filter').value.toLowerCase()))
-        && (quick === 'All' || quick === 'Failures' && !['succeeded','running','no-speech'].includes(r.outcome)
+        && (quick === 'All' || quick === 'Failures' && (r.hasFailures || !['succeeded','running','no-speech'].includes(r.outcome))
         || quick === 'LLM' && r.handledBy === 'language-model' || quick === 'Direct' && r.handledBy === 'direct-intent'
         || quick === 'Voice' && r.source === 'voice' || quick === 'Debug' && r.source === 'debug'));
 }
 function renderList() {
     $('runs').replaceChildren(); const filtered = filteredRuns(); $('run-count').textContent = `${filtered.length} of ${runs.length} interactions`;
-    for (const r of filtered) { const b = node('button', null, 'run' + (r.runId === selected ? ' selected' : '')); b.append(node('strong', r.userText || 'Waiting for transcript…'), node('small', `${r.source.toUpperCase()} · ${new Date(r.startedAt).toLocaleString()} · ${time(r.durationMilliseconds)}`), badge(r.outcome)); b.onclick = () => inspect(r.runId); $('runs').append(b); }
+    for (const r of filtered) { const b = node('button', null, 'run' + (r.runId === selected ? ' selected' : '')); b.append(node('strong', r.userText || 'Waiting for transcript…'), node('small', `${r.source.toUpperCase()} · ${new Date(r.startedAt).toLocaleString()} · ${time(r.durationMilliseconds)}`), badge(r.outcome)); if(r.hasFailures)b.append(badge('stage-failure')); b.onclick = () => inspect(r.runId); $('runs').append(b); }
     if (!filtered.length) $('runs').append(node('p', runs.length ? 'No matching interactions.' : 'No runs yet. Use Debug Chat to begin.', 'muted'));
 }
 function stepTitle(s) { const title = node('div', null, 'stage-title'); title.append(node('strong', s.name), badge(s.status), node('span', time(s.durationMilliseconds), 'duration')); return title; }
@@ -50,7 +50,7 @@ function renderStep(s, all) {
 }
 function renderDetail(r) {
     const signature = JSON.stringify(r); if(signature === detailSignature) return; detailSignature = signature;
-    const d=$('detail');d.replaceChildren();const card=node('div',null,'summary-card'),top=node('div',null,'summary-top');top.append(node('span',`${r.source.toUpperCase()} / ${new Date(r.startedAt).toLocaleString()}`,'mono'),badge(r.outcome));card.append(top,node('h2',r.userText || 'Waiting for transcript…'));
+    const d=$('detail');d.replaceChildren();const card=node('div',null,'summary-card'),top=node('div',null,'summary-top');top.append(node('span',`${r.source.toUpperCase()} / ${new Date(r.startedAt).toLocaleString()}`,'mono'),badge(r.outcome));if(r.hasFailures)top.append(badge('stage-failure'));card.append(top,node('h2',r.userText || 'Waiting for transcript…'));
     const inputCopy=node('div',null,'mono');inputCopy.append(copyButton(r.userText || '','user input'));card.append(inputCopy);
     const responseGrid=node('div',null,'response-grid');for(const [name,value,cls]of [['Raw response',r.rawResponse,'response'],['Spoken / TTS-ready response',r.spokenResponse,'response spoken']]){const section=node('div');section.append(node('span',name,'mono'),node('div',value ?? '(Not produced yet)',cls));responseGrid.append(section);}card.append(responseGrid);
     const info=node('div',null,'facts');for(const [name,value]of [['RunId',r.runId],['Handled by',r.handledBy],['Satellite',r.satelliteId],['Area',r.area],['Conversation ID',r.conversationId],['Voice session ID',r.voiceSessionId],['Total duration',time(r.durationMilliseconds)],['Infrastructure trace',r.activityTraceId]]){const f=node('div',null,'fact');f.append(node('span',name),node('strong',value || '—'));if(name==='RunId')f.append(copyButton(r.runId,'RunId'));info.append(f);}card.append(info);d.append(card);
