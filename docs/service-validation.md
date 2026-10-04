@@ -73,3 +73,41 @@ Both action paths now wait for HA state readback rather than treating HTTP servi
 as completion. LLM controls require current-request search/control tool execution; older
 confirmation replies cannot authorize reporting a new action as successful. Failed/unexecuted
 control returns a failed response instead of passing through model success prose.
+
+## Multi-target brightness and cancellation, October 4, 2026
+
+Deployed application revision: `0fbc4a707f6ce668b6fcf72f6496a711fcba722e`.
+Dockhand Git stack 10 synced to `0fbc4a7`. The image was built from that exact Git archive
+on Automation because Dockhand builds remain disabled. Dockhand recreated only Assister,
+using the local image without a registry pull. Running image:
+`sha256:db28c6ac97f13fa016642eea0624131182799390a316b5a7c537b4599198caad`.
+Environment fingerprints and mounts match the pre-deployment snapshot. ESPHome bridge container
+and image remain unchanged at `ed8d918`. /health is Healthy; read-only authenticated HA REST,
+WebSocket and registry checks pass. All 125 automated C# tests pass (110 unit, 15 integration).
+
+A temporary C# probe ran inside the production application container, using its existing
+environment without exposing credentials. It exercised the shared coordinator via production
+HTTP APIs, queried HA states independently, and captured a durable recovery record before
+controls. It reported zero failures:
+
+| Check | Production result |
+| --- | --- |
+| Both light groups to 40% | Direct intent; both HA states confirmed; trace `85edb09f-9e3e-4903-9a3f-3196eb8f9ff0` |
+| Both light groups to 100% | Direct intent; both HA states confirmed; trace `1d7a5646-a901-4464-893d-f96bc29ceef9` |
+| Missing second target | `not-found`; existing light states unchanged |
+| Original settings | Living Room Lights on/128, Kitchen Main Lights on/194 restored and independently verified |
+| Stop during real MBedroom announcement | Playback-start event followed by deterministic `please stop`, cancellation event and released session |
+| Next MBedroom announcement | Playback-start and completion acknowledgments; runtime returned idle with no error |
+
+The tested command was "Can you set both the living room light and Kitchen Main Lights to
+40?" (also 100). Targets were `light.living_room_lights` and `light.kitchen_main_lights`;
+neither required HA area assignment. The shorter "kitchen light" remains unresolved and
+requires an alias or the full name. Missing/ambiguous targets never trigger partial control.
+Recovery record: `/data/production-two-light-backup-20261004220703.json`.
+
+Announcement playback began at 18:07:06 EDT, cancellation was recorded immediately afterward,
+and the next announcement completed at 18:07:08 EDT. Stop used the text API with MBedroom's
+satellite ID, proving deterministic routing and real controller playback cancellation.
+These tests do not prove microphone recognition, human-audible interruption or LED cleanup.
+Capture/model-processing/synthesis cancellation has automated coverage; those voice stages
+were not physically exercised by this production probe. Wake during speech remains deferred.

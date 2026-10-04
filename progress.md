@@ -4,23 +4,47 @@ Updated: October 4, 2026. This file records completed work and verification; [ro
 
 ## Current state
 
-Local multi-target brightness correction: live trace eef525e6-5556-4809-b672-44abbe774b1c
+Deployed multi-target brightness correction: live trace eef525e6-5556-4809-b672-44abbe774b1c
 contained "Can you set both the living room light and kitchen light to 100?". The polite
 prefix prevented direct matching; fallback model searches assumed HA areas and failed.
 Direct normalization now accepts can/could/would-you prefixes and "both"; brightness lists
 resolve every named target independently before one bounded, deduplicated control. Missing
 or ambiguous members prevent all controls, and whole names containing "and" remain intact.
-The exact transcript and these safety cases are regression-tested. This correction is local;
-deployment and new spoken acceptance remain pending.
+The exact transcript and these safety cases are regression-tested. Production API controls
+and independent HA state checks pass; new spoken multi-target acceptance remains pending.
 
-Local stop/cancel increment: the satellite Stop API and UI cancel active capture, processing,
+Deployed stop/cancel increment: the satellite Stop API and UI cancel active capture, processing,
 synthesis and playback through a shared operation lifetime. Exact spoken stop/cancel phrases are
 silent deterministic commands, bypassing LLM/TTS and conversation locks. EchoMuse stop uses the
 matching session/request ID, suppresses duplicate terminal commands, removes cancelled audio and
 ignores stale playback events. Immediate next-turn recovery covers completed and cancelled turns.
 Explicitly dismissed timer announcements are consumed to prevent replay. Device button cancellation
-during reply playback is regression-tested. Deployment and physical LED/audible-stop verification
-remain pending; interruption by speech requires a new device microphone turn.
+during reply playback is regression-tested. Production announcement stop and subsequent playback
+pass; physical LED/audible-stop verification of this revision remains pending. Interruption by
+speech requires a new device microphone turn. The user verified wake-and-stop during thinking
+on the earlier deployment; wake during speech is unavailable and deferred by agreement.
+
+October 4 deployment and production acceptance: source revision
+`0fbc4a707f6ce668b6fcf72f6496a711fcba722e` was committed, pushed and synced through Dockhand.
+An image built from that exact Git archive replaced only the Assister container through
+Dockhand; running image ID and revision match. Environment fingerprints and mounts are preserved.
+The ESPHome bridge container/image remain unchanged at `ed8d918`. All 125 C# tests pass
+(110 unit, 15 integration). /health is Healthy; HA REST/WebSocket/registry probes pass, with
+fresh cache and both EchoMuse satellites online. The previously offline HA Voice remains offline.
+
+Production controls set `light.living_room_lights` and `light.kitchen_main_lights` together to
+40% and 100% through direct intents, with independent HA state readback and no model rounds.
+Traces: `85edb09f-9e3e-4903-9a3f-3196eb8f9ff0` and
+`1d7a5646-a901-4464-893d-f96bc29ceef9`. A missing second target prevented partial changes.
+Original on/128 and on/194 settings respectively were restored and verified. Recovery backup:
+`/data/production-two-light-backup-20261004220703.json`. The actual kitchen group is named
+"Kitchen Main Lights" and has no HA area assignment; "kitchen light" still needs an alias.
+
+MBedroom's real announcement reported playback started, then deterministic `please stop`
+through the production text API cancelled it and released the session. The next announcement
+completed with controller acknowledgment. Final runtime is Online, Assister output idle,
+without an active session or last error. These checks do not establish microphone recognition,
+audible interruption or LED behavior; see [service-validation.md](docs/service-validation.md).
 
 The integration foundation now registers Home Assistant and Assister with qualified action IDs, declared inputs and integration-specific execution dispatch. `/integrations.html` lists actions and connection status; the intent editor/inspector/confirmation show ownership explicitly. Existing JSON definitions receive an idempotent upgrade with a startup backup checkpoint. All 107 tests pass (93 unit, 14 integration), including upgrade and dispatch guards. Additional services, connection editing and dynamic plugin installation remain future work; see [integrations.md](docs/integrations.md).
 

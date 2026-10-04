@@ -18,6 +18,14 @@ Remaining hardware checks: cancellation LEDs, deterministic spoken brightness, s
 announcement/media duck/resume, ownership conflict/recovery and satellite reboot. Runtime
 wake-word editing is unavailable on the installed device firmware; do not invent model IDs.
 
+Revision `0fbc4a7` is deployed: multi-target brightness and stop/cancel pass production API
+checks. Both light groups reached 40%/100% and were restored; a missing target prevented partial
+control. MBedroom announcement cancellation and next-announcement recovery pass. Next verify
+the full-name two-light phrase through the microphone and confirm audible/LED stop behavior.
+Use "Kitchen Main Lights" until a short-name alias is configured. Wake-word interruption during
+speech is unavailable on the current device path and deferred; do not treat it as accepted.
+See [service-validation.md](docs/service-validation.md) for traces and verification boundaries.
+
 ### Earlier LLM and tool checkpoints
 
 - HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
