@@ -39,6 +39,12 @@ Builder.Services.AddHostedService(Services => Services.GetRequiredService<HomeAs
 Builder.Services.AddHttpClient<IHomeAssistantClient, HomeAssistantActionClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 Builder.Services.AddSingleton<IntentClassifier>();
+Builder.Services.AddSingleton<IIntentActionProvider, HomeAssistantIntentActions>();
+Builder.Services.AddSingleton<IIntentActionProvider, AssisterIntentActions>();
+Builder.Services.AddSingleton<IntentActionRegistry>();
+Builder.Services.AddTransient<IIntegrationIntentExecutor, HomeAssistantIntentExecutor>();
+Builder.Services.AddTransient<IIntegrationIntentExecutor, AssisterIntentExecutor>();
+Builder.Services.AddTransient<IntegrationActionDispatcher>();
 Builder.Services.AddScoped<IntentStore>();
 Builder.Services.AddScoped<IIntentEngine, IntentEngine>();
 Builder.Services.AddScoped<IntentWorkbench>();

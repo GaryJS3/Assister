@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Assister.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Assister.Intents;
 
-public sealed record IntentDefinition(string Id, string Name, string Handler, bool Enabled,
+public sealed record IntentDefinition(string Id, string Name, string ActionId, bool Enabled,
     string[] Patterns, string? Target = null, int? Brightness = null, string? Area = null,
     string Response = "{response}", bool BuiltIn = false, long Version = 0);
 
@@ -28,7 +29,6 @@ public sealed class IntentExampleRow
 
 public static class IntentCatalog
 {
-    public static readonly string[] Handlers = ["TurnOn", "TurnOff", "SetBrightness", "QueryState", "QueryTemperature", "Reply", "Time", "Date"];
     public static readonly Dictionary<string, string[]> NativePhrases = new()
     {
         ["builtin-turn-on"] = ["turn on {target}", "turn {target} on"],
@@ -39,13 +39,13 @@ public static class IntentCatalog
     };
     public static readonly IntentDefinition[] BuiltIns =
     [
-        new("builtin-turn-on", "Turn power on", "TurnOn", true, [], BuiltIn: true),
-        new("builtin-turn-off", "Turn power off", "TurnOff", true, [], BuiltIn: true),
-        new("builtin-brightness", "Set light brightness", "SetBrightness", true, [], BuiltIn: true),
-        new("builtin-state", "Read device state", "QueryState", true, [], BuiltIn: true),
-        new("builtin-temperature", "Read temperature", "QueryTemperature", true, [], BuiltIn: true),
-        new("builtin-time", "Current local time", "Time", true, ["what time is it", "what is the time"], BuiltIn: true),
-        new("builtin-date", "Current local date", "Date", true, ["what is today's date", "what is the date", "what day is it"], BuiltIn: true)
+        new("builtin-turn-on", "Turn power on", "home-assistant.turn-on", true, [], BuiltIn: true),
+        new("builtin-turn-off", "Turn power off", "home-assistant.turn-off", true, [], BuiltIn: true),
+        new("builtin-brightness", "Set light brightness", "home-assistant.set-brightness", true, [], BuiltIn: true),
+        new("builtin-state", "Read device state", "home-assistant.query-state", true, [], BuiltIn: true),
+        new("builtin-temperature", "Read temperature", "home-assistant.query-temperature", true, [], BuiltIn: true),
+        new("builtin-time", "Current local time", "assister.time", true, ["what time is it", "what is the time"], BuiltIn: true),
+        new("builtin-date", "Current local date", "assister.date", true, ["what is today's date", "what is the date", "what day is it"], BuiltIn: true)
     ];
 
     public static readonly IntentExample[] Examples =
@@ -64,7 +64,7 @@ public static class IntentCatalog
     };
 }
 
-public sealed class IntentStore(AssisterDbContext Database)
+public sealed class IntentStore(AssisterDbContext Database, IntentActionRegistry Registry)
 {
     public async Task<IntentDefinition[]> DefinitionsAsync(CancellationToken Token)
     {
@@ -76,12 +76,12 @@ public sealed class IntentStore(AssisterDbContext Database)
 
     public async Task SaveAsync(IntentDefinition Definition, CancellationToken Token)
     {
-        Validate(Definition);
+        Validate(Definition, Registry);
         var Native = IntentCatalog.BuiltIns.SingleOrDefault(Row => Row.Id == Definition.Id);
-        if (Native is not null && (!Definition.BuiltIn || Definition.Handler != Native.Handler || Definition.Target is not null
+        if (Native is not null && (!Definition.BuiltIn || Definition.ActionId != Native.ActionId || Definition.Target is not null
             || Definition.Brightness is not null || Definition.Area is not null))
         {
-            throw new ArgumentException("Built-in handlers and fixed slots cannot be changed. Add aliases or create a custom intent.");
+            throw new ArgumentException("Built-in actions and fixed slots cannot be changed. Add aliases or create a custom intent.");
         }
         if (Native is null && (Definition.BuiltIn || Definition.Id.StartsWith("builtin-", StringComparison.Ordinal)))
         {
@@ -128,35 +128,55 @@ public sealed class IntentStore(AssisterDbContext Database)
 
     public async Task InitializeAsync(CancellationToken Token)
     {
+        // Upgrade the old JSON contract in place, preserving phrases, responses and optimistic versions.
+        foreach (var Existing in await Database.IntentDefinitions.ToArrayAsync(Token))
+        {
+            var Payload = JsonNode.Parse(Existing.Payload)!.AsObject();
+            if (Payload["ActionId"] is null && Payload["Handler"] is { } Legacy)
+            {
+                Payload["ActionId"] = IntentActionRegistry.UpgradeLegacy(Legacy.GetValue<string>());
+                Payload.Remove("Handler");
+                Existing.Payload = Payload.ToJsonString();
+                Existing.Version++;
+            }
+        }
+        await Database.SaveChangesAsync(Token);
         // Seed once per installation; deleting all examples must not re-create them on restart.
         if (await Database.IntentExamples.AnyAsync(Token) || await Database.IntentDefinitions.AnyAsync(Row => Row.Id == "catalog-initialized", Token)) { return; }
         Database.IntentExamples.AddRange(IntentCatalog.Examples.Select(Row => new IntentExampleRow { Id = Row.Id, Payload = JsonSerializer.Serialize(Row) }));
-        Database.IntentDefinitions.Add(new() { Id = "catalog-initialized", Payload = JsonSerializer.Serialize(new IntentDefinition("catalog-initialized", "Initialization marker", "Reply", false, ["internal marker"], Response: "internal")), Version = 1 });
+        Database.IntentDefinitions.Add(new() { Id = "catalog-initialized", Payload = JsonSerializer.Serialize(new IntentDefinition("catalog-initialized", "Initialization marker", "assister.reply", false, ["internal marker"], Response: "internal")), Version = 1 });
         await Database.SaveChangesAsync(Token);
     }
 
     public static bool ValidId(string? Id) => Id is not null && Regex.IsMatch(Id, @"^[a-z0-9][a-z0-9-]{0,95}$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
 
-    public static void Validate(IntentDefinition Definition)
+    public static void Validate(IntentDefinition Definition, IntentActionRegistry? Registry = null)
     {
+        var Action = (Registry ?? IntentActionRegistry.Default).Get(Definition.ActionId);
         if (!ValidId(Definition.Id) || Definition.Id == "catalog-initialized" || string.IsNullOrWhiteSpace(Definition.Name) || Definition.Name.Length > 128
-            || !IntentCatalog.Handlers.Contains(Definition.Handler) || Definition.Patterns is null || Definition.Patterns.Length > 24
+            || Definition.Patterns is null || Definition.Patterns.Length > 24
             || !Definition.BuiltIn && Definition.Patterns.Length == 0 || Definition.Target?.Length > 256 || Definition.Area?.Length > 128
             || Definition.Brightness is < 0 or > 100 || Definition.Response is null || Definition.Response.Length is < 1 or > 1000)
         {
-            throw new ArgumentException("Invalid intent fields. Use a supported handler, at most 24 phrases and brightness from 0 to 100.");
+            throw new ArgumentException("Invalid intent fields. Use a registered action, at most 24 phrases and brightness from 0 to 100.");
         }
         foreach (var Pattern in Definition.Patterns)
         {
             var Slots = IntentTemplate.Compile(Pattern).Slots;
-            if (Definition.Handler is "Reply" or "Time" or "Date" && Slots.Count > 0) { throw new ArgumentException("Reply, time and date phrases have no slots."); }
-            if (Definition.Handler is "TurnOn" or "TurnOff" or "SetBrightness" or "QueryState"
-                && Definition.Target is null && !Slots.Contains("target")) { throw new ArgumentException("This handler needs a target slot or fixed target."); }
-            if (Definition.Handler == "SetBrightness" && Definition.Brightness is null && !Slots.Contains("brightness")) { throw new ArgumentException("Brightness needs a slot or fixed percentage."); }
-            if (Definition.Handler != "SetBrightness" && (Slots.Contains("brightness") || Definition.Brightness is not null)) { throw new ArgumentException("Brightness belongs only to the brightness handler."); }
-            if (Definition.Handler == "QueryTemperature" && Slots.Contains("target")) { throw new ArgumentException("Temperature uses an area slot instead of a device target."); }
+            foreach (var Slot in Slots)
+            {
+                if (!Action.Inputs.Any(Input => Input.Name == Slot)) { throw new ArgumentException($"{Action.IntegrationName} / {Action.Name} does not accept {Slot}."); }
+            }
+            foreach (var Input in Action.Inputs.Where(Input => Input.Required))
+            {
+                var Fixed = Input.Name switch { "target" => Definition.Target, "brightness" => Definition.Brightness?.ToString(), "area" => Definition.Area, _ => null };
+                if (string.IsNullOrWhiteSpace(Fixed) && !Slots.Contains(Input.Name)) { throw new ArgumentException($"{Input.Label} needs a phrase slot or a fixed value."); }
+            }
         }
-        if (Definition.Handler == "Reply" && Definition.Response.Contains("{response}", StringComparison.Ordinal))
+        if (Definition.Target is not null && !Action.Inputs.Any(Input => Input.Name == "target")
+            || Definition.Brightness is not null && !Action.Inputs.Any(Input => Input.Name == "brightness")
+            || Definition.Area is not null && !Action.Inputs.Any(Input => Input.Name == "area")) { throw new ArgumentException("A fixed value is not supported by this action."); }
+        if (Definition.ActionId == "assister.reply" && Definition.Response.Contains("{response}", StringComparison.Ordinal))
         {
             throw new ArgumentException("A fixed reply needs its own response text instead of {response}.");
         }

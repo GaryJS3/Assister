@@ -10,7 +10,14 @@ public static class IntentEndpoints
     {
         var Api = App.MapGroup("/api/intents");
         Api.MapGet("", async (IntentStore Store, CancellationToken Token) => Results.Ok(await Store.DefinitionsAsync(Token)));
-        Api.MapGet("/catalog", () => Results.Ok(new { handlers = IntentCatalog.Handlers, nativePhrases = IntentCatalog.NativePhrases, slots = new[] { "{target}", "{target:light}", "{target:switch}", "{brightness:percent}", "{area}" } }));
+        Api.MapGet("/catalog", (IntentActionRegistry Registry) => Results.Ok(new { Registry.Integrations, Registry.Actions, nativePhrases = IntentCatalog.NativePhrases }));
+        App.MapGet("/api/integrations", (IntentActionRegistry Registry, Assister.Modules.HomeAssistant.HomeAssistantStateCache Cache, IConfiguration Configuration) => Results.Ok(Registry.Integrations.Select(Integration => new
+        {
+            Integration.Id, Integration.Name, Integration.Description, Integration.BuiltIn,
+            status = Integration.Id == "assister" ? "Available" : Integration.Id == "home-assistant"
+                ? string.IsNullOrWhiteSpace(Configuration["HomeAssistant:Url"]) ? "Not configured" : Cache.Snapshot().IsStale ? "Unavailable" : "Connected" : "Registered",
+            actions = Registry.Actions.Where(Action => Action.IntegrationId == Integration.Id)
+        })));
         Api.MapPut("/{id}", async (string Id, IntentDefinition Definition, IntentStore Store, CancellationToken Token) =>
         {
             if (Id != Definition.Id) { return Results.BadRequest(new { error = "The intent identifier does not match." }); }

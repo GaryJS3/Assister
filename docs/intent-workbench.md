@@ -2,6 +2,8 @@
 
 Open `/intents.html` from the diagnostics navigation. The workbench and normal voice/text pipeline share the same persisted C# intent engine. Saved changes apply to the next request without restarting.
 
+Each intent now selects an **Integration** and a registered **Action**. Stable qualified IDs such as `home-assistant.set-brightness` identify execution ownership. Existing handler definitions are upgraded automatically. See [integrations.md](integrations.md) for registration, dispatch and the initial scope.
+
 ## Author and inspect
 
 Built-ins cover power, light brightness, device state, temperature, local time and date. Their native device recognizers remain in C#; the editor shows examples and supports additional aliases, response changes and disabling. Create custom intents for fixed replies or additional phrases bound to an existing handler. Custom intents can be deleted. Concurrent edits require reloading instead of silently overwriting another save.

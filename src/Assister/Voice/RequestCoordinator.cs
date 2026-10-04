@@ -10,7 +10,7 @@ namespace Assister.Voice;
 
 public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
     HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
-    IConfiguration? Configuration = null) : IRequestCoordinator
+    IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -55,14 +55,19 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             Step.Input(new { originalInput = Request.Message, normalizedInput = IntentClassifier.Normalize(Request.Message) }, false);
             Step.Output(new { matched = Decision.Status == "matched", rule = Decision.Match?.Definition.BuiltIn == true && Intent is not null ? Intent.MatchedRule : Decision.Match?.Definition.Id, intent = Intent?.Kind.ToString(),
                 Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Decision.Reason }, false);
-            Step.Metadata(new { ruleId = Decision.Match?.Definition.Id, handler = Decision.Match?.Definition.Handler,
+            Step.Metadata(new { ruleId = Decision.Match?.Definition.Id, actionId = Decision.Match?.Definition.ActionId, integrationId = Decision.Match?.Definition.ActionId.Split('.')[0],
                 pattern = Decision.Match?.Pattern, candidates = Decision.Candidates.Select(Item => Item.Definition.Id), Decision.Reason });
             Step.Complete(Decision.Status);
         }
         if (Decision.Status is "ambiguous" or "invalid-request") { return Result(Decision.Reason, Decision.Status); }
+        if (Decision.Match is { } Registered && Actions is not null && !Actions.CanExecute(Registered.Definition.ActionId))
+        {
+            return Result("This integration does not have an available action executor.", "unavailable");
+        }
         if (Decision.Match is { Intent: null } Simple)
         {
-            return Result(IntentResponses.Render(Simple, "", Configuration ?? new ConfigurationBuilder().Build()), "succeeded");
+            var Response = Actions is null ? new IntentResult("", "succeeded") : await Actions.ExecuteAsync(Simple, null, CancellationToken);
+            return Result(Response.Outcome == "succeeded" ? IntentResponses.Render(Simple, Response.Response, Configuration ?? new ConfigurationBuilder().Build()) : Response.Response, Response.Outcome);
         }
         if (Intent is null)
         {
@@ -115,7 +120,8 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             using (var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state."))
             {
                 Step.Input(new { action = Intent.Kind.ToString(), entities = Resolution.Entities.Select(Entity => Entity.EntityId), Intent.BrightnessPercent });
-                Response = await Handler.ExecuteAsync(Intent, Resolution, CancellationToken);
+                Response = Actions is null ? await Handler.ExecuteAsync(Intent, Resolution, CancellationToken)
+                    : await Actions.ExecuteAsync(Decision.Match!, Resolution, CancellationToken);
                 Step.Output(new { Response.Response, Response.Outcome });
                 Step.Complete(Response.Outcome);
             }

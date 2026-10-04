@@ -15,10 +15,10 @@ public interface IIntentEngine
     Task<IntentDecision> MatchAsync(string Text, CancellationToken Token);
 }
 
-public sealed class IntentEngine(IntentStore Store, IntentClassifier Native) : IIntentEngine
+public sealed class IntentEngine(IntentStore Store, IntentClassifier Native, IntentActionRegistry Registry) : IIntentEngine
 {
     public async Task<IntentDecision> MatchAsync(string Text, CancellationToken Token) =>
-        IntentMatching.Match(Text, await Store.DefinitionsAsync(Token), Native);
+        IntentMatching.Match(Text, await Store.DefinitionsAsync(Token), Native, Registry);
 }
 
 public sealed record CompiledIntentTemplate(Regex Pattern, HashSet<string> Slots, string? TargetDomain);
@@ -62,7 +62,7 @@ public static class IntentTemplate
 
 public static class IntentMatching
 {
-    public static IntentDecision Match(string Text, IReadOnlyList<IntentDefinition> Definitions, IntentClassifier Native)
+    public static IntentDecision Match(string Text, IReadOnlyList<IntentDefinition> Definitions, IntentClassifier Native, IntentActionRegistry? Registry = null)
     {
         if (string.IsNullOrWhiteSpace(Text) || Text.Length > 1000) { return new("invalid-request", "", [], "Enter a request of 1 to 1000 characters."); }
         var Normalized = IntentClassifier.Normalize(Text);
@@ -86,7 +86,7 @@ public static class IntentMatching
                 var Target = Compiled.Slots.Contains("target") ? LanguageParser.Noun(Match.Groups["target"].Value) : Definition.Target;
                 var Area = Compiled.Slots.Contains("area") ? LanguageParser.Noun(Match.Groups["area"].Value) : Definition.Area;
                 int? Brightness = Compiled.Slots.Contains("brightness") ? int.Parse(Match.Groups["brightness"].Value, CultureInfo.InvariantCulture) : Definition.Brightness;
-                var Intent = Enum.TryParse<DirectIntentKind>(Definition.Handler, out var Kind)
+                var Intent = (Registry ?? IntentActionRegistry.Default).Get(Definition.ActionId).DeviceIntent is { } Kind
                     ? new IntentMatch(Kind, Kind == DirectIntentKind.QueryTemperature ? "temperature" : Target ?? "", Brightness, Area, Compiled.TargetDomain) : null;
                 // Two patterns in one definition may extract different slots; retain conflicts.
                 var Equivalent = Candidates.FindIndex(Item => Item.Definition.Id == Definition.Id
@@ -115,12 +115,12 @@ public static class IntentResponses
     public static string Render(IntentCandidate Candidate, string Response, IConfiguration Configuration, DateTimeOffset? Now = null)
     {
         var Time = Now ?? DateTimeOffset.UtcNow;
-        if (Candidate.Definition.Handler is "Time" or "Date" || Candidate.Definition.Response.Contains("{time}", StringComparison.Ordinal) || Candidate.Definition.Response.Contains("{date}", StringComparison.Ordinal))
+        if (Candidate.Definition.ActionId is "assister.time" or "assister.date" || Candidate.Definition.Response.Contains("{time}", StringComparison.Ordinal) || Candidate.Definition.Response.Contains("{date}", StringComparison.Ordinal))
         {
             Time = TimeZoneInfo.ConvertTime(Time, TimeZoneInfo.FindSystemTimeZoneById(Configuration["Assister:TimeZone"] ?? "America/New_York"));
         }
-        if (Candidate.Definition.Handler == "Time") { Response = $"It is {Time.ToString("h:mm tt", CultureInfo.InvariantCulture)}."; }
-        if (Candidate.Definition.Handler == "Date") { Response = $"Today is {Time.ToString("dddd, MMMM d, yyyy", CultureInfo.InvariantCulture)}."; }
+        if (Candidate.Definition.ActionId == "assister.time") { Response = $"It is {Time.ToString("h:mm tt", CultureInfo.InvariantCulture)}."; }
+        if (Candidate.Definition.ActionId == "assister.date") { Response = $"Today is {Time.ToString("dddd, MMMM d, yyyy", CultureInfo.InvariantCulture)}."; }
         return Regex.Replace(Candidate.Definition.Response, @"\{(?<slot>response|target|brightness|area|time|date)\}", Match => Match.Groups["slot"].Value switch
         {
             "response" => Response, "target" => Candidate.Intent?.Target ?? "", "brightness" => Candidate.Intent?.BrightnessPercent?.ToString(CultureInfo.InvariantCulture) ?? "",

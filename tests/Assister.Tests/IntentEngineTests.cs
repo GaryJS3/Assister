@@ -5,8 +5,46 @@ namespace Assister.Tests;
 
 public sealed class IntentEngineTests
 {
-    private static IntentDefinition Brightness(string Id = "dim-lights") => new(Id, "Dim a light", "SetBrightness", true,
+    [Fact]
+    public void RegistryRequiresUniqueQualifiedActionsAndValidationUsesRegisteredInputs()
+    {
+        var Registry = IntentActionRegistry.Default;
+        Assert.Equal(2, Registry.Integrations.Length);
+        Assert.Equal(8, Registry.Actions.Length);
+        Assert.Throws<ArgumentException>(() => new IntentActionRegistry([new HomeAssistantIntentActions(), new HomeAssistantIntentActions()]));
+        Assert.Throws<ArgumentException>(() => Registry.Get("SetBrightness"));
+        Assert.Throws<ArgumentException>(() => IntentStore.Validate(new("bad-input", "Bad input", "assister.reply", true, ["hello {target}"], Response: "Hello.")));
+        Assert.Throws<ArgumentException>(() => IntentStore.Validate(new("missing-input", "Missing target", "home-assistant.turn-on", true, ["turn on something"])));
+    }
+
+    private static IntentDefinition Brightness(string Id = "dim-lights") => new(Id, "Dim a light", "home-assistant.set-brightness", true,
         ["dim {target:light} to {brightness:percent} percent"]);
+
+    [Fact]
+    public async Task DispatcherRequiresAnExecutorAndRejectsMismatchedDeviceActions()
+    {
+        var Executor = new RecordingExecutor();
+        var Dispatcher = new IntegrationActionDispatcher(IntentActionRegistry.Default, [Executor]);
+        var Candidate = IntentMatching.Match("dim desk to 40 percent", [Brightness()], new()).Match!;
+        Assert.True(Dispatcher.CanExecute(Candidate.Definition.ActionId));
+        Assert.False(Dispatcher.CanExecute("assister.reply"));
+        await Dispatcher.ExecuteAsync(Candidate, null, CancellationToken.None);
+        Assert.Equal(1, Executor.Calls);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Dispatcher.ExecuteAsync(Candidate with { Intent = new(DirectIntentKind.TurnOff, "desk") }, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Dispatcher.ExecuteAsync(new(new("reply", "Reply", "assister.reply", true, ["hello"], Response: "Hi."), null, "hello"), null, CancellationToken.None));
+        Assert.Equal(1, Executor.Calls);
+    }
+
+    private sealed class RecordingExecutor : IIntegrationIntentExecutor
+    {
+        public string IntegrationId => "home-assistant";
+        public int Calls { get; private set; }
+        public Task<IntentResult> ExecuteAsync(IntentCandidate Candidate, EntityResolutionResult? Resolution, CancellationToken Token)
+        {
+            Calls++;
+            return Task.FromResult(new IntentResult("Done.", "succeeded"));
+        }
+    }
 
     [Fact]
     public void TemplatesExtractTypedSlotsAndValidateOutOfRangeValues()
@@ -37,7 +75,7 @@ public sealed class IntentEngineTests
     [Fact]
     public void LiteralPhrasesCannotInjectRegexAndMultipleRulesDoNotSilentlyWin()
     {
-        var Reply = new IntentDefinition("hello", "Greeting", "Reply", true, ["hello .*"], Response: "Hi.");
+        var Reply = new IntentDefinition("hello", "Greeting", "assister.reply", true, ["hello .*"], Response: "Hi.");
         Assert.Equal("unmatched", IntentMatching.Match("hello anything", [Reply], new()).Status);
         Assert.Equal("matched", IntentMatching.Match("hello .*", [Reply], new()).Status);
         var Conflicting = new[] { Brightness(), Brightness("other-dim") };
@@ -48,7 +86,7 @@ public sealed class IntentEngineTests
     [Fact]
     public void BuiltInAliasesPreserveNativeRulesAndDisabledRulesStopMatching()
     {
-        var Definition = IntentCatalog.BuiltIns.Single(Row => Row.Handler == "TurnOff")
+        var Definition = IntentCatalog.BuiltIns.Single(Row => Row.ActionId == "home-assistant.turn-off")
             with { Patterns = ["turn {target:light} off", "disable {target:light}"] };
         Assert.Equal("matched", IntentMatching.Match("turn desk light off", [Definition], new()).Status);
         Assert.Equal("light", IntentMatching.Match("turn desk light off", [Definition], new()).Match!.Intent!.TargetDomain);
@@ -60,7 +98,7 @@ public sealed class IntentEngineTests
     [Fact]
     public void FixedSlotsAndNativeClockResponsesDoNotNeedTheModel()
     {
-        var Movie = new IntentDefinition("movie", "Movie lighting", "SetBrightness", true, ["movie lighting"], "light.living_room_lights", 20, Response: "Set {target} to {brightness} percent.");
+        var Movie = new IntentDefinition("movie", "Movie lighting", "home-assistant.set-brightness", true, ["movie lighting"], "light.living_room_lights", 20, Response: "Set {target} to {brightness} percent.");
         IntentStore.Validate(Movie);
         var Match = IntentMatching.Match("movie lighting", [Movie], new()).Match!;
         Assert.Equal(20, Match.Intent!.BrightnessPercent);

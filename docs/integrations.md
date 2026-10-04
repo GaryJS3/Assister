@@ -1,0 +1,11 @@
+# Integration foundation
+
+`/integrations.html` displays the installed built-in integrations and their registered actions. `/api/integrations` returns this catalog with a minimal connection status. Home Assistant uses the existing configuration/client/cache; Assister supplies local replies, time and date. Credentials and endpoints are not exposed by this API. Configuration editing and installing external plugins are not implemented yet.
+
+An `IIntentActionProvider` registers an integration descriptor and its action descriptors through dependency injection. Stable IDs are qualified by integration, for example `home-assistant.set-brightness` and `assister.reply`. Descriptors provide names, input requirements and whether the action changes state. The same registry supplies the editor, validates definitions and identifies execution ownership. Duplicate integration/action IDs and unqualified actions are rejected.
+
+An `IIntegrationIntentExecutor` handles an integration's actual execution. `IntegrationActionDispatcher` selects it by the action's owning integration; catalog metadata alone does not authorize execution. Both normal requests and explicit workbench execution use this dispatch. Existing Home Assistant resolution and confirmed-control behavior remain in their current adapter. Timers and the LLM tool registry retain their existing paths for this initial increment.
+
+The editor separates Integration and Action, shows registered inputs, and includes integration ownership in the library, inspector and confirmation. Definitions persist `ActionId` instead of an unqualified handler name. The startup checkpoint triggers the existing database backup flow; the idempotent JSON upgrade preserves intent IDs, templates, responses and enabled state, and increments versions to invalidate stale edits. Saved regression examples retain their rule IDs.
+
+Future Calendar, Trello or Lunch Money adapters can register catalog and executor implementations against these contracts. This first version supports the existing device/area/brightness input vocabulary. New action input types, connection setup, generic target resolution and LLM tool exposure are additive work; there is no dynamic plugin loader or claim that those services are already connected.

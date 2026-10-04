@@ -11,12 +11,12 @@ namespace Assister.Intents;
 public sealed record IntentInspectRequest(string Text, string? Area = null, IntentDefinition? Draft = null);
 public sealed record IntentExecuteRequest(string Text, string? Area, string Fingerprint);
 public sealed record IntentPreview(string Text, string Normalized, string MatchStatus, string Outcome, string Reason,
-    IntentCandidate[] Candidates, string? Handler, string[] EntityIds, object[] Alternatives,
+    IntentCandidate[] Candidates, IntentActionDescriptor? Action, string[] EntityIds, object[] Alternatives,
     string? Response, bool StateChanging, bool CanExecute, string Fingerprint);
 public sealed record IntentTestResult(IntentExample Example, bool Passed, string[] Failures, IntentPreview Actual);
 
 public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, IntentClassifier Native,
-    IEntityResolver Resolver, HomeAssistantStateCache Cache, DirectIntentHandler Handler, IConfiguration Configuration)
+    IEntityResolver Resolver, HomeAssistantStateCache Cache, DirectIntentHandler Handler, IConfiguration Configuration, IntentActionRegistry Registry, IntegrationActionDispatcher Dispatcher)
 {
     private async Task<(IntentPreview Preview, IntentCandidate? Match, EntityResolutionResult? Resolution)> PlanAsync(IntentInspectRequest Request, CancellationToken Token)
     {
@@ -24,9 +24,9 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
         IntentDecision Decision;
         if (Request.Draft is not null)
         {
-            IntentStore.Validate(Request.Draft);
+            IntentStore.Validate(Request.Draft, Registry);
             var Definitions = await Store.DefinitionsAsync(Token);
-            Decision = IntentMatching.Match(Request.Text, Definitions.Where(Row => Row.Id != Request.Draft.Id).Append(Request.Draft).ToArray(), Native);
+            Decision = IntentMatching.Match(Request.Text, Definitions.Where(Row => Row.Id != Request.Draft.Id).Append(Request.Draft).ToArray(), Native, Registry);
         }
         else { Decision = await Engine.MatchAsync(Request.Text, Token); }
         var Match = Decision.Match;
@@ -34,10 +34,16 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
         var Reason = Decision.Reason;
         EntityResolutionResult? Resolution = null;
         string? Response = null;
-        var Changing = Match?.Definition.Handler is "TurnOn" or "TurnOff" or "SetBrightness";
+        var Action = Match is null ? null : Registry.Get(Match.Definition.ActionId);
+        var Changing = Action?.StateChanging == true;
         if (Match is not null)
         {
-            if (Match.Intent is null)
+            if (!Dispatcher.CanExecute(Match.Definition.ActionId))
+            {
+                Outcome = "unsupported";
+                Reason = "This integration has no registered intent executor.";
+            }
+            else if (Match.Intent is null)
             {
                 Outcome = "ready";
                 Response = IntentResponses.Render(Match, "", Configuration);
@@ -72,7 +78,7 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
             Request.Text, Request.Area, Outcome, rule = Match?.Definition, intent = Match?.Intent, targets = Ids
         }))));
         var Preview = new IntentPreview(Request.Text, Decision.Normalized, Decision.Status, Outcome, Reason,
-            Decision.Candidates, Match?.Definition.Handler, Ids,
+            Decision.Candidates, Action, Ids,
             Resolution?.Alternatives.Select(Entity => (object)new { Entity.EntityId, Entity.Name, Entity.AreaName }).ToArray() ?? [],
             Response, Changing, Outcome == "ready" && Request.Draft is null, Fingerprint);
         return (Preview, Match, Resolution);
@@ -89,11 +95,10 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
         }
         using var Run = RunTracing.BeginRun(Runs, "intent-workbench", "intent-workbench", Request.Area, Text: Request.Text);
         using var Step = RunTracing.Start("Intent execution", "Execute only the inspected deterministic handler; LLM fallback is disabled.");
-        Step.Input(new { Plan.Match!.Definition.Id, Plan.Preview.EntityIds, Plan.Match.Intent });
+        Step.Input(new { Plan.Match!.Definition.Id, Plan.Match.Definition.ActionId, Plan.Preview.Action!.IntegrationId, Plan.Preview.EntityIds, Plan.Match.Intent });
         try
         {
-            var Result = Plan.Match.Intent is null ? new IntentResult("", "succeeded")
-                : await Handler.ExecuteAsync(Plan.Match.Intent, Plan.Resolution!, Token);
+            var Result = await Dispatcher.ExecuteAsync(Plan.Match!, Plan.Resolution, Token);
             var Text = Result.Outcome == "succeeded" ? IntentResponses.Render(Plan.Match, Result.Response, Configuration) : Result.Response;
             var Spoken = VoiceFormatter.Format(Text);
             Step.Output(new { response = Text, Result.Outcome });

@@ -2,7 +2,20 @@
 const $ = id => document.getElementById(id);
 const node = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const id = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-let nativePhrases = {};
+let nativePhrases = {}, actions = [];
+const actionFor = actionId => actions.find(a => a.id === actionId);
+const actionLabel = actionId => { const a = actionFor(actionId); return a ? `${a.integrationName} → ${a.name}` : actionId; };
+function renderInputs() {
+  const a = actionFor($('action').value);
+  $('action-inputs').textContent = a ? `${a.id} · ${a.stateChanging ? 'Changes state' : 'Read-only / local response'} · Inputs: ${a.inputs.map(i => `${i.label} (${i.type}${i.required ? ', required' : ', optional'})`).join(', ') || 'None'}` : '';
+  for (const [field, input] of [['fixed-target', 'target'], ['fixed-brightness', 'brightness'], ['fixed-area', 'area']]) $(field).disabled = selected?.builtIn || !a?.inputs.some(i => i.name === input);
+}
+function populateActions(actionId) {
+  $('action').replaceChildren();
+  for (const a of actions.filter(a => a.integrationId === $('integration').value)) { const option = node('option', a.name); option.value = a.id; $('action').append(option); }
+  if (actionId) $('action').value = actionId;
+  renderInputs();
+}
 let definitions = [], examples = [], selected = null, preview = null, exampleId = null, testResults = [], inspectionGeneration = 0;
 async function api(path, method = 'GET', body) {
   const r = await fetch(`/api/intents${path}`, { method, headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -18,9 +31,9 @@ function panel(name) {
 }
 function invalidate() { inspectionGeneration++; preview = null; $('execute').disabled = true; $('save-example').disabled = true; $('execution').replaceChildren(); $('preview').replaceChildren(node('p', 'Inspect this request to see the current plan.', 'muted')); }
 function definition() {
-  return { id: selected?.id || id('intent'), name: $('name').value.trim(), handler: $('handler').value, enabled: $('enabled').checked,
-    patterns: $('patterns').value.split('\n').map(x => x.trim()).filter(Boolean), target: $('fixed-target').value.trim() || null,
-    brightness: $('fixed-brightness').value === '' ? null : Number($('fixed-brightness').value), area: $('fixed-area').value.trim() || null,
+  return { id: selected?.id || id('intent'), name: $('name').value.trim(), actionId: $('action').value, enabled: $('enabled').checked,
+    patterns: $('patterns').value.split('\n').map(x => x.trim()).filter(Boolean), target: $('fixed-target').disabled ? null : $('fixed-target').value.trim() || null,
+    brightness: $('fixed-brightness').disabled || $('fixed-brightness').value === '' ? null : Number($('fixed-brightness').value), area: $('fixed-area').disabled ? null : $('fixed-area').value.trim() || null,
     response: $('response-template').value, builtIn: selected?.builtIn || false, version: selected?.version || 0 };
 }
 function select(d) {
@@ -28,21 +41,21 @@ function select(d) {
   $('native-phrases').replaceChildren(...phrases.map(text => node('li', text)));
   selected = d; $('definition-form').hidden = false; $('editor-empty').hidden = true; $('editor-title').textContent = d.name || 'New intent';
   $('definition-kind').textContent = d.builtIn ? 'BUILT-IN' : 'CUSTOM';
-  $('name').value = d.name; $('handler').value = d.handler; $('handler').disabled = d.builtIn;
+  $('name').value = d.name; $('integration').value = actionFor(d.actionId).integrationId; populateActions(d.actionId); $('integration').disabled = d.builtIn; $('action').disabled = d.builtIn;
   $('enabled').checked = d.enabled; $('patterns').value = d.patterns.join('\n');
-  $('pattern-label').textContent = d.builtIn && !['Time', 'Date'].includes(d.handler) ? ' / additional aliases' : '';
+  $('pattern-label').textContent = d.builtIn && !['assister.time', 'assister.date'].includes(d.actionId) ? ' / additional aliases' : '';
   $('fixed-target').value = d.target || ''; $('fixed-brightness').value = d.brightness ?? ''; $('fixed-area').value = d.area || '';
-  for (const key of ['fixed-target', 'fixed-brightness', 'fixed-area']) $(key).disabled = d.builtIn;
+  renderInputs();
   $('response-template').value = d.response; $('delete-intent').hidden = d.builtIn || !definitions.some(x => x.id === d.id);
   $('dirty').textContent = ''; $('preview-draft').checked = false; invalidate(); renderLibrary();
 }
 function renderLibrary() {
   const filter = $('search').value.toLowerCase(); $('intent-list').replaceChildren();
   $('intent-count').textContent = `${definitions.filter(x => x.enabled).length} ON`;
-  for (const d of definitions.filter(x => `${x.name} ${x.handler}`.toLowerCase().includes(filter))) {
+  for (const d of definitions.filter(x => `${x.name} ${actionLabel(x.actionId)}`.toLowerCase().includes(filter))) {
     const b = node('button', undefined, `intent-item${selected?.id === d.id ? ' selected' : ''}${d.enabled ? '' : ' off'}`);
     b.type = 'button'; b.setAttribute('aria-pressed', String(selected?.id === d.id));
-    b.append(node('strong', d.name), node('small', `${d.handler} · ${d.builtIn ? 'native' : 'custom'} · ${d.enabled ? 'enabled' : 'disabled'}`));
+    b.append(node('strong', d.name), node('small', `${actionLabel(d.actionId)} · ${d.builtIn ? 'native' : 'custom'} · ${d.enabled ? 'enabled' : 'disabled'}`));
     b.onclick = () => select(d); $('intent-list').append(b);
   }
 }
@@ -55,7 +68,7 @@ async function refresh() {
 function fact(list, label, text) { const row = node('div'); row.append(node('dt', label), node('dd', text)); list.append(row); }
 function renderPreview(p) {
   $('preview').replaceChildren(); const head = node('div', undefined, 'decision-head');
-  head.append(node('strong', p.handler || (p.matchStatus === 'unmatched' ? 'No intent match' : 'Routing decision')), node('span', p.outcome, `status ${p.outcome}`));
+  head.append(node('strong', p.action ? `${p.action.integrationName} → ${p.action.name}` : (p.matchStatus === 'unmatched' ? 'No intent match' : 'Routing decision')), node('span', p.outcome, `status ${p.outcome}`));
   $('preview').append(head, node('p', p.reason, 'muted'));
   const list = node('dl', undefined, 'decision-steps'); const match = p.matchStatus === 'matched' ? p.candidates[0] : null;
   fact(list, 'Input', p.normalized);
@@ -125,9 +138,10 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => $(b.dat
 document.querySelectorAll('[data-request]').forEach(b => b.onclick = action(async () => { $('request').value = b.dataset.request; $('preview-draft').checked = false; await inspectRequest(); }));
 $('search').oninput = renderLibrary;
 $('refresh').onclick = action(refresh);
-$('new-intent').onclick = () => select({ id: id('intent'), name: '', handler: 'Reply', enabled: true, patterns: ['hello assister'], response: 'Hello.', builtIn: false, version: 0 });
+$('new-intent').onclick = () => select({ id: id('intent'), name: '', actionId: 'assister.reply', enabled: true, patterns: ['hello assister'], response: 'Hello.', builtIn: false, version: 0 });
 $('definition-form').oninput = () => { $('dirty').textContent = 'Unsaved changes'; if ($('preview-draft').checked) invalidate(); };
-$('handler').onchange = () => { if ($('handler').value === 'Reply' && $('response-template').value === '{response}') $('response-template').value = 'Hello.'; };
+$('integration').onchange = () => { populateActions(); invalidate(); };
+$('action').onchange = () => { renderInputs(); if ($('action').value === 'assister.reply' && $('response-template').value === '{response}') $('response-template').value = 'Hello.'; invalidate(); };
 $('definition-form').onsubmit = action(async () => {
   $('save-intent').disabled = true;
   try { const d = definition(); selected = await api(`/${encodeURIComponent(d.id)}`, 'PUT', d); testResults = []; await refresh(); $('notice').textContent = 'Intent saved. Changes apply to the next request.'; }
@@ -158,7 +172,7 @@ $('run-tests').onclick = action(async () => {
 });
 $('load-candidates').onclick = action(candidates);
 $('execute').onclick = () => {
-  $('execution-plan').replaceChildren(node('p', preview.text), node('p', `Handler: ${preview.handler}`), node('p', `Targets: ${preview.entityIds.join(', ') || 'No device'}`), node('p', `Expected response: ${preview.response || ''}`));
+  $('execution-plan').replaceChildren(node('p', preview.text), node('p', `Integration: ${preview.action.integrationName}`), node('p', `Action: ${preview.action.name}`), node('p', `Targets: ${preview.entityIds.join(', ') || 'No device'}`), node('p', `Expected response: ${preview.response || ''}`));
   $('execute-dialog').showModal();
 };
 $('confirm-execute').onclick = action(async () => {
@@ -171,6 +185,6 @@ $('confirm-execute').onclick = action(async () => {
   } catch (e) { invalidate(); throw e; }
 });
 action(async () => {
-  const catalog = await api('/catalog'); nativePhrases = catalog.nativePhrases; for (const handler of catalog.handlers) { const option = node('option', handler); option.value = handler; $('handler').append(option); }
+  const catalog = await api('/catalog'); nativePhrases = catalog.nativePhrases; actions = catalog.actions; for (const integration of catalog.integrations) { const option = node('option', integration.name); option.value = integration.id; $('integration').append(option); }
   await refresh();
 })();

@@ -15,11 +15,48 @@ namespace Assister.IntegrationTests;
 public sealed class IntentWorkbenchTests
 {
     [Fact]
+    public async Task LegacyDefinitionsUpgradeOnceAndActionsExposeTheirOwningIntegration()
+    {
+        await using var Factory = new TestApplication();
+        using var Http = Factory.CreateClient();
+        using (var Scope = Factory.Services.CreateScope())
+        {
+            var Database = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.AssisterDbContext>();
+            Database.IntentDefinitions.Add(new() { Id = "legacy-reply", Version = 3,
+                Payload = """{"Id":"legacy-reply","Name":"Legacy greeting","Handler":"Reply","Enabled":true,"Patterns":["legacy greeting"],"Response":"Preserved reply.","BuiltIn":false,"Version":3}""" });
+            await Database.SaveChangesAsync();
+            var Store = Scope.ServiceProvider.GetRequiredService<IntentStore>();
+            await Store.InitializeAsync(CancellationToken.None);
+            await Store.InitializeAsync(CancellationToken.None);
+            var Upgraded = (await Store.DefinitionsAsync(CancellationToken.None)).Single(Row => Row.Id == "legacy-reply");
+            Assert.Equal("assister.reply", Upgraded.ActionId);
+            Assert.Equal(4, Upgraded.Version);
+            Assert.Equal("Preserved reply.", Upgraded.Response);
+            Assert.DoesNotContain("Handler", (await Database.IntentDefinitions.FindAsync("legacy-reply"))!.Payload);
+        }
+        var Preview = await InspectAsync(Http, "legacy greeting");
+        Assert.Equal("assister", Preview.Action!.IntegrationId);
+        Assert.Equal("Reply with text", Preview.Action.Name);
+        Assert.False(Preview.StateChanging);
+        var Device = await InspectAsync(Http, "set desk light to 40 percent");
+        Assert.Equal("home-assistant.set-brightness", Device.Action!.Id);
+        Assert.Equal("Home Assistant", Device.Action.IntegrationName);
+        Assert.True(Device.Action.StateChanging);
+        Assert.Contains(Device.Action.Inputs, Input => Input.Name == "brightness" && Input.Required);
+        var Integrations = await Http.GetFromJsonAsync<JsonElement[]>("/api/integrations");
+        Assert.Equal(2, Integrations!.Length);
+        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync("/integrations.html")).StatusCode);
+        var Invalid = new IntentDefinition("unknown-action", "Unknown", "trello.create-card", true, ["create a card"], Response: "Done.");
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync("/api/intents/unknown-action", Invalid)).StatusCode);
+        Assert.Empty(Factory.Actions.Calls);
+    }
+
+    [Fact]
     public async Task InspectorNeverExecutesAndPlansAreRevalidatedBeforeExplicitExecution()
     {
         await using var Factory = new TestApplication();
         using var Http = Factory.CreateClient();
-        var Definition = new IntentDefinition("movie-lighting", "Movie lighting", "SetBrightness", true,
+        var Definition = new IntentDefinition("movie-lighting", "Movie lighting", "home-assistant.set-brightness", true,
             ["movie lighting"], "light.desk", 20, Response: "Movie lighting is ready.");
         Definition = await SaveAsync(Http, Definition);
         var Preview = await InspectAsync(Http, "movie lighting");
@@ -60,7 +97,7 @@ public sealed class IntentWorkbenchTests
         await using (var Factory = new TestApplication(Directory))
         {
             using var Http = Factory.CreateClient();
-            var Definition = await SaveAsync(Http, new("hello-rule", "Greeting", "Reply", true, ["hello assister"], Response: "Hello from a saved intent."));
+            var Definition = await SaveAsync(Http, new("hello-rule", "Greeting", "assister.reply", true, ["hello assister"], Response: "Hello from a saved intent."));
             var Normal = await (await Http.PostAsJsonAsync("/api/test/message", new UserRequest("hello assister"))).Content.ReadFromJsonAsync<RequestResult>();
             Assert.Equal("direct-intent", Normal!.HandledBy);
             Assert.Equal("Hello from a saved intent.", Normal.Response);
@@ -68,11 +105,11 @@ public sealed class IntentWorkbenchTests
             Assert.Equal(HttpStatusCode.OK, (await Http.PutAsJsonAsync("/api/intents/examples/hello-test", Example)).StatusCode);
             var Conflict = await Http.PutAsJsonAsync("/api/intents/hello-rule", Definition with { Version = 0 });
             Assert.Equal(HttpStatusCode.Conflict, Conflict.StatusCode);
-            var BuiltIn = (await Http.GetFromJsonAsync<IntentDefinition[]>("/api/intents"))!.Single(Row => Row.Handler == "TurnOff");
+            var BuiltIn = (await Http.GetFromJsonAsync<IntentDefinition[]>("/api/intents"))!.Single(Row => Row.ActionId == "home-assistant.turn-off");
             BuiltIn = await SaveAsync(Http, BuiltIn with { Enabled = false });
             Assert.Equal("unmatched", (await InspectAsync(Http, "turn desk light off")).MatchStatus);
             Assert.Equal(HttpStatusCode.BadRequest, (await Http.DeleteAsync($"/api/intents/{BuiltIn.Id}?version={BuiltIn.Version}")).StatusCode);
-            Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync($"/api/intents/{BuiltIn.Id}", BuiltIn with { Handler = "Reply" })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync($"/api/intents/{BuiltIn.Id}", BuiltIn with { ActionId = "assister.reply" })).StatusCode);
             Assert.Empty(Factory.Actions.Calls);
         }
         await using (var Factory = new TestApplication(Directory))
@@ -95,7 +132,7 @@ public sealed class IntentWorkbenchTests
     {
         await using var Factory = new TestApplication();
         using var Http = Factory.CreateClient();
-        var Draft = new IntentDefinition("draft-greeting", "Draft", "Reply", true, ["hi assister"], Response: "Hi.");
+        var Draft = new IntentDefinition("draft-greeting", "Draft", "assister.reply", true, ["hi assister"], Response: "Hi.");
         var Preview = await (await Http.PostAsJsonAsync("/api/intents/inspect", new IntentInspectRequest("hi assister", Draft: Draft))).Content.ReadFromJsonAsync<IntentPreview>();
         Assert.Equal("matched", Preview!.MatchStatus);
         Assert.False(Preview.CanExecute);
@@ -105,7 +142,7 @@ public sealed class IntentWorkbenchTests
         Assert.Equal("ambiguous", (await InspectAsync(Http, "hi assister")).MatchStatus);
         var Normal = await (await Http.PostAsJsonAsync("/api/test/message", new UserRequest("hi assister"))).Content.ReadFromJsonAsync<RequestResult>();
         Assert.Equal("ambiguous", Normal!.Outcome);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync("/api/intents/unsafe-handler", Draft with { Id = "unsafe-handler", Handler = "shell" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync("/api/intents/unsafe-handler", Draft with { Id = "unsafe-handler", ActionId = "shell" })).StatusCode);
         Assert.Equal("timer-route", (await InspectAsync(Http, "set a timer for 5 minutes")).MatchStatus);
         Assert.Empty(Factory.Actions.Calls);
         Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync("/intents.html")).StatusCode);
