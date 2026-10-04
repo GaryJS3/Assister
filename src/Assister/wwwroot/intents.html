@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Intents</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/intents.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Intents</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/intents.css"><link rel="stylesheet" href="/app-shell.css"></head>
 <body>
-<header><div class="brand">A<span> / ASSISTER</span></div><nav aria-label="Main navigation"><a href="/">Pipeline debugger</a><a href="/satellites.html">Satellites</a><a href="/intents.html" aria-current="page">Intents</a></nav></header>
+<header data-app-shell></header>
 <main>
 <div class="heading"><div><p class="eyebrow">LANGUAGE / DETERMINISTIC ROUTING</p><h1>Intent workbench.</h1><p>Give repeatable requests a predictable path.</p></div><div class="actions"><button id="refresh">Refresh</button><button id="new-intent" class="primary">New intent +</button></div></div>
 <p id="notice" role="status" aria-live="polite"></p>
@@ -33,5 +33,5 @@
 </main>
 <dialog id="example-dialog"><form id="example-form"><h2 id="example-title">Save a test.</h2><label for="example-name">Name</label><input id="example-name" maxlength="128" required><label for="example-text">Request</label><textarea id="example-text" maxlength="1000" required></textarea><label for="example-area">Area</label><input id="example-area" maxlength="128"><div class="field-row"><div><label for="example-status">Expected match</label><select id="example-status"><option>matched</option><option>unmatched</option><option>ambiguous</option><option>invalid-request</option><option>timer-route</option></select></div><div><label for="example-rule">Expected rule</label><select id="example-rule"></select></div></div><div class="field-row"><div><label for="example-target">Expected target slot</label><input id="example-target" maxlength="256"></div><div><label for="example-brightness">Expected brightness</label><input id="example-brightness" type="number"></div></div><p id="example-error" role="alert"></p><div class="actions"><button type="button" data-close="example-dialog">Cancel</button><button class="primary" type="submit">Save test</button></div></form></dialog>
 <dialog id="execute-dialog"><h2>Execute this plan?</h2><div id="execution-plan"></div><p class="muted">This sends the inspected action to the resolved devices. The server checks the plan again before execution.</p><div class="actions"><button data-close="execute-dialog">Cancel</button><button id="confirm-execute" class="primary">Execute now</button></div></dialog>
-<script src="/intents.js"></script>
+<script src="/app-shell.js"></script><script src="/intents.js"></script>
 </body></html>

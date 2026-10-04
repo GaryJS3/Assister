@@ -1,0 +1,11 @@
+/* Shared management shell. Page styles own only their content. */
+.app-header{padding:20px 3vw;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:73px}
+.app-brand{font:bold 27px Georgia,serif;color:var(--accent);text-decoration:none;white-space:nowrap}
+.app-brand span{font:11px Consolas,monospace;letter-spacing:1.2px}
+.app-header-tools{display:flex;align-items:center;justify-content:flex-end;gap:24px;flex-wrap:wrap}
+.app-nav{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.app-nav a{font:12px Consolas,monospace;color:var(--muted);text-decoration:none;padding:7px 0;border-bottom:2px solid transparent;white-space:nowrap}
+.app-nav a:hover{color:var(--accent)}
+.app-nav a[aria-current=page]{color:var(--ink);border-bottom-color:var(--accent)}
+.app-header-status{border-left:1px solid var(--line);padding-left:24px;font:12px Consolas,monospace;color:var(--accent);white-space:nowrap}
+@media(max-width:700px){.app-header{padding:16px 14px;flex-wrap:wrap;gap:12px}.app-header-tools{width:100%;justify-content:space-between;gap:12px}.app-nav{gap:16px}.app-header-status{padding-left:0;border-left:0}}
