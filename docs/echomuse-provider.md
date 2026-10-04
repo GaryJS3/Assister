@@ -39,6 +39,6 @@ turns with the same session ID, wrong/stale IDs, cancellation/no speech, WAV del
 standalone stop and cleanup. A live MBedroom Hey Jarvis request on 2026-10-04 verified
 microphone → STT → shared coordinator → TTS → HTTP WAV → controller playback completion
 in 8.348 seconds, returning the session to idle without errors (trace
-`8f213ddb-ee7b-456d-b23c-6757a19087df`). Audible reply/LED confirmation, deterministic HA
-control, physical cancellation and media coexistence remain acceptance work; controller
-playback acknowledgment alone does not prove an audible reply.
+`8f213ddb-ee7b-456d-b23c-6757a19087df`). The user confirmed hearing the reply and LEDs
+returning to idle afterward. Initial MBedroom physical wake/request/reply acceptance passed.
+Deterministic HA control, physical cancellation and media coexistence remain acceptance work.

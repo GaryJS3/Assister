@@ -179,8 +179,8 @@ a784345 fixes it and adds a five-second duration/sample-value regression test. V
 passes 70 unit, 10 C# integration and 12 bridge adapter tests (92 total). The repeated live
 MBedroom announcement returned HTTP 200 in 3.565 seconds with controller play_started and
 play_finished acknowledgment, then returned output to idle with zero active sessions. The
-controller fetched Assister's opaque HTTP WAV directly. Audible confirmation and actual EchoMuse
-wake/microphone → shared routing → reply remain pending until someone is at the device.
+controller fetched Assister's opaque HTTP WAV directly. At that point, audible confirmation and
+actual EchoMuse wake/microphone → shared routing → reply were pending; see acceptance below.
 
 HA Voice was already unreachable before this deployment (bridge logs at 15:53 UTC onward show
 Native API network unreachable; app deployment began later). Its configuration, image and
@@ -193,5 +193,6 @@ Wyoming TTS, opaque HTTP WAV delivery and matching controller playback completio
 succeeded. Trace `8f213ddb-ee7b-456d-b23c-6757a19087df` took 8.348 seconds including
 capture and playback; post-input STT finalization was 1.044 seconds, model generation
 0.544 seconds and TTS 0.305 seconds. Runtime returned to Complete/idle with no active
-voice session or error. Audible reply and LED behavior still require explicit confirmation;
-deterministic HA control, physical cancellation and media coexistence remain acceptance work.
+voice session or error. The user explicitly confirmed hearing the reply and LEDs returning
+to idle afterward. This completes the initial MBedroom physical wake/request/reply acceptance.
+Deterministic HA control, physical cancellation and media coexistence remain acceptance work.
