@@ -9,6 +9,85 @@ namespace Assister.Tests;
 public sealed class ToolLoopTests
 {
     [Fact]
+    public async Task ForecastQuestionCannotSkipTheSourceAndInventWeather()
+    {
+        var Registry = new ToolRegistry([new SourceTool("weather_forecast", "{\"forecast\":[]}")]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("It will be sunny.", [], "stop"));
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("What is the weather this weekend?"), [], CancellationToken.None);
+        Assert.Contains("could not retrieve", Answer);
+        Assert.Equal("required", Model.Requests.Single().ToolChoice);
+    }
+
+    [Fact]
+    public async Task ForecastToolFailureIsExplainedWithoutRepeatedRequests()
+    {
+        var Registry = new ToolRegistry([new SourceTool("weather_forecast", "{\"error\":\"Hourly forecasts are unavailable.\"}")]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("forecast", new("weather_forecast", "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("Hourly forecasts are unavailable.", [], "stop"));
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("Weather tonight?"), [], CancellationToken.None);
+        Assert.Equal("Hourly forecasts are unavailable.", Answer);
+        Assert.Equal("none", Model.Requests.Last().ToolChoice);
+    }
+
+    private sealed class SourceTool(string Name, string Result) : IAssisterTool
+    {
+        public bool StateChanging => false;
+        public LlmTool Definition => new(new(Name, Name, JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{}}""")));
+        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token) => Task.FromResult(Result);
+    }
+    [Theory]
+    [InlineData("2026-10-04T23:00:00Z", "2026-10-04T19:00:00-04:00")]
+    [InlineData("2026-12-04T23:00:00Z", "2026-12-04T18:00:00-05:00")]
+    public void LocalClockPreservesSeasonalUtcOffset(string Utc, string Expected)
+        => Assert.Equal(DateTimeOffset.Parse(Expected).ToString("O"), LocalClock.At(DateTimeOffset.Parse(Utc), "America/New_York").ToString("O"));
+    [Fact]
+    public async Task StreamingBuffersToolRoundProseAndExecutesOnlyCompletedCalls()
+    {
+        var Tool = new FakeTool();
+        var Registry = new ToolRegistry([Tool]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("I will look that up.", [new("search", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("The office is warm.", [], "stop"));
+        var Spoken = new List<string>();
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("Was the office hot?"), [], CancellationToken.None, OnText: (Text, _) => { Spoken.Add(Text); return Task.CompletedTask; });
+        Assert.Equal("The office is warm.", Answer);
+        Assert.Equal([Answer], Spoken);
+        Assert.Equal(1, Tool.Calls);
+    }
+
+    [Fact]
+    public async Task StreamingUnconfirmedControlCannotSpeakModelConfirmation()
+    {
+        var Registry = new ToolRegistry([new FakeControlTool()]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("Done, I dimmed the lights.", [], "stop"));
+        var Spoken = new List<string>();
+        await Assert.ThrowsAsync<ControlNotConfirmedException>(() => new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("Dim living room lights"), [], CancellationToken.None, OnText: (Text, _) => { Spoken.Add(Text); return Task.CompletedTask; }));
+        Assert.Empty(Spoken);
+    }
+
+    [Fact]
+    public async Task PersonalPreferenceQuestionOffersSearchWithoutMemoryMutation()
+    {
+        var Registry = new ToolRegistry([new NamedTool("memory_search"), new NamedTool("memory_store"), new NamedTool("memory_delete")]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("I will check your preferences.", [], "stop"));
+        await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build()).RespondAsync(new("What is my favorite tea?"), [], CancellationToken.None);
+        Assert.Equal("memory_search", Assert.Single(Model.Requests[0].Tools!).Function.Name);
+    }
+    private sealed class NamedTool(string Name) : IAssisterTool
+    {
+        public bool StateChanging => Name != "memory_search";
+        public LlmTool Definition => new(new(Name, Name, JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{}}""")));
+        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token) => throw new NotSupportedException();
+    }
+    [Fact]
     public async Task SelectedSearchExecutesAndToolResultsStayInThisRequestOnly()
     {
         var Tool = new FakeTool();
@@ -158,6 +237,11 @@ public sealed class ToolLoopTests
             Requests.Add(Request with { Messages = Request.Messages.ToArray() });
             return Task.FromResult(Responses.Dequeue());
         }
-        public IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request, CancellationToken CancellationToken) => throw new NotSupportedException();
+        public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken CancellationToken)
+        {
+            var Response = await CompleteAsync(Request, CancellationToken);
+            if (Response.Content is { } Text) { yield return new(TextDelta: Text); }
+            yield return new(Completed: Response);
+        }
     }
 }

@@ -4,6 +4,12 @@ Updated: October 4, 2026. This file records completed work and verification; [ro
 
 ## Current state
 
+Local MVP/timer/memory/streaming increment: 157 C# tests pass (139 unit/component, 18 integration). Semantic temperature search, empty weather configuration, explicit local offsets, exact searched IDs and required source tools improve historical/forecast routing. Memory recall cannot authorize mutation; query stop words are filtered; summaries count toward the context budget. Timer expiry delivers up to four independent satellite notifications concurrently with fair queries and sequential SQLite writes.
+
+Voice now supports safe streamed text, bounded sentence synthesis, negotiated native Wyoming streaming and legacy fallback. Application defaults enable generation/synthesis overlap. Installed transports still receive complete audio objects. Tests cover cancellation/recovery, failed synthesis preserving text and rejection of partial failed model replies. Bridge audio objects are removed after delivery/cancellation.
+
+The final updated-module probe passed actual temperature, comparative history, weekend weather and Sunday-night follow-up from a separate temporary database inside the running container. Native TTS first audio was 335 ms. Synthesized audio arrived at 1.88 s while model generation continued to 4.65 s. These are module/synthetic checks; this source increment is not deployed and physical acceptance remains open. See [mvp-acceptance.md](docs/mvp-acceptance.md).
+
 Deployed multi-target brightness correction: live trace eef525e6-5556-4809-b672-44abbe774b1c
 contained "Can you set both the living room light and kitchen light to 100?". The polite
 prefix prevented direct matching; fallback model searches assumed HA areas and failed.
@@ -59,14 +65,14 @@ The existing deployment has user-confirmed button/microphone input, office tempe
 | Milestone | Status | Evidence / remaining work |
 | --- | --- | --- |
 | 1. Application skeleton | Complete | .NET 10 ASP.NET Core, contracts project, EF Core SQLite migration, structured logs, Docker/Compose, health/status APIs, unit/integration projects; container runs as non-root with persistent data. |
-| 2. Wyoming | Core implementation complete | Buffered framing with partial reads, bounded lengths, JSON data merging, payloads, describe/info, STT, TTS audio streaming and transcript events. Fake TCP tests and real TTS/STT round trip pass. Providers are not yet wired into the pipeline. |
+| 2. Wyoming | Core deployed; streaming increment verified separately | Providers are wired into voice. Native streaming negotiation and legacy fallback have TCP tests and actual synthesis evidence. |
 | 3. Home Assistant | Core implementation deployed and verified | Authenticated REST/WebSocket, state/service/registry reads and event subscription passed through the probe. Persistent C# client, state cache, registry joins/entity index, startup event replay, bounded messages and reconnect/backoff are deployed and verified with a fresh 1965-entity cache and delivered state events. |
 | 4. Direct intents | Core implementation deployed and verified | Separate parser/classifier/slots, conservative area/name/alias/ID resolver, validated light/switch on/off, brightness and cached temperature/state handlers; shared `POST /api/test/message`. Fake/HTTP tests pass. Live off/on, 50% brightness, cache updates and restoration passed for the user-selected `light.living_room_lights`; office temperature query passed. |
-| 5. LLM and tools | Implemented locally; live validation in progress | Fixed-schema broker, selected HA tools, bounded tool loop and unmatched routing; optional Qwen thinking setting and bounded history summaries. |
-| 6. Conversations | Implemented locally | SQLite turns, satellite ownership checks, five-minute continuity, bounded recent turns/topic notes; raw tool results excluded. |
+| 5. LLM and tools | Core deployed; updated modules live-verified | Actual history/forecast retrieval passes with corrected search, local offsets and required sources; consolidated physical acceptance remains open. |
+| 6. Conversations | Core deployed; expanded local tests pass | SQLite reopen, satellite separation, continuity, summary/context budget and tool-result exclusion verified. |
 | 7. Satellites | Existing physical pipeline verified; management realignment implemented locally | Shared C# coordinator, authenticated gRPC, HA Voice microphone/temperature/playback and timer acknowledgment have prior live evidence. New ownership/capability/configuration/UI hardening has local automated evidence; wake/media coexistence acceptance remains pending. |
-| 8. Timers and memory | Implemented locally | Restart-safe timers, deferred announcements, SQLite FTS memory and compact persisted tool audit. |
-| 9. Streaming latency | Pending | Sentence-boundary synthesis, early playback and barge-in. |
+| 8. Timers and memory | Core deployed; reliability increment tested locally | Restart/delivery/cancellation, satellite independence, FTS persistence/retrieval/deletion and mutation permissions pass; physical restart announcements remain open. |
+| 9. Streaming latency | Generation/synthesis overlap implemented locally | Native Wyoming streaming and safe tool buffering have live module evidence; physical early playback/barge-in remain open. |
 
 ## Verified baseline
 

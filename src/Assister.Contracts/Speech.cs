@@ -16,3 +16,9 @@ public interface ITextToSpeechProvider
     IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text,
         TextToSpeechOptions Options, CancellationToken CancellationToken);
 }
+
+public interface IStreamingTextToSpeechProvider : ITextToSpeechProvider
+{
+    IAsyncEnumerable<AudioChunk> SynthesizeStreamAsync(IAsyncEnumerable<string> Text,
+        TextToSpeechOptions Options, CancellationToken CancellationToken);
+}

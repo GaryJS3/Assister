@@ -251,11 +251,11 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow });
             StartedPlayback = false;
             PlaybackTrace = Delivery;
-            await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
-                Text = Announcement ? "announcement" : "", SessionId = PlaybackSession, PlaybackId = PlaybackId, TraceId = RunTracing.RunId.ToString() }, CancellationToken);
-            if (Playback is not null)
+            try
             {
-                try
+                await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
+                    Text = Announcement ? "announcement" : "", SessionId = PlaybackSession, PlaybackId = PlaybackId, TraceId = RunTracing.RunId.ToString() }, CancellationToken);
+                if (Playback is not null)
                 {
                     using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
                     Timeout.CancelAfter(TimeSpan.FromSeconds(45));
@@ -263,8 +263,8 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow });
                     Delivery.Complete();
                 }
-                finally { Playback = null; PlaybackTrace = null; Announcement = false; }
             }
+            finally { Playback = null; PlaybackTrace = null; Announcement = false; Audio.Remove(Id); }
         }
         public async Task SendEventAsync(SatelliteEvent Event, CancellationToken CancellationToken)
         {

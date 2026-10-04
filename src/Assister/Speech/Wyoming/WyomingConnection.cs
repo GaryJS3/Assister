@@ -16,14 +16,15 @@ public sealed record WyomingServiceInfo(JsonElement Data)
 public sealed class WyomingConnection : IAsyncDisposable
 {
     private readonly TcpClient Client;
-    private readonly BufferedStream Stream;
+    private readonly NetworkStream Stream;
     public WyomingEventReader Reader { get; }
     public WyomingEventWriter Writer { get; }
 
     private WyomingConnection(TcpClient Client)
     {
         this.Client = Client;
-        Stream = new BufferedStream(Client.GetStream(), 16384);
+        // NetworkStream supports one reader and one writer concurrently for streaming TTS.
+        Stream = Client.GetStream();
         Reader = new(Stream);
         Writer = new(Stream);
     }

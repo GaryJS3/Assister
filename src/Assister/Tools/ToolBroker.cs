@@ -59,9 +59,11 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
                 Trace.Detail("resultTruncated", true);
                 throw new InvalidDataException();
             }
-            Trace.Complete();
-            Trace.Output(DiagnosticSanitizer.ParseJson(Result));
-            await Audit("succeeded");
+            var Output = DiagnosticSanitizer.ParseJson(Result);
+            var Outcome = Output is JsonElement { ValueKind: JsonValueKind.Object } Element && Element.TryGetProperty("error", out _) ? "failed" : "succeeded";
+            Trace.Complete(Outcome);
+            Trace.Output(Output);
+            await Audit(Outcome);
             return Result;
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }

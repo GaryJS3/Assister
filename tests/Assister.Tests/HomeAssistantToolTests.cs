@@ -9,6 +9,37 @@ namespace Assister.Tests;
 public sealed class HomeAssistantToolTests
 {
     [Fact]
+    public async Task FutureHistoryRangeReturnsCorrectableErrorWithoutContactingHa()
+    {
+        var Cache = new HomeAssistantStateCache();
+        Cache.Load(Json("""[{"entity_id":"sensor.temp","state":"74","attributes":{"friendly_name":"Temp","device_class":"temperature"}}]"""), Json("{}"), Json("[]"), Json("[]"), Json("[]"));
+        Cache.SetStale(false);
+        using var Http = new HttpClient();
+        var Tool = new HomeAssistantTool("ha_get_history", Cache, new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Context = new ToolExecutionContext(new("office temperature history"), new HashSet<string> { "sensor.temp" });
+        var Registry = new ToolRegistry([Tool]);
+        var Result = Json(await new ToolBroker(Registry).ExecuteAsync(new("history", new("ha_get_history", JsonSerializer.Serialize(new
+            { entity_ids = new[] { "sensor.temp" }, start = DateTimeOffset.UtcNow.AddHours(-1).ToString("O"), end = DateTimeOffset.UtcNow.AddHours(4).ToString("O") }))),
+            Registry.All.Keys.ToHashSet(), Context, CancellationToken.None));
+        Assert.Contains("future", Result.GetProperty("error").GetString());
+        Assert.True(Result.TryGetProperty("current_utc", out _));
+    }
+    [Fact]
+    public async Task TemperatureSearchUsesDeviceClassForAbbreviatedSensorNames()
+    {
+        var Cache = new HomeAssistantStateCache();
+        Cache.Load(Json("""[{"entity_id":"sensor.office_tempc","state":"74","attributes":{"friendly_name":"OfficeTemp-tempc","device_class":"temperature","unit_of_measurement":"°F"}}]"""),
+            Json("{}"), Json("""[{"entity_id":"sensor.office_tempc","area_id":"office"}]"""), Json("[]"), Json("""[{"area_id":"office","name":"Office"}]"""));
+        Cache.SetStale(false);
+        using var Http = new HttpClient();
+        var Context = new ToolExecutionContext(new("Was the office warmer?"), []);
+        var Search = new HomeAssistantTool("ha_search", Cache, new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Result = Json(await Search.ExecuteAsync(Json("""{"query":"temperature","area":"office","domains":["sensor"]}"""), Context, CancellationToken.None));
+        Assert.Equal("sensor.office_tempc", Assert.Single(Result.EnumerateArray()).GetProperty("entity_id").GetString());
+        Assert.True(Result[0].GetProperty("is_temperature").GetBoolean());
+        Assert.Contains("sensor.office_tempc", Context.ObservedEntities);
+    }
+    [Fact]
     public async Task FullNameSearchExcludesIncidentalLightMatchesAndAllowsSingularControl()
     {
         var Cache = new HomeAssistantStateCache();

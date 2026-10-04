@@ -16,7 +16,7 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         "ha_search" => "Find a small set of relevant Home Assistant entities by name or area. Never assume entity IDs.",
         "ha_get_state" => "Read current compact state for entities found by search.",
         "ha_control" => "Control a single light or switch found by search. Only use for an explicit user control request.",
-        _ => "Get bounded numeric history summaries for searched entities. Times must include a UTC offset."
+        _ => "Get bounded numeric history summaries for searched entities. Times must include the correct UTC offset; end cannot be in the future. Maximum range is seven days."
     }, Schema(Name switch
     {
         "ha_search" => """{"type":"object","properties":{"query":{"type":"string"},"area":{"type":"string"},"domains":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["query"],"additionalProperties":false}""",
@@ -36,8 +36,9 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
             var Domains = Arguments.TryGetProperty("domains", out var DomainValue) ? DomainValue.EnumerateArray().Select(Item => Item.GetString()).ToArray() : null;
             var Ranked = Snapshot.Entities.Where(Entity => (Area is null || string.Equals(Area, Entity.AreaId, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(Area, Entity.AreaName, StringComparison.OrdinalIgnoreCase)) && (Domains is null || Domains.Contains(Entity.Domain)))
-                .Select(Entity => new { Entity, Score = Words.Count(Word => string.Join(' ', Entity.EntityId, Entity.Name, Entity.AreaName, string.Join(' ', Entity.Aliases)).Contains(Word, StringComparison.OrdinalIgnoreCase)) })
-                .Where(Item => Item.Score > 0).OrderByDescending(Item => Item.Score).ThenBy(Item => Item.Entity.EntityId).ToArray();
+                .Select(Entity => new { Entity, Score = Words.Count(Word => string.Join(' ', Entity.EntityId, Entity.Name, Entity.AreaName, string.Join(' ', Entity.Aliases)).Contains(Word, StringComparison.OrdinalIgnoreCase)
+                    || Word.Equals("temperature", StringComparison.OrdinalIgnoreCase) && Entity.IsTemperature) })
+                .Where(Item => Item.Score > 0).OrderByDescending(Item => Item.Score).ThenBy(Item => Item.Entity.IsUnavailable).ThenBy(Item => Item.Entity.EntityId).ToArray();
             // Keep equally strong alternatives, but do not mix a full target match with incidental
             // matches on a generic word such as "light"; those make a unique control look ambiguous.
             var Matches = Ranked.Where(Item => Item.Score == Ranked[0].Score)
@@ -47,7 +48,11 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         }
         var Ids = Name == "ha_control" ? new[] { Arguments.GetProperty("entity_id").GetString()! }
             : Arguments.GetProperty("entity_ids").EnumerateArray().Select(Item => Item.GetString()!).Distinct().ToArray();
-        if (Ids.Any(Id => !Context.ObservedEntities.Contains(Id))) { throw new InvalidOperationException(); }
+        if (Ids.Any(Id => !Context.ObservedEntities.Contains(Id)))
+        {
+            if (Name == "ha_control") { throw new InvalidOperationException(); }
+            return "{\"error\":\"Search for every requested entity with ha_search in this request first. Copy its exact entity_id; do not reconstruct IDs from names or earlier turns.\"}";
+        }
         var Entities = Ids.Select(Id => Snapshot.Entities.SingleOrDefault(Entity => Entity.EntityId == Id) ?? throw new InvalidOperationException()).ToArray();
         if (Name == "ha_get_state") { return JsonSerializer.Serialize(Entities.Select(Compact)); }
         if (Name == "ha_control")
@@ -76,7 +81,10 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         if (!HasOffset(StartText) || !HasOffset(EndText)
             || !DateTimeOffset.TryParse(StartText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var Start)
             || !DateTimeOffset.TryParse(EndText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var End)
-            || Start >= End || End - Start > TimeSpan.FromDays(7) || End > DateTimeOffset.UtcNow.AddMinutes(1)) { throw new InvalidOperationException(); }
+            || Start >= End || End - Start > TimeSpan.FromDays(7) || End > DateTimeOffset.UtcNow.AddMinutes(1))
+        {
+            return JsonSerializer.Serialize(new { error = "History timestamps must include a UTC offset, start must precede end, range must not exceed seven days, and end cannot be in the future. Correct the range using the supplied local clock.", current_utc = DateTimeOffset.UtcNow });
+        }
         var Path = $"api/history/period/{Uri.EscapeDataString(Start.ToString("O"))}?filter_entity_id={Uri.EscapeDataString(string.Join(',', Ids))}&end_time={Uri.EscapeDataString(End.ToString("O"))}&minimal_response&no_attributes&significant_changes_only";
         using var Request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(Configuration["HomeAssistant:Url"]!), Path));
         Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Configuration["HomeAssistant:Token"]);
@@ -116,6 +124,7 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         state = Entity.State.GetProperty("state").GetString(),
         unit = Entity.State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var Unit) ? Unit.GetString() : null,
         supports_brightness = Entity.SupportsBrightness,
+        is_temperature = Entity.IsTemperature,
         brightness_pct = Entity.State.GetProperty("attributes").TryGetProperty("brightness", out var Brightness)
             && Brightness.TryGetInt32(out var Value) ? (int?)Math.Round(Value * 100.0 / 255) : null
     };

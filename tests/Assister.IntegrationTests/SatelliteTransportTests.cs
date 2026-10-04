@@ -50,6 +50,8 @@ public sealed class SatelliteTransportTests
                 var Id = Call.ResponseStream.Current.PlaybackId;
                 RunId = Guid.Parse(Call.ResponseStream.Current.TraceId);
                 Assert.False(string.IsNullOrWhiteSpace(Id));
+                var Wave = await Http.GetByteArrayAsync(new Uri(Call.ResponseStream.Current.Url).PathAndQuery, Timeout.Token);
+                Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Wave, 0, 4));
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-started", PlaybackId = "old-playback", SessionId = "transport-session" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "old-session", Text = "succeeded" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "transport-session", Text = "succeeded" });
@@ -70,8 +72,7 @@ public sealed class SatelliteTransportTests
         }
         Assert.Contains(Events, Frame => Frame.Type == "response" && Frame.Text == "Done.");
         var Audio = Assert.Single(Events, Frame => Frame.Type == "audio-ready");
-        var Wave = await Http.GetByteArrayAsync(new Uri(Audio.Url).PathAndQuery, Timeout.Token);
-        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Wave, 0, 4));
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await Http.GetAsync(new Uri(Audio.Url).PathAndQuery, Timeout.Token)).StatusCode);
         Assert.Equal("succeeded", Events.Last().Text);
         var Run = Factory.Services.GetRequiredService<RunStore>().Get(RunId)!;
         var Activation = Assert.Single(Run.Steps, Step => Step.Name == "Voice activation");

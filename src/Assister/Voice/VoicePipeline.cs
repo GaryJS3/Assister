@@ -3,6 +3,7 @@ using Assister.Diagnostics;
 using Assister.Satellites;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 
 namespace Assister.Voice;
 
@@ -91,6 +92,101 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             await Satellite.SendEventAsync(new("transcribed", Transcript.Text, Session.Id), Timeout.Token);
             await Satellite.SendEventAsync(new("processing", SessionId: Session.Id), Timeout.Token);
             Phase = "processing-failed";
+            if (Configuration.GetValue("Voice:StreamingEnabled", false) && Coordinator is IStreamingRequestCoordinator Streaming)
+            {
+                var Text = Channel.CreateBounded<string>(new BoundedChannelOptions(8) { SingleReader = true, SingleWriter = true });
+                var Sentences = new SentenceBuffer();
+                var DeliveredText = new System.Text.StringBuilder();
+                using var OutputLifetime = CancellationTokenSource.CreateLinkedTokenSource(Timeout.Token);
+                var ResponseReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var OutputPhase = "playback-failed";
+                var FirstAudioAtOutput = (DateTimeOffset?)null;
+                var Output = DeliverAsync();
+                try
+                {
+                    Result = await Streaming.ProcessStreamingAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId),
+                        async (Delta, Token) =>
+                        {
+                            Token.ThrowIfCancellationRequested();
+                            if (DeliveredText.Length < 16000) { DeliveredText.Append(Delta.AsSpan(0, Math.Min(Delta.Length, 16000 - DeliveredText.Length))); }
+                            foreach (var Sentence in Sentences.Append(Delta))
+                            {
+                                try { await Text.Writer.WriteAsync(VoiceFormatter.Format(Sentence), OutputLifetime.Token); }
+                                catch (OperationCanceledException) when (!Timeout.IsCancellationRequested && OutputLifetime.IsCancellationRequested) { break; }
+                            }
+                        }, Timeout.Token);
+                    Session = Session with { ConversationId = Result.ConversationId };
+                    RunTracing.Response(Result.Response, Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), Result.Outcome, Result.HandledBy, Result.ConversationId);
+                    await Satellite.SendEventAsync(new("response", Result.Response, Session.Id, Result.ConversationId), Timeout.Token);
+                    if (Result.Outcome != "succeeded" && Result.HandledBy == "language-model"
+                        && VoiceFormatter.Format(DeliveredText.ToString()).Trim() != (Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response)).Trim())
+                    {
+                        // Discard partial generation on WAV providers; streaming providers must stop on cancellation.
+                        Phase = "processing-failed";
+                        throw new InvalidOperationException("Incomplete model output cannot finish playback.");
+                    }
+                    foreach (var Sentence in Sentences.Append("", Final: true))
+                    {
+                        if (OutputLifetime.IsCancellationRequested) { break; }
+                        try { await Text.Writer.WriteAsync(VoiceFormatter.Format(Sentence), OutputLifetime.Token); }
+                        catch (OperationCanceledException) when (!Timeout.IsCancellationRequested && OutputLifetime.IsCancellationRequested) { break; }
+                    }
+                    Text.Writer.TryComplete();
+                    ResponseReady.TrySetResult();
+                    try { await Output; }
+                    catch { Phase = OutputPhase; throw; }
+                    using var Latency = RunTracing.Start("Playback", "Streaming latency", "Measure first synthesized audio independently of device playback acknowledgement.");
+                    Latency.Metadata(new { streaming = true, timeToFirstAudioMilliseconds = FirstAudioAtOutput is { } First ? (double?)(First - Session.StartedAt).TotalMilliseconds : null,
+                        earlyPlaybackSupported = Satellite is IStreamingAudioPlayback { SupportsStreamingPlayback: true } });
+                    Latency.Complete();
+                    await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
+                    Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Complete);
+                    Run.Complete(Result.Outcome);
+                    return new(Session, Result, Result.Outcome);
+                }
+                finally
+                {
+                    OutputLifetime.Cancel();
+                    Text.Writer.TryComplete();
+                    ResponseReady.TrySetCanceled();
+                    try { await Output; } catch (Exception) { /* Observed by the main await, or superseded by routing/cancellation. */ }
+                }
+                async Task DeliverAsync()
+                {
+                    try
+                    {
+                        using var Playback = RunTracing.Start("Playback", "Streaming delivery", "Overlap sentence synthesis with response generation; the provider controls audio buffering.");
+                        await Satellite.SendAudioAsync(Audio(OutputLifetime.Token), OutputLifetime.Token);
+                        Playback.Complete();
+                    }
+                    catch { OutputLifetime.Cancel(); throw; }
+                }
+                async IAsyncEnumerable<AudioChunk> Audio([EnumeratorCancellation] CancellationToken Token)
+                {
+                    OutputPhase = "tts-failed";
+                    using var Synthesis = RunTracing.Start("TextToSpeech", "Streaming speech synthesis", "Synthesize bounded sentences as model text becomes safe to speak.");
+                    var Voice = new TextToSpeechOptions(Configuration["TextToSpeech:Voice"]);
+                    var InputText = Text.Reader.ReadAllAsync(Token);
+                    var Chunks = Tts is IStreamingTextToSpeechProvider StreamingTts
+                        ? StreamingTts.SynthesizeStreamAsync(InputText, Voice, Token) : SynthesizeSentences(InputText, Voice, Token);
+                    await foreach (var Chunk in Chunks.WithCancellation(Token))
+                    {
+                        if (FirstAudioAtOutput is null) { Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Synthesizing); }
+                        FirstAudioAtOutput ??= DateTimeOffset.UtcNow;
+                        yield return Chunk;
+                    }
+                    Synthesis.Complete();
+                    OutputPhase = "playback-failed";
+                    Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.WaitingForPlayback);
+                    await ResponseReady.Task.WaitAsync(Token);
+                }
+                async IAsyncEnumerable<AudioChunk> SynthesizeSentences(IAsyncEnumerable<string> InputText, TextToSpeechOptions Voice,
+                    [EnumeratorCancellation] CancellationToken Token)
+                {
+                    await foreach (var Sentence in InputText.WithCancellation(Token))
+                        await foreach (var Chunk in Tts.SynthesizeAsync(Sentence, Voice, Token).WithCancellation(Token)) { yield return Chunk; }
+                }
+            }
             Result = await Coordinator.ProcessAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId), Timeout.Token);
             Session = Session with { ConversationId = Result.ConversationId };
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Synthesizing, Result.ConversationId);

@@ -6,7 +6,7 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup migrations, structured console logs, health/status endpoints, Docker packaging, and persistence/API tests.
 
-Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. These providers are not yet wired into a voice pipeline.
+Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. The providers are wired into the shared voice pipeline.
 
 Home Assistant has a persistent authenticated connection, state subscriptions, registry/area joins, and reconnecting cache. Direct intents support light/switch on/off, light brightness and cached temperature/state queries through a shared request coordinator. Ambiguous targets require clarification; stale HA connectivity blocks actions. Unmatched requests use selected tools and a bounded LLM loop. Conversations, timers, FTS memory and compact tool audit records persist in SQLite. See PROJECT.md for the acceptance criteria.
 
@@ -44,6 +44,10 @@ Weather requests use Home Assistant's `weather.get_forecasts` service. Set `WEAT
 `GET /api/homeassistant/entities?query=office&limit=10` returns a bounded cache search with names, areas and state values. `/api/status` reports connection status, freshness and received state-event counts. Raw attributes and credentials are excluded. These development APIs are intended for the trusted local network; complex authentication is outside the MVP scope.
 
 ## Development
+
+Latest MVP, timer/memory and streaming acceptance is recorded in [docs/mvp-acceptance.md](docs/mvp-acceptance.md), distinguishing local implementation, live module checks and physical acceptance.
+
+Voice generation and sentence synthesis overlap by default. Set `Voice__StreamingEnabled=false` to restore buffered generation. Native Wyoming text streaming is negotiated when advertised, with ordinary sentence synthesis as a legacy fallback. Tool-capable rounds remain buffered until validated; final speech-only rounds can feed synthesis immediately. Installed EchoMuse/ESPHome transports still receive complete audio files, so physical early playback and wake-word barge-in remain open.
 
 Live service checks and their limits are recorded in [docs/service-validation.md](docs/service-validation.md). The C# `tools/Assister.ServiceProbe` CLI runs read-only dependency checks using the container environment, including a synthetic TTS-to-STT round trip and a short LLM completion. `--ha-only` narrows read-only checks. The explicit `--direct-intents --light light.authorized_entity` mode performs real controls and restores original member states/brightness; use it only with an authorized target.
 

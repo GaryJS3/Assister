@@ -64,9 +64,24 @@ internal static class MvpProbe
                 using var Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest(Message, Satellite, ConversationId: Conversation));
                 Response.EnsureSuccessStatusCode();
                 var Result = await Response.Content.ReadFromJsonAsync<RequestResult>() ?? throw new InvalidDataException();
-                if (Result.Outcome != "succeeded" || Conversation is not null && Result.ConversationId != Conversation) { Failures++; }
+                using var Trace = JsonDocument.Parse(await Http.GetStringAsync("/api/diagnostics/runs/" + Result.RunId));
+                var Steps = Trace.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+                var RequiredTool = Message.StartsWith("Has the office", StringComparison.Ordinal) ? "ha_get_history"
+                    : Message.Contains("weather", StringComparison.OrdinalIgnoreCase) || Message.Contains("Sunday", StringComparison.Ordinal) ? "weather_forecast" : null;
+                var ToolEvidence = RequiredTool is null || Steps.Any(Step => Step.GetProperty("kind").GetString() == "ToolCall"
+                    && Step.GetProperty("name").GetString() == RequiredTool && Step.GetProperty("status").GetString() == "succeeded"
+                    && Step.TryGetProperty("output", out var Output) && Output.ValueKind is JsonValueKind.Array or JsonValueKind.Object
+                    && (Output.ValueKind != JsonValueKind.Object || !Output.TryGetProperty("error", out _))
+                    && (RequiredTool != "weather_forecast" || Output.TryGetProperty("forecast", out var Forecast) && Forecast.GetArrayLength() > 0)
+                    && (RequiredTool != "ha_get_history" || Output.ValueKind == JsonValueKind.Array && Output.GetArrayLength() >= 2
+                        && Output.EnumerateArray().All(Series => Series.TryGetProperty("numeric_samples", out var Samples) && Samples.GetInt32() > 0)));
+                var Accepted = Result.Outcome == "succeeded" && Result.ConversationId is not null
+                    && (Conversation is null || Result.ConversationId == Conversation) && ToolEvidence
+                    && (RequiredTool is not null || Result.HandledBy == "direct-intent");
+                if (!Accepted) { Failures++; }
                 Conversation = Result.ConversationId;
                 Console.WriteLine(JsonSerializer.Serialize(new { message = Message, Result.Outcome, Result.HandledBy, Result.ConversationId,
+                    Result.RunId, requiredTool = RequiredTool, toolEvidence = ToolEvidence, accepted = Accepted,
                     Result.DurationMilliseconds, response = Result.Response[..Math.Min(Result.Response.Length, 500)] }));
             }
             catch (Exception Error)

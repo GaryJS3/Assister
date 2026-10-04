@@ -13,3 +13,9 @@ public interface IRequestCoordinator
 {
     Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken);
 }
+
+public interface IStreamingRequestCoordinator : IRequestCoordinator
+{
+    Task<RequestResult> ProcessStreamingAsync(UserRequest Request,
+        Func<string, CancellationToken, Task> OnText, CancellationToken CancellationToken);
+}

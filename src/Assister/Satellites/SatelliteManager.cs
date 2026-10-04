@@ -20,6 +20,12 @@ public interface ISatelliteConnection
     Task SendEventAsync(SatelliteEvent Event, CancellationToken CancellationToken);
 }
 
+// Implement only when SendAudioAsync starts physical playback before its source completes.
+public interface IStreamingAudioPlayback
+{
+    bool SupportsStreamingPlayback { get; }
+}
+
 public sealed class SatelliteManager
 {
     private readonly DiagnosticSanitizer Sanitizer;
@@ -35,6 +41,7 @@ public sealed class SatelliteManager
     private readonly ConcurrentDictionary<string, SatelliteRuntimeState> Runtime = new();
     private readonly ConcurrentDictionary<string, ConcurrentQueue<SatelliteHistoryEvent>> History = new();
     public int Count => Connections.Count;
+    public string[] ConnectedIds => Connections.Keys.Order(StringComparer.Ordinal).ToArray();
     public int ActiveSessionCount => Sessions.Count;
     public bool Register(ISatelliteConnection Connection)
     {

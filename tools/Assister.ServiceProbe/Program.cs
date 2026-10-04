@@ -5,6 +5,8 @@ using System.Text.Json;
 using Assister.Contracts;
 using Assister.Speech.Wyoming;
 
+if (args.Contains("--mvp-modules")) { return await LiveModuleProbe.RunAsync(args.Contains("--stream-only")); }
+
 if (args.Contains("--llm-contract"))
 {
     return await MvpProbe.CheckModelContractAsync();

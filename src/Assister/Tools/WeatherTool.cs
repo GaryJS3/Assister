@@ -16,7 +16,8 @@ public sealed class WeatherTool(HomeAssistantStateCache Cache, HttpClient Http, 
         var Snapshot = Cache.Snapshot();
         if (Snapshot.IsStale) { throw new InvalidOperationException(); }
         var Candidates = Snapshot.Entities.Where(Entity => Entity.Domain == "weather" && !Entity.IsUnavailable).ToArray();
-        var Configured = Configuration["Weather:EntityId"];
+        var Configured = Configuration["Weather:EntityId"]?.Trim();
+        if (string.IsNullOrWhiteSpace(Configured)) { Configured = null; }
         var Entity = Configured is not null ? Candidates.SingleOrDefault(Item => Item.EntityId == Configured)
             : Candidates.Length == 1 ? Candidates[0] : null;
         if (Entity is null) { return "{\"error\":\"No single weather source configured. Set Weather:EntityId to select an available HA weather entity.\"}"; }

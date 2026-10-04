@@ -8,6 +8,8 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 
 ## Next: satellite realignment acceptance
 
+The MVP/timer/memory/streaming increment is implemented locally and described in [mvp-acceptance.md](docs/mvp-acceptance.md). The final updated-module probe passed actual history/forecast retrieval and native TTS streaming. Deploy it and verify microphone/playback behavior before treating module results as production satellite acceptance.
+
 The manager, provider boundary, runtime UI and core physical request path are deployed.
 Integrate the forked EchoMuse external voice v1 controller through a native C# provider,
 using its authenticated inventory and one multiplexed WebSocket. Validate independent
@@ -58,8 +60,8 @@ See [service-validation.md](docs/service-validation.md) for traces and verificat
 9. Verify the installed HA entity-disable procedure before claiming coexistence; keep the ESPHome integration.
 
 The current local increment and remaining acceptance gaps are recorded in progress.md and
-[satellite-architecture.md](docs/satellite-architecture.md). Do not begin streaming/barge-in,
-firmware management, discovery or whole-home grouping to satisfy this realignment.
+[satellite-architecture.md](docs/satellite-architecture.md). Streaming is tracked as a separate
+increment. Firmware management, discovery and whole-home grouping remain outside this realignment.
 
 - Wire speech configuration into runtime providers and make status report real connectivity/capability checks as integrations arrive.
 - Add trace-correlated stage timings, bounded audit data and a recent-run diagnostics page.

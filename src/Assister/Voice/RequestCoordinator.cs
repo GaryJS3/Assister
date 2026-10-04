@@ -14,7 +14,8 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
-    public async Task<RequestResult> ProcessWithHistoryAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken)
+    public async Task<RequestResult> ProcessWithHistoryAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken,
+        Func<string, CancellationToken, Task>? OnText = null)
     {
         using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
         var TraceId = RunTracing.RunId;
@@ -79,7 +80,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             if (LanguageModel is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
             try
             {
-                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId), "succeeded", "language-model");
+                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText), "succeeded", "language-model");
             }
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
             catch (ControlNotConfirmedException)

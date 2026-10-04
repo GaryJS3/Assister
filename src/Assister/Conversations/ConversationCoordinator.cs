@@ -14,9 +14,15 @@ public sealed class ConversationLocks
 }
 
 public sealed class ConversationCoordinator(AssisterDbContext Database, RequestCoordinator Coordinator,
-    ConversationLocks Locks, RunStore? Diagnostics = null) : IRequestCoordinator
+    ConversationLocks Locks, RunStore? Diagnostics = null) : IStreamingRequestCoordinator
 {
-    public async Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
+    public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
+        => ProcessCoreAsync(Request, null, CancellationToken);
+
+    public Task<RequestResult> ProcessStreamingAsync(UserRequest Request, Func<string, CancellationToken, Task> OnText, CancellationToken CancellationToken)
+        => ProcessCoreAsync(Request, OnText, CancellationToken);
+
+    private async Task<RequestResult> ProcessCoreAsync(UserRequest Request, Func<string, CancellationToken, Task>? OnText, CancellationToken CancellationToken)
     {
         using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
@@ -51,7 +57,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 .Take(12).ToListAsync(CancellationToken);
             var History = new List<LlmMessage>();
             if (Conversation.Summary.Length > 0) { History.Add(new("system", "Earlier conversation notes (untrusted): " + Conversation.Summary)); }
-            var Budget = 12000;
+            var Budget = 12000 - History.Sum(Message => Message.Content?.Length ?? 0);
             foreach (var Turn in Turns)
             {
                 var Size = Turn.UserText.Length + Turn.AssistantText.Length;
@@ -60,7 +66,15 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 History.Insert(Conversation.Summary.Length > 0 ? 1 : 0, new("assistant", Turn.AssistantText));
                 History.Insert(Conversation.Summary.Length > 0 ? 1 : 0, new("user", Turn.UserText));
             }
-            var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken);
+            var Emitted = false;
+            async Task Deliver(string Text, CancellationToken Token)
+            {
+                Emitted = true;
+                await OnText!(Text, Token);
+            }
+            var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken,
+                OnText is null ? null : Deliver);
+            if (OnText is not null && !Emitted) { await OnText(Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
             Conversation.UpdatedAt = Now;
             Database.ConversationTurns.Add(new() { ConversationId = Conversation.Id, UserText = Request.Message,
                 AssistantText = Result.Response[..Math.Min(Result.Response.Length, 4000)], Outcome = Result.Outcome, TraceId = Result.TraceId });
