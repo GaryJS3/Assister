@@ -74,6 +74,7 @@ transcripts, routing/tool/model details and raw/spoken responses. Audio is not d
 | Capabilities refresh and wake configuration/drift | Automated manager/configuration and adapter tests |
 | Announcements unsupported/busy/failing | Fake provider tests |
 | Two API clients, HA entity/media retention | Verified HA 2026.9.4 integration loaded, Assist entity disabled, media audible, real wake received |
+| Physical request → STT → shared coordinator → TTS → playback/LED completion | Trace 9e2f69f3-f9f0-4a03-83a8-30012d282ccc succeeded; user confirmed accurate audible reply and correct LED behavior |
 | Real wake → deterministic living-room brightness → TTS/playback; no LLM | Pending physical verification |
 | Supported wake-word change/new phrase/disabled old phrase/restoration | Unavailable on installed firmware: API reports no models and maximum zero |
 | Music/announcement duck/resume and Music Assistant | Pending physical verification |
