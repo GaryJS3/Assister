@@ -114,6 +114,17 @@ public sealed class EchoMuseTests
         Assert.True(EchoMuseProvider.ValidAudio(Message(new { audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } })));
         Assert.False(EchoMuseProvider.ValidAudio(Message(new { audio = new { sampleRate = 48000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } })));
     }
+    [Fact]
+    public async Task ResamplingRealLengthSpeechPreservesDurationAndSampleValues()
+    {
+        var Pcm = new byte[22050 * 5 * 2];
+        for (var Index = 0; Index < Pcm.Length; Index += 2) BinaryPrimitives.WriteInt16LittleEndian(Pcm.AsSpan(Index), 1000);
+        var Wave = await VoiceAudioStore.Wave48kAsync(Input(), CancellationToken.None);
+        Assert.Equal(44 + 48000 * 5 * 2, Wave.Length);
+        Assert.Equal(1000, BinaryPrimitives.ReadInt16LittleEndian(Wave.AsSpan(44)));
+        Assert.Equal(1000, BinaryPrimitives.ReadInt16LittleEndian(Wave.AsSpan(Wave.Length - 2)));
+        async IAsyncEnumerable<AudioChunk> Input() { await Task.Yield(); yield return new(Pcm, 22050, 2, 1); }
+    }
     private static async IAsyncEnumerable<AudioChunk> Chunks([EnumeratorCancellation] CancellationToken Token = default)
     { await Task.Yield(); Token.ThrowIfCancellationRequested(); yield return new(new byte[2205 * 2], 22050, 2, 1); }
     private sealed class Tts : ITextToSpeechProvider

@@ -71,7 +71,7 @@ public sealed class VoiceAudioStore : IDisposable
         for (var Index = 0; Index < Count; Index++)
         {
             if (Index % 4096 == 0) { Token.ThrowIfCancellationRequested(); }
-            var Position = Index * Rate / 48000.0;
+            var Position = Index * (double)Rate / 48000.0;
             var Left = Math.Min((int)Position, Frames - 1);
             var Right = Math.Min(Left + 1, Frames - 1);
             var Value = Sample(Left) + (Sample(Right) - Sample(Left)) * (Position - Left);
