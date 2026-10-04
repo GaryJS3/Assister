@@ -34,10 +34,13 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
             var Words = Arguments.GetProperty("query").GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var Area = Arguments.TryGetProperty("area", out var AreaValue) ? AreaValue.GetString() : null;
             var Domains = Arguments.TryGetProperty("domains", out var DomainValue) ? DomainValue.EnumerateArray().Select(Item => Item.GetString()).ToArray() : null;
-            var Matches = Snapshot.Entities.Where(Entity => (Area is null || string.Equals(Area, Entity.AreaId, StringComparison.OrdinalIgnoreCase)
+            var Ranked = Snapshot.Entities.Where(Entity => (Area is null || string.Equals(Area, Entity.AreaId, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(Area, Entity.AreaName, StringComparison.OrdinalIgnoreCase)) && (Domains is null || Domains.Contains(Entity.Domain)))
                 .Select(Entity => new { Entity, Score = Words.Count(Word => string.Join(' ', Entity.EntityId, Entity.Name, Entity.AreaName, string.Join(' ', Entity.Aliases)).Contains(Word, StringComparison.OrdinalIgnoreCase)) })
-                .Where(Item => Item.Score > 0).OrderByDescending(Item => Item.Score).ThenBy(Item => Item.Entity.EntityId)
+                .Where(Item => Item.Score > 0).OrderByDescending(Item => Item.Score).ThenBy(Item => Item.Entity.EntityId).ToArray();
+            // Keep equally strong alternatives, but do not mix a full target match with incidental
+            // matches on a generic word such as "light"; those make a unique control look ambiguous.
+            var Matches = Ranked.Where(Item => Item.Score == Ranked[0].Score)
                 .Take(Arguments.TryGetProperty("limit", out var Limit) ? Limit.GetInt32() : 10).Select(Item => Item.Entity).ToArray();
             foreach (var Entity in Matches) { Context.ObservedEntities.Add(Entity.EntityId); }
             return JsonSerializer.Serialize(Matches.Select(Compact));
@@ -111,6 +114,9 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
     {
         entity_id = Entity.EntityId, name = Entity.Name[..Math.Min(Entity.Name.Length, 128)], area = Entity.AreaName,
         state = Entity.State.GetProperty("state").GetString(),
-        unit = Entity.State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var Unit) ? Unit.GetString() : null
+        unit = Entity.State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var Unit) ? Unit.GetString() : null,
+        supports_brightness = Entity.SupportsBrightness,
+        brightness_pct = Entity.State.GetProperty("attributes").TryGetProperty("brightness", out var Brightness)
+            && Brightness.TryGetInt32(out var Value) ? (int?)Math.Round(Value * 100.0 / 255) : null
     };
 }

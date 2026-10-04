@@ -27,6 +27,23 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
 
         if (Area is null)
         {
+            // A room name inside a device's full name does not require an HA area assignment.
+            // Prefer that named device before interpreting "living room light" as an area query.
+            var NamedDomain = Domain ?? (Target.EndsWith(" light", StringComparison.Ordinal) || Target.EndsWith(" lights", StringComparison.Ordinal)
+                ? "light" : Target.EndsWith(" switch", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal) ? "switch" : null);
+            var Specific = Target is not ("light" or "lights" or "switch" or "switches" or "temperature");
+            var Named = Candidates.Where(Entity => Specific && (NamedDomain is null || Entity.Domain == NamedDomain)
+                && Names(Entity).Any(Name => LanguageParser.Noun(Name) == Target)).ToArray();
+            if (Specific && Named.Length == 0 && Target.Contains(' '))
+            {
+                Named = Candidates.Where(Entity => (NamedDomain is null || Entity.Domain == NamedDomain)
+                    && Names(Entity).Any(Name => StripDomain(LanguageParser.Noun(Name), NamedDomain) == StripDomain(Target, NamedDomain))).ToArray();
+            }
+            if (Named.Length > 0)
+            {
+                if (Named.Length > 1 && SatelliteArea is not null) { Named = InArea(Named, SatelliteArea); }
+                return Unique(Named, 1);
+            }
             var EmbeddedAreas = Snapshot.Entities.Select(Entity => Entity.AreaName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(Name => Target.StartsWith(LanguageParser.Normalize(Name) + " ", StringComparison.Ordinal)).ToArray();
             if (EmbeddedAreas.Length == 1)

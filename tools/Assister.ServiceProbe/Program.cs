@@ -16,10 +16,10 @@ if (args.Contains("--mvp-readonly"))
     return await MvpProbe.RunAsync(Index >= 0 && Index + 1 < args.Length ? args[Index + 1] : "http://127.0.0.1:8080");
 }
 
-if (args.Contains("--direct-intents"))
+if (args.Contains("--direct-intents") || args.Contains("--controls"))
 {
     var Index = Array.IndexOf(args, "--light");
-    return await LiveIntentProbe.RunAsync(Index >= 0 && Index + 1 < args.Length ? args[Index + 1] : null);
+    return await LiveIntentProbe.RunAsync(Index >= 0 && Index + 1 < args.Length ? args[Index + 1] : null, args.Contains("--controls"));
 }
 
 var Results = new List<object>();

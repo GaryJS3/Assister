@@ -62,6 +62,10 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
                 return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId), "succeeded", "language-model");
             }
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
+            catch (ControlNotConfirmedException)
+            {
+                return Result("I could not confirm the command completed. Please check the device or use its full name.", "failed", "language-model");
+            }
             catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.IO.IOException or System.Text.Json.JsonException)
             {
                 using (var Failure = RunTracing.Start("Error", "Language model failure", "LLM routing stopped; supported direct commands remain available."))
@@ -108,7 +112,7 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             return Result(Response.Response, Response.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException)
+        catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.Text.Json.JsonException or System.IO.IOException)
         {
             using (var Failure = RunTracing.Start("Error", "Direct action failure", "Device action completion could not be confirmed."))
             {

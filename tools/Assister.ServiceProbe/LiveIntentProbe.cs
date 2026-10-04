@@ -6,7 +6,7 @@ using Assister.Contracts;
 
 internal static class LiveIntentProbe
 {
-    public static async Task<int> RunAsync(string? EntityId)
+    public static async Task<int> RunAsync(string? EntityId, bool IncludeLlm = false)
     {
         if (EntityId is null || !Regex.IsMatch(EntityId, @"^light\.[a-z0-9_]+$"))
         {
@@ -17,7 +17,7 @@ internal static class LiveIntentProbe
         var Results = new List<object>();
         using var Home = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("HomeAssistant__Url")!), Timeout = TimeSpan.FromSeconds(15) };
         Home.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Environment.GetEnvironmentVariable("HomeAssistant__Token"));
-        using var Assister = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:8080"), Timeout = TimeSpan.FromSeconds(15) };
+        using var Assister = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:8080"), Timeout = TimeSpan.FromSeconds(100) };
         var Originals = new List<OriginalLight>();
         var Changed = false;
         var Failures = 0;
@@ -66,15 +66,38 @@ internal static class LiveIntentProbe
             });
             var Status = await GetAsync(Assister, "api/status");
             var InitialEvents = Status.GetProperty("homeAssistantCache").GetProperty("stateEventCount").GetInt64();
-            foreach (var Step in new[] { (Message: $"turn {EntityId} off", Power: "off", Brightness: (int?)null),
-                (Message: $"turn {EntityId} on", Power: "on", Brightness: (int?)null),
-                (Message: $"set {EntityId} to 50 percent", Power: "on", Brightness: (int?)128) })
+            var Steps = new List<(string Message, string Power, int? Brightness, string Handler)>
+            {
+                ($"turn {EntityId} off", "off", null, "direct-intent"),
+                ($"turn {EntityId} on", "on", null, "direct-intent"),
+                ($"set {EntityId} to 50 percent", "on", 128, "direct-intent")
+            };
+            if (IncludeLlm)
+            {
+                var Name = All[EntityId].GetProperty("attributes").GetProperty("friendly_name").GetString()!;
+                Steps.Add((EntityId == "light.living_room_lights" ? "Set living room light to 100." : $"Set {Name} to 100 percent", "on", 255, "direct-intent"));
+                Steps.Add(($"Dim {Name} to 40 percent", "on", 102, "language-model"));
+                Steps.Add(($"Could you make {Name} fully bright?", "on", 255, "language-model"));
+                Steps.Add(($"Could you switch {Name} off?", "off", null, "language-model"));
+            }
+            foreach (var Step in Steps)
             {
                 Changed = true;
                 var Result = await MessageAsync(Assister, Step.Message);
-                if (Result.Outcome != "succeeded" || Result.HandledBy != "direct-intent" || !Result.EntityIds.SequenceEqual(new[] { EntityId }))
+                if (Result.Outcome != "succeeded" || Result.HandledBy != Step.Handler
+                    || Step.Handler == "direct-intent" && !Result.EntityIds.SequenceEqual(new[] { EntityId }))
                 {
-                    throw new InvalidDataException("Direct intent did not succeed for the authorized target.");
+                    throw new InvalidDataException("Control did not succeed through the expected request path.");
+                }
+                if (Step.Handler == "language-model")
+                {
+                    var Trace = await GetAsync(Assister, $"api/diagnostics/runs/{Result.TraceId}");
+                    var Controls = Trace.GetProperty("steps").EnumerateArray().Where(Item => Item.GetProperty("name").GetString() == "ha_control").ToArray();
+                    if (Controls.Length != 1 || Controls[0].GetProperty("input").GetProperty("entity_id").GetString() != EntityId
+                        || Controls[0].GetProperty("output").GetProperty("status").GetString() != "completed")
+                    {
+                        throw new InvalidDataException("A matching successful LLM control tool call was not confirmed.");
+                    }
                 }
                 var Confirmed = false;
                 for (var Attempt = 0; Attempt < 40; Attempt++)
@@ -84,7 +107,15 @@ internal static class LiveIntentProbe
                     var Power = Actual.GetProperty("state").GetString();
                     var BrightnessOk = Step.Brightness is null || (Actual.GetProperty("attributes").TryGetProperty("brightness", out var Brightness)
                         && Brightness.ValueKind == JsonValueKind.Number && Math.Abs(Brightness.GetInt32() - Step.Brightness.Value) <= 1);
-                    if (Power == Step.Power && BrightnessOk && Cached.Outcome == "succeeded" && Cached.Response.Contains($" is {Step.Power}.", StringComparison.Ordinal))
+                    var MembersOk = true;
+                    foreach (var Original in Originals)
+                    {
+                        var Member = await GetAsync(Home, $"api/states/{Original.EntityId}");
+                        MembersOk &= Member.GetProperty("state").GetString() == Step.Power
+                            && (Step.Brightness is null || Member.GetProperty("attributes").TryGetProperty("brightness", out var MemberBrightness)
+                                && MemberBrightness.TryGetInt32(out var Number) && Math.Abs(Number - Step.Brightness.Value) <= 2);
+                    }
+                    if (Power == Step.Power && BrightnessOk && MembersOk && Cached.Outcome == "succeeded" && Cached.Response.Contains($" is {Step.Power}.", StringComparison.Ordinal))
                     {
                         Confirmed = true;
                         break;

@@ -53,6 +53,64 @@ public sealed class ToolLoopTests
         Assert.Equal("none", Model.Requests.Last().ToolChoice);
     }
 
+    [Theory]
+    [InlineData("Set living room light to 100.")]
+    [InlineData("Could you make the living room lights fully bright?")]
+    [InlineData("Dim the living room lights to 40 percent")]
+    public async Task ControlRequestsOfferControlAndCannotInventSuccess(string Message)
+    {
+        var Registry = new ToolRegistry([new FakeControlTool()]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("Done, I set the brightness.", [], "stop"));
+        var Loop = new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build());
+        await Assert.ThrowsAsync<ControlNotConfirmedException>(() => Loop.RespondAsync(new(Message), [], CancellationToken.None));
+        Assert.Contains(Model.Requests[0].Tools!, Tool => Tool.Function.Name == "ha_control");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedControlsCannotBecomeSuccessfulModelProse(bool Fails)
+    {
+        var Tool = new FakeControlTool { Fails = Fails };
+        var Registry = new ToolRegistry([Tool]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("control", new("ha_control", "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("Done.", [], "stop"));
+        var Loop = new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build());
+        if (Fails)
+        {
+            await Assert.ThrowsAsync<ControlNotConfirmedException>(() => Loop.RespondAsync(new("Dim living room lights"), [], CancellationToken.None));
+        }
+        else { Assert.Equal("Done.", await Loop.RespondAsync(new("Dim living room lights"), [], CancellationToken.None)); }
+        Assert.Equal(1, Tool.Calls);
+    }
+
+    [Fact]
+    public async Task ReadOnlyBrightnessQuestionDoesNotOfferControl()
+    {
+        var Registry = new ToolRegistry([new FakeControlTool()]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("The brightness is 50 percent.", [], "stop"));
+        await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("What is the living room light brightness?"), [], CancellationToken.None);
+        Assert.Empty(Model.Requests[0].Tools!);
+    }
+
+    private sealed class FakeControlTool : IAssisterTool
+    {
+        public int Calls { get; private set; }
+        public bool Fails { get; init; }
+        public bool StateChanging => true;
+        public LlmTool Definition => new(new("ha_control", "Control", JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{},"additionalProperties":false}""")));
+        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken CancellationToken)
+        {
+            Calls++;
+            if (Fails) { throw new InvalidOperationException(); }
+            return Task.FromResult("{\"status\":\"completed\"}");
+        }
+    }
+
     private sealed class FakeTool : IAssisterTool
     {
         public int Calls { get; private set; }

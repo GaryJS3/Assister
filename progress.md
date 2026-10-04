@@ -206,3 +206,25 @@ found Online, OwnedByAssister, observed firmware v2.17.0, idle output and no act
 or last error; Assister health is Healthy. Re-ran all 70 unit and 10 C# integration tests:
 80 passed. Reconnect and post-reconnect voice processing are verified; this reboot occurred
 outside an active request, so mid-request disconnect acceptance remains separate.
+
+## Verified-control correction - October 4, 2026
+
+The live MBedroom trace ae373758-6d2c-450d-82f6-a4fe27c3fefe transcribed
+"Set living room light to 100." but neither matched a direct intent nor selected ha_control.
+The model searched/read entities and invented successful control without any service call.
+The living-room light group also lacks an HA area assignment.
+
+Implemented: bare light brightness numbers and turn-to-percent direct commands; full named
+entity resolution before inferred room filtering; imperative LLM control selection; strongest
+search matches with equal-score ambiguity retained; compact brightness/capability data; and
+code enforcement that LLM control replies require a successful ha_control result. Failed or
+missing control cannot become a successful model response. The shared HA action client now
+reads back power/brightness for targets and nested light-group members within a bounded timeout,
+without retrying mutations. Both direct and LLM paths use this confirmation.
+
+Local validation: 81 unit and 10 integration tests pass (91 C# tests). Regression coverage includes
+the exact transcript, unnamed-area light group, missing/rejected LLM control, read-only tool
+selection, ranked search ambiguity and accepted-service/no-state-change behavior. The C# probe
+adds --controls --light to verify direct and LLM actions, matching tool traces, independent HA
+state/member reads and cache delivery, with durable original-state backup and restoration.
+Deployment and live control verification are pending at this implementation checkpoint.

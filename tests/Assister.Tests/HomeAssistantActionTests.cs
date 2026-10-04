@@ -53,6 +53,13 @@ public sealed class HomeAssistantActionTests
             Transport.ResponseStatus = HttpStatusCode.Unauthorized;
             await Assert.ThrowsAsync<InvalidOperationException>(() => Client.ControlAsync(Control, Deadline.Token));
             Assert.Equal(2, Transport.Calls);
+
+            Transport.ResponseStatus = HttpStatusCode.OK;
+            Transport.ConfirmState = false;
+            using var NoChange = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Client.ControlAsync(Control, NoChange.Token));
+            Assert.Equal(3, Transport.Calls); // One mutation, regardless of readback retries.
+            Assert.True(Transport.Reads >= 2);
         }
         finally { await Connection.StopAsync(CancellationToken.None); }
     }
@@ -80,9 +87,22 @@ public sealed class HomeAssistantActionTests
             get; private set;
         }
         public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
+        public bool ConfirmState { get; set; } = true;
+        public int Reads { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
+            if (Request.Method == HttpMethod.Get)
+            {
+                Reads++;
+                var Off = Url!.AbsolutePath.EndsWith("turn_off", StringComparison.Ordinal);
+                var Percent = Body.TryGetProperty("brightness_pct", out var Value) ? Value.GetInt32() : 100;
+                var State = ConfirmState ? Off ? "off" : "on" : "unknown";
+                return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new
+                {
+                    entity_id = "light.desk", state = State, attributes = new { brightness = (int)Math.Round(Percent * 255.0 / 100) }
+                })) };
+            }
             Calls++;
             Url = Request.RequestUri;
             Authorization = Request.Headers.Authorization?.ToString();

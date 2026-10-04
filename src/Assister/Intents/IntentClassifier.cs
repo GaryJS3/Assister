@@ -46,10 +46,16 @@ public sealed class IntentClassifier
             return Slots(Match.Groups["power"].Value == "on" ? DirectIntentKind.TurnOn : DirectIntentKind.TurnOff, Match.Groups["target"].Value);
         }
 
-        Match = Pattern(Text, @"^set (?<target>.+) to (?<percent>-?\d{1,9})\s*(?:percent|%)$");
+        Match = Pattern(Text, @"^(?:set|turn) (?<target>.+) to (?<percent>-?\d{1,9})\s*(?:percent|%)?$");
         if (Match.Success)
         {
-            return Slots(DirectIntentKind.SetBrightness, Match.Groups["target"].Value, int.Parse(Match.Groups["percent"].Value));
+            var Target = Match.Groups["target"].Value;
+            // A bare number is brightness only for a light target, not a thermostat or other device.
+            if (Text.EndsWith("percent", StringComparison.Ordinal) || Text.EndsWith('%')
+                || Pattern(Target, @"\b(?:light|lights|lamp|lamps)\b").Success || Target.StartsWith("light.", StringComparison.Ordinal))
+            {
+                return Slots(DirectIntentKind.SetBrightness, Target, int.Parse(Match.Groups["percent"].Value));
+            }
         }
 
         Match = Pattern(Text, @"^(?:what is|what's) the temperature (?:in|of) (?<area>.+)$");
