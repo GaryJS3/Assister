@@ -1,6 +1,7 @@
 using Assister.Contracts;
 using Assister.Diagnostics;
 using Assister.Satellites;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace Assister.Voice;
@@ -9,16 +10,15 @@ public sealed record VoiceSession(Guid Id, string SatelliteId, string? Area, Gui
 public sealed record VoiceResult(VoiceSession Session, RequestResult? Request, string Outcome);
 
 public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvider Tts, IRequestCoordinator Coordinator,
-    SatelliteManager Satellites, IConfiguration Configuration)
+    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null)
 {
     public async Task<VoiceResult> RunAsync(ISatelliteConnection Satellite, Guid? ConversationId, CancellationToken CancellationToken)
     {
         var Session = new VoiceSession(Guid.NewGuid(), Satellite.SatelliteId, Satellite.Area, ConversationId, DateTimeOffset.UtcNow);
-        if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id)) { return new(Session, null, "busy"); }
-        using var Trace = RunTracing.Start("Voice session", "Receive microphone audio, transcribe, use the shared coordinator, synthesize and play the response.");
-        Trace.Detail("sessionId", Session.Id);
-        Trace.Detail("satellite", Session.SatelliteId);
+        using var Run = RunTracing.BeginRun(Diagnostics ?? new RunStore(), "voice", Satellite.SatelliteId, Satellite.Area, Session.Id, ConversationId);
+        if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id)) { Run.Complete("busy"); return new(Session, null, "busy"); }
         RequestResult? Result = null;
+        var Phase = "stt-failed";
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         Timeout.CancelAfter(TimeSpan.FromMinutes(3));
         try
@@ -27,36 +27,96 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             var Input = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false)
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
                 : Satellite.ReceiveAudioAsync(Timeout.Token);
-            var Transcript = await Stt.TranscribeAsync(Input,
-                new(Configuration["SpeechToText:Language"] ?? "en"), Timeout.Token);
-            if (string.IsNullOrWhiteSpace(Transcript.Text))
+            DateTimeOffset? AudioEnded = null;
+            long PcmBytes = 0;
+            double AudioMilliseconds = 0;
+            AudioChunk? Format = null;
+            async IAsyncEnumerable<AudioChunk> ObserveAudio([EnumeratorCancellation] CancellationToken Token)
             {
-                Trace.Complete("no-speech");
-                return new(Session, null, "no-speech");
+                using var Capture = RunTracing.Start("Input", "Microphone audio", "Receive PCM microphone audio; only format, byte count and duration are retained.");
+                Capture.Metadata(new { Session.SatelliteId, Session.Area, voiceSessionId = Session.Id, Session.ConversationId });
+                await foreach (var Chunk in Input.WithCancellation(Token))
+                {
+                    Format ??= Chunk;
+                    PcmBytes += Chunk.Pcm.Length;
+                    if (Chunk.SampleRate > 0 && Chunk.Channels > 0 && Chunk.SampleWidth > 0)
+                        AudioMilliseconds += 1000.0 * Chunk.Pcm.Length / (Chunk.SampleRate * Chunk.Channels * Chunk.SampleWidth);
+                    yield return Chunk;
+                }
+                AudioEnded = DateTimeOffset.UtcNow;
+                Capture.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
+                    pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, audioInputCompletedAt = AudioEnded });
+                Capture.Complete();
             }
+            TranscriptionResult Transcript;
+            using (var Recognition = RunTracing.Start("SpeechToText", "Speech to text", "Stream microphone input to STT and measure finalization separately from audio capture."))
+            {
+                var Language = Configuration["SpeechToText:Language"] ?? "en";
+                Recognition.Input(new { languageRequested = Language });
+                Transcript = await Stt.TranscribeAsync(ObserveAudio(Timeout.Token), new(Language), Timeout.Token);
+                var Arrived = DateTimeOffset.UtcNow;
+                Recognition.Output(new { transcript = Transcript.Text, returnedLanguage = Transcript.Language });
+                Recognition.Metadata(new { audioDurationMilliseconds = AudioMilliseconds, audioInputCompletedAt = AudioEnded,
+                    finalTranscriptAt = Arrived, postAudioLatencyMilliseconds = AudioEnded is { } End ? (double?)(Arrived - End).TotalMilliseconds : null });
+                Recognition.Complete();
+                RunTracing.Transcript(Transcript.Text);
+            }
+            if (string.IsNullOrWhiteSpace(Transcript.Text)) { Run.Complete("no-speech"); return new(Session, null, "no-speech"); }
             await Satellite.SendEventAsync(new("transcribed", Transcript.Text, Session.Id), Timeout.Token);
             await Satellite.SendEventAsync(new("processing", SessionId: Session.Id), Timeout.Token);
+            Phase = "processing-failed";
             Result = await Coordinator.ProcessAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId), Timeout.Token);
             Session = Session with { ConversationId = Result.ConversationId };
-            Trace.Detail("traceId", Result.TraceId);
-            // Preserve text before synthesis so a TTS failure cannot lose the completed response.
+            var Spoken = Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response);
+            RunTracing.Response(Result.Response, Spoken, Result.Outcome, Result.HandledBy, Result.ConversationId);
             await Satellite.SendEventAsync(new("response", Result.Response, Session.Id, Result.ConversationId), Timeout.Token);
-            await Satellite.SendAudioAsync(Tts.SynthesizeAsync(VoiceFormatter.Format(Result.Response),
-                new(Configuration["TextToSpeech:Voice"]), Timeout.Token), Timeout.Token);
+            Phase = "playback-failed";
+            async IAsyncEnumerable<AudioChunk> Synthesize([EnumeratorCancellation] CancellationToken Token)
+            {
+                using var Synthesis = RunTracing.Start("TextToSpeech", "Text to speech", "Synthesize the exact voice-formatted response; audio bytes are not stored in diagnostics.");
+                var Voice = Configuration["TextToSpeech:Voice"];
+                Synthesis.Input(new { spokenText = Spoken, voice = Voice });
+                var Started = DateTimeOffset.UtcNow;
+                double? FirstAudio = null;
+                AudioChunk? OutputFormat = null;
+                long Bytes = 0;
+                double Duration = 0;
+                await foreach (var Chunk in Tts.SynthesizeAsync(Spoken, new(Voice), Token).WithCancellation(Token))
+                {
+                    FirstAudio ??= (DateTimeOffset.UtcNow - Started).TotalMilliseconds;
+                    OutputFormat ??= Chunk;
+                    Bytes += Chunk.Pcm.Length;
+                    if (Chunk.SampleRate > 0 && Chunk.Channels > 0 && Chunk.SampleWidth > 0)
+                        Duration += 1000.0 * Chunk.Pcm.Length / (Chunk.SampleRate * Chunk.Channels * Chunk.SampleWidth);
+                    yield return Chunk;
+                }
+                Synthesis.Output(new { encoding = "PCM", OutputFormat?.SampleRate, OutputFormat?.SampleWidth, OutputFormat?.Channels,
+                    pcmByteCount = Bytes, audioDurationMilliseconds = Duration, timeToFirstAudioMilliseconds = FirstAudio });
+                Synthesis.Complete();
+            }
+            using (var Playback = RunTracing.Start("Playback", "Playback delivery", "Deliver synthesized audio and wait for satellite playback completion."))
+            {
+                await Satellite.SendAudioAsync(Synthesize(Timeout.Token), Timeout.Token);
+                Playback.Output(new { deliveryCompleted = true });
+                Playback.Complete();
+            }
             await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
-            Trace.Complete(Result.Outcome);
+            Run.Complete(Result.Outcome);
             return new(Session, Result, Result.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
         {
-            Trace.Complete("cancelled");
+            Run.Complete("cancelled");
             throw;
         }
         catch (Exception Error) when (Error is IOException or System.Net.Sockets.SocketException or OperationCanceledException or InvalidOperationException)
         {
-            var Outcome = Result is null ? "stt-failed" : "playback-failed";
-            Trace.Complete(Outcome);
-            return new(Session, Result, Outcome);
+            using var Failure = RunTracing.Start("Error", "Pipeline failure", "The pipeline stopped before completion.");
+            Failure.Metadata(new { failureCategory = Error.GetType().Name, phase = Phase });
+            Failure.Complete("failed");
+            // Keep the existing response-preservation behavior on synthesis/playback failures.
+            Run.Complete(Phase);
+            return new(Session, Result, Phase);
         }
         finally { Satellites.EndSession(Satellite.SatelliteId, Session.Id); }
     }

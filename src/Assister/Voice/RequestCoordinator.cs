@@ -9,28 +9,30 @@ using Assister.Modules.Timers;
 namespace Assister.Voice;
 
 public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
-    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null) : IRequestCoordinator
+    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
     public async Task<RequestResult> ProcessWithHistoryAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken)
     {
-        using var Run = RunTracing.Start("Request", "Process a text request through direct intent routing.");
-        var TraceId = Guid.NewGuid();
-        Run.Detail("traceId", TraceId);
-        Run.Detail("message", Request.Message);
-        Run.Detail("satellite", Request.SatelliteId);
+        using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
+        var TraceId = RunTracing.RunId;
         var Clock = Stopwatch.StartNew();
-        using var Scope = Logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = TraceId, ["SatelliteId"] = Request.SatelliteId });
+        using var Scope = Logger.BeginScope(new Dictionary<string, object> { ["RunId"] = TraceId, ["SatelliteId"] = Request.SatelliteId });
         EntityResolutionResult? Resolution = null;
         RequestResult Result(string Text, string Outcome, string HandledBy = "direct-intent")
         {
-            Run.Detail("response", Text);
-            Run.Detail("handledBy", HandledBy);
-            Run.Complete(Outcome);
+            var Spoken = VoiceFormatter.Format(Text);
+            using (var Step = RunTracing.Start("ResponseFormatting", "Response formatting", "Normalize the exact text that will be supplied to speech synthesis."))
+            {
+                Step.Input(new { rawResponse = Text });
+                Step.Output(new { spokenResponse = Spoken });
+                Step.Complete();
+            }
+            RunTracing.Response(Text, Spoken, Outcome, HandledBy, Request.ConversationId);
             Logger.LogInformation("Request completed: {Outcome}, {DurationMilliseconds} ms.", Outcome, Clock.Elapsed.TotalMilliseconds);
             return new(Text, Request.ConversationId, HandledBy, TraceId, Outcome,
-                Resolution?.Entities.Select(Entity => Entity.EntityId).ToArray() ?? [], Resolution?.Confidence, Clock.Elapsed.TotalMilliseconds);
+                Resolution?.Entities.Select(Entity => Entity.EntityId).ToArray() ?? [], Resolution?.Confidence, Clock.Elapsed.TotalMilliseconds, Spoken);
         }
 
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
@@ -47,7 +49,9 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
         using (var Step = RunTracing.Start("Intent classification", "Match supported deterministic commands before selecting a device."))
         {
             Intent = Classifier.Classify(Request.Message);
-            Step.Detail("intent", Intent?.Kind);
+            Step.Input(new { originalInput = Request.Message, normalizedInput = IntentClassifier.Normalize(Request.Message) }, false);
+            Step.Output(new { matched = Intent is not null, rule = Intent?.MatchedRule, intent = Intent?.Kind.ToString(),
+                Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Intent is null ? "No deterministic intent rule matched. Route to the language model." : "Deterministic rule matched." }, false);
             Step.Complete(Intent is null ? "unmatched" : "matched");
         }
         if (Intent is null)
@@ -60,6 +64,11 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
             catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.IO.IOException or System.Text.Json.JsonException)
             {
+                using (var Failure = RunTracing.Start("Error", "Language model failure", "LLM routing stopped; supported direct commands remain available."))
+                {
+                    Failure.Metadata(new { failureCategory = Error.GetType().Name });
+                    Failure.Complete("failed");
+                }
                 Logger.LogWarning("Language model request failed ({FailureType}).", Error.GetType().Name);
                 return Result("The language model is unavailable. You can still use supported direct device commands.", "unavailable", "language-model");
             }
@@ -74,9 +83,11 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
         using (var Step = RunTracing.Start("Entity resolution", "Resolve the named device against the current Home Assistant cache and requested area."))
         {
             Resolution = Resolver.Resolve(Intent, Request.Area, Snapshot);
-            Step.Detail("entities", string.Join(", ", Resolution.Entities.Select(Entity => Entity.EntityId)));
-            Step.Detail("confidence", Resolution.Confidence);
-            Step.Complete(Resolution.Entities.Count == 0 ? "unresolved" : "resolved");
+            Step.Input(new { Intent.Target, Intent.ExplicitArea, satelliteArea = Request.Area }, false);
+            Step.Metadata(new { Resolution.EffectiveArea, Resolution.RequiredDomain, Resolution.Confidence });
+            Step.Output(new { selected = Resolution.Entities.Select(Entity => new { Entity.EntityId, Entity.Name, Entity.AreaName }),
+                alternatives = Resolution.Alternatives.Select(Entity => new { Entity.EntityId, Entity.Name, Entity.AreaName }) }, false);
+            Step.Complete(Resolution.Entities.Count == 0 ? Resolution.Alternatives.Count > 0 ? "ambiguous" : "not-found" : "resolved");
         }
         if (Resolution.Entities.Count == 0)
         {
@@ -86,14 +97,24 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
 
         try
         {
-            using var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state.");
-            var Response = await Handler.ExecuteAsync(Intent, Resolution, CancellationToken);
-            Step.Complete(Response.Outcome);
+            IntentResult Response;
+            using (var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state."))
+            {
+                Step.Input(new { action = Intent.Kind.ToString(), entities = Resolution.Entities.Select(Entity => Entity.EntityId), Intent.BrightnessPercent });
+                Response = await Handler.ExecuteAsync(Intent, Resolution, CancellationToken);
+                Step.Output(new { Response.Response, Response.Outcome });
+                Step.Complete(Response.Outcome);
+            }
             return Result(Response.Response, Response.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
         catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException)
         {
+            using (var Failure = RunTracing.Start("Error", "Direct action failure", "Device action completion could not be confirmed."))
+            {
+                Failure.Metadata(new { failureCategory = Error.GetType().Name });
+                Failure.Complete("failed");
+            }
             Logger.LogWarning("Home Assistant request failed ({FailureType}).", Error.GetType().Name);
             return Result("I could not confirm the command completed. Please check the device before trying again.", "failed");
         }

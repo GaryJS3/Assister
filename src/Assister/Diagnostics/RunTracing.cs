@@ -1,74 +1,323 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using Microsoft.Data.Sqlite;
 
 namespace Assister.Diagnostics;
 
-// Only explicit application spans are retained; HTTP headers and credentials are never collected.
+public sealed record DiagnosticStep(Guid Id, Guid? ParentId, int Sequence, string Kind, string Name,
+    string Status, DateTimeOffset StartedAt, double DurationMilliseconds, string Summary,
+    JsonElement? Input, JsonElement? Output, JsonElement? Metadata, bool InputTruncated, bool OutputTruncated);
+public sealed record DiagnosticRun(Guid RunId, string Source, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
+    double DurationMilliseconds, string Outcome, string? SatelliteId, string? Area, Guid? VoiceSessionId,
+    Guid? ConversationId, string? ActivityTraceId, string? UserText, string? RawResponse, string? SpokenResponse,
+    string? HandledBy, IReadOnlyList<DiagnosticStep> Steps);
+
+// Every diagnostic write passes through this sanitizer, including summary fields and persisted data.
+public sealed class DiagnosticSanitizer(IConfiguration? Configuration = null)
+{
+    public bool CapturePayloads { get; } = Configuration?.GetValue("Diagnostics:CapturePayloads", true) ?? true;
+    private readonly string[] Secrets = Configuration?.AsEnumerable().Where(Item => Sensitive(Item.Key) && !string.IsNullOrEmpty(Item.Value))
+        .Select(Item => Item.Value!).Distinct().OrderByDescending(Value => Value.Length).ToArray() ?? [];
+    private static bool Sensitive(string Key) => Regex.IsMatch(Key, "authorization|api.?key|password|secret|token(?!s)|connection.?string|encryption.?key", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public string Text(string? Value, int Limit = 4096)
+    {
+        var Text = Value ?? "";
+        foreach (var Secret in Secrets) { Text = Text.Replace(Secret, "[redacted]", StringComparison.Ordinal); }
+        Text = Regex.Replace(Text, @"(?i)\bBearer\s+[^\s""<>]+", "Bearer [redacted]");
+        Text = Regex.Replace(Text, @"(?i)\b(?:api[_-]?key|password|access[_-]?token|authorization)\s*[:=]\s*[^\s,;]+", "[redacted credential]");
+        return Text.Length > Limit ? Text[..Limit] + " [truncated]" : Text;
+    }
+    public (JsonElement? Value, bool Truncated) Payload(object? Value, bool Detailed = true, int Budget = 32768)
+    {
+        if (Value is null) { return (null, false); }
+        if (Detailed && !CapturePayloads) { return (JsonSerializer.SerializeToElement(new { omitted = "Payload capture disabled" }), false); }
+        var Truncated = false;
+        JsonNode? Clean(JsonElement Item, int Depth)
+        {
+            if (Depth > 10) { Truncated = true; return JsonValue.Create("[depth limit]"); }
+            switch (Item.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    var Object = new JsonObject();
+                    foreach (var Property in Item.EnumerateObject().Take(64))
+                    {
+                        Object[Text(Property.Name, 128)] = Sensitive(Property.Name) ? JsonValue.Create("[redacted]") : Clean(Property.Value, Depth + 1);
+                    }
+                    if (Item.EnumerateObject().Count() > 64) { Truncated = true; }
+                    return Object;
+                case JsonValueKind.Array:
+                    var Array = new JsonArray();
+                    foreach (var Element in Item.EnumerateArray().Take(64)) { Array.Add(Clean(Element, Depth + 1)); }
+                    if (Item.GetArrayLength() > 64) { Truncated = true; }
+                    return Array;
+                case JsonValueKind.String:
+                    var Original = Item.GetString();
+                    if (Original?.Length > 4096) { Truncated = true; }
+                    return JsonValue.Create(Text(Original));
+                default: return JsonNode.Parse(Item.GetRawText());
+            }
+        }
+        try
+        {
+            var Element = JsonSerializer.SerializeToElement(Value, RunStore.Json);
+            var Cleaned = Clean(Element, 0);
+            var Bytes = JsonSerializer.SerializeToUtf8Bytes(Cleaned);
+            // Preserve structured payloads and message order while shortening large content fields.
+            // Keep the first and last entries when an array must be shortened (system/current user messages).
+            for (var Pass = 0; Bytes.Length > Budget && Pass < 256; Pass++)
+            {
+                var Strings = new List<JsonValue>();
+                var Arrays = new List<JsonArray>();
+                void Visit(JsonNode? Node)
+                {
+                    if (Node is JsonObject Object) { foreach (var Pair in Object) { Visit(Pair.Value); } }
+                    else if (Node is JsonArray Array) { Arrays.Add(Array); foreach (var Item in Array) { Visit(Item); } }
+                    else if (Node is JsonValue String && String.TryGetValue<string>(out var Text) && Text.Length > 128) { Strings.Add(String); }
+                }
+                Visit(Cleaned);
+                var Largest = Strings.OrderByDescending(Node => Node.GetValue<string>().Length).FirstOrDefault();
+                if (Largest is not null)
+                {
+                    var Text = Largest.GetValue<string>();
+                    Largest.ReplaceWith(JsonValue.Create(Text[..Math.Max(64, Text.Length / 2)] + " [truncated]"));
+                }
+                else if (Arrays.OrderByDescending(Array => Array.Count).FirstOrDefault(Array => Array.Count > 2) is { } Array)
+                { Array.RemoveAt(Array.Count / 2); }
+                else { break; }
+                Truncated = true;
+                Bytes = JsonSerializer.SerializeToUtf8Bytes(Cleaned);
+            }
+            if (Bytes.Length > Budget)
+                return (JsonSerializer.SerializeToElement(new { truncated = true, reason = "Diagnostics payload budget exceeded" }), true);
+            return (JsonSerializer.SerializeToElement(Cleaned), Truncated);
+        }
+        catch (Exception Error) when (Error is JsonException or NotSupportedException or ArgumentException)
+        { return (JsonSerializer.SerializeToElement(new { omitted = "Unsupported diagnostic payload" }), true); }
+    }
+    public static object ParseJson(string Value)
+    {
+        try { return JsonSerializer.Deserialize<JsonElement>(Value, new JsonSerializerOptions { MaxDepth = 16 }); }
+        catch (JsonException) { return new { invalidJson = true }; }
+    }
+}
+
 public static class RunTracing
 {
     public static readonly ActivitySource Source = new("Assister.Runs");
-    public static TraceStep Start(string Name, string Reason) => new(Source.StartActivity(Name), Reason);
-}
-
-public sealed class TraceStep : IDisposable
-{
-    private readonly Activity? Activity;
-    public TraceStep(Activity? Activity, string Reason)
+    private static readonly AsyncLocal<RunScope?> Ambient = new();
+    private static readonly AsyncLocal<TraceStep?> Parent = new();
+    public static Guid RunId => Ambient.Value?.Run.RunId ?? Guid.Empty;
+    public static string? CurrentKind => Parent.Value?.Kind;
+    public static RunScope BeginRun(RunStore Store, string Source, string? Satellite = null, string? Area = null,
+        Guid? VoiceSession = null, Guid? Conversation = null, string? Text = null)
     {
-        this.Activity = Activity;
-        Activity?.SetTag("reason", Reason);
-        Activity?.SetTag("outcome", "interrupted-or-failed");
+        var Scope = new RunScope(Store, Source, Satellite, Area, VoiceSession, Conversation, Text, Ambient.Value, Parent.Value);
+        Ambient.Value = Scope;
+        Parent.Value = null;
+        return Scope;
     }
-    public void Detail(string Key, object? Value)
+    public static RunScope? EnsureRun(RunStore? Store, string Source, string? Satellite, string? Area, Guid? Conversation, string? Text)
+        => Ambient.Value is null ? BeginRun(Store ?? new RunStore(), Source, Satellite, Area, null, Conversation, Text) : null;
+    public static TraceStep Start(string Kind, string Name, string Summary)
     {
-        var Text = Value?.ToString();
-        Activity?.SetTag(Key, Text?.Length > 16384 ? Text[..16384] + " [truncated]" : Text);
+        var Step = new TraceStep(Ambient.Value, Parent.Value, Kind, Name, Summary);
+        Parent.Value = Step;
+        return Step;
     }
-    public void Complete(string Outcome = "succeeded") => Activity?.SetTag("outcome", Outcome);
-    public void Dispose() => Activity?.Dispose();
+    public static TraceStep Start(string Name, string Summary) => Start(Name switch
+    {
+        "LLM" => "LanguageModel", "STT" => "SpeechToText", "TTS" => "TextToSpeech",
+        "Tool broker" or "Tool · Home Assistant" => "ToolCall", "Intent execution" => "IntentExecution",
+        "Intent classification" => "IntentClassification", "Entity resolution" => "EntityResolution", _ => "Input"
+    }, Name, Summary);
+    public static void Response(string Raw, string Spoken, string Outcome, string HandledBy, Guid? Conversation)
+    {
+        var Scope = Ambient.Value;
+        if (Scope is null) { return; }
+        lock (Scope.Store.Gate)
+        {
+            var Clean = Scope.Store.Sanitizer;
+            Scope.Run = Scope.Run with { RawResponse = Clean.Text(Raw), SpokenResponse = Clean.Text(Spoken),
+                Outcome = Clean.Text(Outcome, 128), HandledBy = Clean.Text(HandledBy, 128), ConversationId = Conversation };
+        }
+    }
+    public static void Transcript(string Text)
+    {
+        if (Ambient.Value is { } Scope) { lock (Scope.Store.Gate) { Scope.Run = Scope.Run with { UserText = Scope.Store.Sanitizer.Text(Text) }; } }
+    }
+    public sealed class RunScope : IDisposable
+    {
+        internal readonly RunStore Store;
+        internal DiagnosticRun Run;
+        internal readonly List<TraceStep> Steps = [];
+        internal int PayloadBytes;
+        private readonly RunScope? Previous;
+        private readonly TraceStep? PreviousParent;
+        private bool Disposed;
+        internal RunScope(RunStore Store, string Source, string? Satellite, string? Area, Guid? VoiceSession,
+            Guid? Conversation, string? Text, RunScope? Previous, TraceStep? PreviousParent)
+        {
+            this.Store = Store; this.Previous = Previous; this.PreviousParent = PreviousParent;
+            var Clean = Store.Sanitizer;
+            Run = new(Guid.NewGuid(), Clean.Text(Source, 32), DateTimeOffset.UtcNow, null, 0, "running", Clean.Text(Satellite, 128),
+                Clean.Text(Area, 128), VoiceSession, Conversation, Activity.Current?.TraceId.ToString(), Clean.Text(Text), null, null, null, []);
+            Store.Register(this);
+        }
+        public void Complete(string Outcome) { lock (Store.Gate) { Run = Run with { Outcome = Store.Sanitizer.Text(Outcome, 128) }; } }
+        internal DiagnosticRun Snapshot(bool IncludeSteps) => Run with
+        {
+            DurationMilliseconds = ((Run.FinishedAt ?? DateTimeOffset.UtcNow) - Run.StartedAt).TotalMilliseconds,
+            Steps = IncludeSteps ? Steps.Select(Step => Step.Snapshot()).ToArray() : []
+        };
+        public void Dispose()
+        {
+            if (Disposed) { return; }
+            Disposed = true;
+            lock (Store.Gate)
+            {
+                Run = Run with { FinishedAt = DateTimeOffset.UtcNow, Outcome = Run.Outcome == "running" ? "interrupted-or-failed" : Run.Outcome };
+                Store.Finish(this);
+            }
+            Ambient.Value = Previous; Parent.Value = PreviousParent;
+        }
+    }
+    public sealed class TraceStep : IDisposable
+    {
+        private readonly RunScope? Scope;
+        private readonly TraceStep? Previous;
+        private readonly Activity? Activity;
+        private DiagnosticStep Step;
+        private DateTimeOffset? Finished;
+        public string Kind => Step.Kind;
+        public Guid Id => Step.Id;
+        internal TraceStep(RunScope? Scope, TraceStep? Previous, string Kind, string Name, string Summary)
+        {
+            this.Scope = Scope; this.Previous = Previous;
+            var Clean = Scope?.Store.Sanitizer ?? new DiagnosticSanitizer();
+            Activity = Source.StartActivity(Name);
+            Activity?.SetTag("assister.run_id", RunId.ToString());
+            Step = new(Guid.NewGuid(), Previous?.Id, 0, Clean.Text(Kind, 64), Clean.Text(Name, 128), "running", DateTimeOffset.UtcNow, 0,
+                Clean.Text(Summary, 1024), null, null, null, false, false);
+            if (Scope is not null) { lock (Scope.Store.Gate) { Step = Step with { Sequence = Scope.Steps.Count + 1 }; if (Scope.Steps.Count < 128) { Scope.Steps.Add(this); } } }
+        }
+        private void Change(Action Action) { if (Scope is not null) { lock (Scope.Store.Gate) { Action(); } } }
+        private (JsonElement? Value, bool Truncated) Bound(object? Value, bool Detailed)
+        {
+            if (Scope is null) { return (null, false); }
+            var Result = Scope.Store.Sanitizer.Payload(Value, Detailed, Math.Max(0, Math.Min(32768, 131072 - Scope.PayloadBytes)));
+            Scope.PayloadBytes += Result.Value is { } Element ? System.Text.Encoding.UTF8.GetByteCount(Element.GetRawText()) : 0;
+            return Result;
+        }
+        public void Input(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Input = Data.Value, InputTruncated = Data.Truncated }; });
+        public void Output(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Output = Data.Value, OutputTruncated = Data.Truncated }; });
+        public void Metadata(object? Value) => Change(() => { Step = Step with { Metadata = Bound(Value, false).Value }; });
+        public void Detail(string Key, object? Value) => Change(() =>
+        {
+            var Data = Step.Metadata is { } Element ? JsonNode.Parse(Element.GetRawText())!.AsObject() : new JsonObject();
+            var Safe = Scope!.Store.Sanitizer.Payload(new Dictionary<string, object?> { [Key] = Value }, false);
+            if (Safe.Value is { } SafeElement && SafeElement.TryGetProperty(Key, out var Item)) { Data[Key] = JsonNode.Parse(Item.GetRawText()); }
+            Step = Step with { Metadata = JsonSerializer.SerializeToElement(Data) };
+        });
+        public void Complete(string Status = "succeeded") => Change(() => Step = Step with { Status = Scope!.Store.Sanitizer.Text(Status, 128) });
+        // Finish model timing before child tools while keeping this round as their semantic parent.
+        public void Finish(string Status = "succeeded") { Complete(Status); Change(() => Finished ??= DateTimeOffset.UtcNow); }
+        internal DiagnosticStep Snapshot() => Step with { DurationMilliseconds = ((Finished ?? DateTimeOffset.UtcNow) - Step.StartedAt).TotalMilliseconds };
+        public void Dispose()
+        {
+            Change(() => { Finished ??= DateTimeOffset.UtcNow; if (Step.Status == "running") { Step = Step with { Status = "interrupted-or-failed" }; } });
+            Activity?.Dispose(); Parent.Value = Previous;
+        }
+    }
 }
-
-public sealed record StepSnapshot(string Id, string? ParentId, string Name, DateTime StartedAt,
-    double DurationMilliseconds, bool Active, IReadOnlyDictionary<string, string?> Details);
-public sealed record RunSnapshot(string Id, DateTime StartedAt, IReadOnlyList<StepSnapshot> Steps);
 
 public sealed class RunStore : IDisposable
 {
-    private readonly object Gate = new();
-    private readonly Dictionary<string, List<Activity>> Runs = new();
-    private readonly ActivityListener Listener;
-    public RunStore()
+    public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    internal readonly object Gate = new();
+    internal readonly DiagnosticSanitizer Sanitizer;
+    private readonly Dictionary<Guid, RunTracing.RunScope> Active = [];
+    private readonly Dictionary<Guid, DiagnosticRun> Completed = [];
+    private readonly SqliteConnection? Database;
+    private readonly int MaximumRuns;
+    private readonly int RetentionDays;
+    private readonly ILogger<RunStore>? Logger;
+    public RunStore(IConfiguration? Configuration = null, ILogger<RunStore>? Logger = null)
     {
-        Listener = new ActivityListener
-        {
-            ShouldListenTo = Source => Source.Name == "Assister.Runs",
-            Sample = (ref ActivityCreationOptions<ActivityContext> Options) => ActivitySamplingResult.AllData,
-            ActivityStarted = Activity =>
-            {
-                lock (Gate)
-                {
-                    var Id = Activity.TraceId.ToString();
-                    if (!Runs.TryGetValue(Id, out var Steps))
-                    {
-                        if (Runs.Count >= 200) { Runs.Remove(Runs.Keys.First()); }
-                        Runs[Id] = Steps = [];
-                    }
-                    if (Steps.Count < 256) { Steps.Add(Activity); }
-                }
-            }
-        };
-        ActivitySource.AddActivityListener(Listener);
+        this.Logger = Logger;
+        Sanitizer = new(Configuration);
+        MaximumRuns = Math.Clamp(Configuration?.GetValue("Diagnostics:MaxRuns", 1000) ?? 1000, 1, 1000);
+        RetentionDays = Math.Clamp(Configuration?.GetValue("Diagnostics:RetentionDays", 7) ?? 7, 1, 30);
+        if (Configuration is null || !Configuration.GetValue("Diagnostics:PersistHistory", true)) { return; }
+        var Path = System.IO.Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data");
+        Directory.CreateDirectory(Path);
+        Database = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(Path, "diagnostics.db") }.ToString());
+        Database.Open();
+        using var Command = Database.CreateCommand();
+        Command.CommandText = "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS DiagnosticRuns (RunId TEXT PRIMARY KEY, StartedAt INTEGER NOT NULL, Summary TEXT NOT NULL, Payload TEXT NOT NULL);";
+        Command.ExecuteNonQuery();
+        Prune();
     }
-    public IReadOnlyList<RunSnapshot> Snapshot()
+    internal void Register(RunTracing.RunScope Scope) { lock (Gate) { if (Active.Count < 64) { Active[Scope.Run.RunId] = Scope; } } }
+    internal void Finish(RunTracing.RunScope Scope)
+    {
+        if (!Active.Remove(Scope.Run.RunId)) { return; }
+        var Run = Scope.Snapshot(true);
+        Completed[Run.RunId] = Run;
+        while (Completed.Count > Math.Min(MaximumRuns, 100)) { Completed.Remove(Completed.Keys.First()); }
+        if (Database is null) { return; }
+        try
+        {
+            using var Command = Database.CreateCommand();
+            Command.CommandText = "INSERT OR REPLACE INTO DiagnosticRuns VALUES($id,$time,$summary,$payload)";
+            Command.Parameters.AddWithValue("$id", Run.RunId.ToString());
+            Command.Parameters.AddWithValue("$time", Run.StartedAt.ToUnixTimeSeconds());
+            Command.Parameters.AddWithValue("$summary", JsonSerializer.Serialize(Run with { Steps = [] }, Json));
+            Command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(Run, Json));
+            Command.ExecuteNonQuery(); Prune();
+        }
+        catch (SqliteException) { Logger?.LogWarning("Diagnostic history could not be persisted."); }
+    }
+    private void Prune()
+    {
+        if (Database is null) { return; }
+        using var Command = Database.CreateCommand();
+        Command.CommandText = "DELETE FROM DiagnosticRuns WHERE StartedAt < $cutoff OR RunId NOT IN (SELECT RunId FROM DiagnosticRuns ORDER BY StartedAt DESC, rowid DESC LIMIT $max)";
+        Command.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-RetentionDays).ToUnixTimeSeconds());
+        Command.Parameters.AddWithValue("$max", MaximumRuns); Command.ExecuteNonQuery();
+    }
+    public IReadOnlyList<DiagnosticRun> Snapshot()
     {
         lock (Gate)
         {
-            return Runs.Select(Run => new RunSnapshot(Run.Key, Run.Value[0].StartTimeUtc,
-                Run.Value.Select(Step => new StepSnapshot(Step.SpanId.ToString(), Step.ParentSpanId == default ? null : Step.ParentSpanId.ToString(),
-                    Step.DisplayName, Step.StartTimeUtc, Step.Duration == TimeSpan.Zero
-                        ? (DateTime.UtcNow - Step.StartTimeUtc).TotalMilliseconds : Step.Duration.TotalMilliseconds,
-                    Step.Duration == TimeSpan.Zero, Step.TagObjects.ToDictionary(Tag => Tag.Key, Tag => Tag.Value?.ToString()))).ToArray()))
-                .OrderByDescending(Run => Run.StartedAt).ToArray();
+            var Runs = Completed.Values.Where(Run => Run.StartedAt >= DateTimeOffset.UtcNow.AddDays(-RetentionDays)).Select(Run => Run with { Steps = Array.Empty<DiagnosticStep>() }).ToDictionary(Run => Run.RunId);
+            if (Database is not null)
+            {
+                using var Command = Database.CreateCommand();
+                Command.CommandText = "SELECT Summary FROM DiagnosticRuns WHERE StartedAt >= $cutoff ORDER BY StartedAt DESC LIMIT $max";
+                Command.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-RetentionDays).ToUnixTimeSeconds());
+                Command.Parameters.AddWithValue("$max", MaximumRuns);
+                using var Reader = Command.ExecuteReader();
+                while (Reader.Read()) { var Run = JsonSerializer.Deserialize<DiagnosticRun>(Reader.GetString(0), Json)!; Runs[Run.RunId] = Run; }
+            }
+            foreach (var Scope in Active.Values) { Runs[Scope.Run.RunId] = Scope.Snapshot(false); }
+            return Runs.Values.OrderByDescending(Run => Run.StartedAt).Take(MaximumRuns).ToArray();
         }
     }
-    public void Dispose() => Listener.Dispose();
+    public DiagnosticRun? Get(Guid Id)
+    {
+        lock (Gate)
+        {
+            if (Active.TryGetValue(Id, out var Scope)) { return Scope.Snapshot(true); }
+            if (Completed.TryGetValue(Id, out var Run) && Run.StartedAt >= DateTimeOffset.UtcNow.AddDays(-RetentionDays)) { return Run; }
+            if (Database is null) { return null; }
+            using var Command = Database.CreateCommand();
+            Command.CommandText = "SELECT Payload FROM DiagnosticRuns WHERE RunId=$id AND StartedAt >= $cutoff";
+            Command.Parameters.AddWithValue("$id", Id.ToString());
+            Command.Parameters.AddWithValue("$cutoff", DateTimeOffset.UtcNow.AddDays(-RetentionDays).ToUnixTimeSeconds());
+            return Command.ExecuteScalar() is string Payload ? JsonSerializer.Deserialize<DiagnosticRun>(Payload, Json) : null;
+        }
+    }
+    public void Dispose() => Database?.Dispose();
 }

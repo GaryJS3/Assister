@@ -1,6 +1,7 @@
 using Assister.Contracts;
 using Assister.Persistence;
 using Assister.Voice;
+using Assister.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Assister.Conversations;
@@ -13,10 +14,11 @@ public sealed class ConversationLocks
 }
 
 public sealed class ConversationCoordinator(AssisterDbContext Database, RequestCoordinator Coordinator,
-    ConversationLocks Locks) : IRequestCoordinator
+    ConversationLocks Locks, RunStore? Diagnostics = null) : IRequestCoordinator
 {
     public async Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
     {
+        using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
             || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128)
         { return await Coordinator.ProcessAsync(Request, CancellationToken); }
@@ -31,12 +33,14 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 Conversation = await Database.Conversations.SingleOrDefaultAsync(Row => Row.Id == Id && Row.SatelliteId == Request.SatelliteId, CancellationToken);
                 if (Conversation is null)
                 {
-                    return new("That conversation does not belong to this satellite or no longer exists.", null, "validation", Guid.NewGuid(), "invalid-request", [], null, 0);
+                    const string Response = "That conversation does not belong to this satellite or no longer exists.";
+                    RunTracing.Response(Response, Response, "invalid-request", "validation", null);
+                    return new(Response, null, "validation", RunTracing.RunId, "invalid-request", [], null, 0, Response);
                 }
             }
             else
             {
-                Conversation = await Database.Conversations.Where(Row => Row.SatelliteId == Request.SatelliteId && Row.UpdatedAt > Now - 300)
+                Conversation = Request.NewConversation ? null : await Database.Conversations.Where(Row => Row.SatelliteId == Request.SatelliteId && Row.UpdatedAt > Now - 300)
                     .OrderByDescending(Row => Row.UpdatedAt).FirstOrDefaultAsync(CancellationToken);
             }
             Conversation ??= new() { Id = Guid.NewGuid(), SatelliteId = Request.SatelliteId };

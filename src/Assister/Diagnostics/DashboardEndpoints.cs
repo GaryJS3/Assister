@@ -12,7 +12,7 @@ public static class DashboardEndpoints
         App.Services.GetRequiredService<RunStore>();
         App.MapGet("/api/diagnostics/runs", (RunStore Store) => Results.Ok(Store.Snapshot()));
         App.MapGet("/api/diagnostics/runs/{id}", (string Id, RunStore Store) =>
-            Store.Snapshot().FirstOrDefault(Run => Run.Id == Id) is { } Run ? Results.Ok(Run) : Results.NotFound());
+            Guid.TryParse(Id, out var RunId) && Store.Get(RunId) is { } Run ? Results.Ok(Run) : Results.NotFound());
         App.MapGet("/api/diagnostics/health", async (AssisterDbContext Database, HomeAssistantClient HomeAssistant,
             HomeAssistantStateCache Cache, ComponentHealth Health, SatelliteManager Satellites, CancellationToken Token) =>
         {

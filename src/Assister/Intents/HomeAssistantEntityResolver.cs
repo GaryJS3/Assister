@@ -3,7 +3,7 @@ using Assister.Modules.HomeAssistant;
 namespace Assister.Intents;
 
 public sealed record EntityResolutionResult(IReadOnlyList<HomeAssistantEntity> Entities, double Confidence,
-    IReadOnlyList<HomeAssistantEntity> Alternatives);
+    IReadOnlyList<HomeAssistantEntity> Alternatives, string? EffectiveArea = null, string? RequiredDomain = null);
 
 public interface IEntityResolver
 {
@@ -18,6 +18,11 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         var Candidates = Snapshot.Entities.Where(Entity => Eligible(Entity, Intent.Kind)).ToArray();
         var Area = Intent.ExplicitArea;
         var Domain = Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null;
+        EntityResolutionResult Result(IReadOnlyList<HomeAssistantEntity> Entities, double Confidence, IReadOnlyList<HomeAssistantEntity> Alternatives)
+            => new(Entities, Confidence, Alternatives, Area ?? Entities.FirstOrDefault()?.AreaName,
+                Domain ?? (Intent.Kind == DirectIntentKind.QueryTemperature ? "temperature sensor" : Intent.Kind is DirectIntentKind.TurnOn or DirectIntentKind.TurnOff ? "light or switch" : null));
+        EntityResolutionResult Unique(HomeAssistantEntity[] Entities, double Confidence) => Entities.Length == 1
+            ? Result(Entities, Confidence, []) : Result([], 0, Entities.Take(5).ToArray());
         var Plural = Target is "lights" or "switches" || Target.EndsWith(" lights", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal);
 
         if (Area is null)
@@ -45,11 +50,11 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         if (Generic)
         {
             Area ??= SatelliteArea;
-            if (Area is null) { return new([], 0, Candidates.Take(5).ToArray()); }
+            if (Area is null) { return Result([], 0, Candidates.Take(5).ToArray()); }
             Candidates = InArea(Candidates, Area);
             if (Plural && Candidates.Length is > 0 and <= 64 && Intent.Kind != DirectIntentKind.QueryState)
             {
-                return new(Candidates, 1, []);
+                return Result(Candidates, 1, []);
             }
             return Unique(Candidates, 1);
         }
@@ -68,7 +73,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         if (Equivalent.Length > 0) { return Unique(Equivalent, 0.95); }
         var Alternatives = Candidates.Where(Entity => Names(Entity).Any(Name => LanguageParser.Normalize(Name).Contains(Target, StringComparison.Ordinal)))
             .Take(5).ToArray();
-        return new([], 0, Alternatives);
+        return Result([], 0, Alternatives);
     }
 
     private static bool Eligible(HomeAssistantEntity Entity, DirectIntentKind Kind) => Kind switch
@@ -84,9 +89,6 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
 
     private static HomeAssistantEntity[] InArea(IEnumerable<HomeAssistantEntity> Entities, string Area) => Entities.Where(Entity =>
         string.Equals(Entity.AreaId, Area, StringComparison.OrdinalIgnoreCase) || (Entity.AreaName is not null && LanguageParser.Normalize(Entity.AreaName) == LanguageParser.Noun(Area))).ToArray();
-
-    private static EntityResolutionResult Unique(HomeAssistantEntity[] Candidates, double Confidence) => Candidates.Length == 1
-        ? new(Candidates, Confidence, []) : new([], 0, Candidates.Take(5).ToArray());
 
     private static string StripDomain(string Name, string? Domain)
     {

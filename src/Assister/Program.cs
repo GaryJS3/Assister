@@ -126,9 +126,18 @@ App.MapGet("/api/status", async (AssisterDbContext Database, HomeAssistantClient
         ImplementationMilestone = 6
     });
 });
-App.MapPost("/api/test/message", async (UserRequest Request, IRequestCoordinator Coordinator, CancellationToken CancellationToken) =>
+App.MapPost("/api/test/message", async (UserRequest Request, IRequestCoordinator Coordinator, RunStore Store, CancellationToken CancellationToken) =>
 {
+    using var Run = RunTracing.BeginRun(Store, "debug", Request.SatelliteId, Request.Area, Conversation: Request.ConversationId, Text: Request.Message);
+    using (var Input = RunTracing.Start("Input", "Text input", "Process debug text through the same conversation and request coordinators as voice."))
+    {
+        Input.Metadata(new { Request.SatelliteId, Request.Area, Request.ConversationId });
+        Input.Output(new { text = Request.Message });
+        Input.Complete();
+    }
     var Result = await Coordinator.ProcessAsync(Request, CancellationToken);
+    RunTracing.Response(Result.Response, Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), Result.Outcome, Result.HandledBy, Result.ConversationId);
+    Run.Complete(Result.Outcome);
     return Result.Outcome == "invalid-request" ? Results.BadRequest(Result) : Results.Ok(Result);
 });
 App.MapGet("/api/homeassistant/entities", (string? Query, int? Limit, HomeAssistantStateCache Cache) =>

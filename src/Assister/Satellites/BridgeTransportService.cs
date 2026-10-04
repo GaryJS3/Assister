@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Assister.Contracts;
 using Assister.Satellites.Protocol;
 using Assister.Voice;
+using Assister.Diagnostics;
 using Grpc.Core;
 
 namespace Assister.Satellites;
@@ -124,10 +125,19 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         {
             var Wave = await VoiceAudioStore.WaveAsync(Chunks, CancellationToken);
             var UseFlac = Configuration.GetValue("SatelliteBridge:UseFlac", true);
-            var Data = UseFlac ? await VoiceAudioEncoder.FlacAsync(Wave, CancellationToken) : Wave;
+            byte[] Data;
+            using (var Encoding = RunTracing.Start("Playback", "Audio encoding", "Encode synthesized PCM for satellite delivery."))
+            {
+                Data = UseFlac ? await VoiceAudioEncoder.FlacAsync(Wave, CancellationToken) : Wave;
+                Encoding.Output(new { encoding = UseFlac ? "FLAC" : "WAV", byteCount = Data.Length,
+                    sampleRate = UseFlac ? 48000 : (int?)null, channels = UseFlac ? 1 : (int?)null });
+                Encoding.Complete();
+            }
             var Id = Audio.Add(Data);
             var Base = Configuration["Assister:PublicUrl"] ?? throw new InvalidOperationException("Public audio URL is required.");
             Playback = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Publish audio-ready and wait for the satellite's explicit playback acknowledgement.");
+            Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow });
             await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
                 Text = Announcement ? "announcement" : "", SessionId = Announcement ? "" : TransportSession }, CancellationToken);
             if (Playback is not null)
@@ -137,6 +147,8 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
                     Timeout.CancelAfter(TimeSpan.FromSeconds(45));
                     if (!await Playback.Task.WaitAsync(Timeout.Token)) { throw new IOException("Playback failed."); }
+                    Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow });
+                    Delivery.Complete();
                 }
                 finally { Playback = null; Announcement = false; }
             }

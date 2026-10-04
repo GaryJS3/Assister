@@ -11,7 +11,16 @@ public enum DirectIntentKind
     QueryTemperature
 }
 
-public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null);
+public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null)
+{
+    public string MatchedRule => Kind switch
+    {
+        DirectIntentKind.TurnOn or DirectIntentKind.TurnOff => "TurnPower",
+        DirectIntentKind.SetBrightness => "SetBrightnessPercent",
+        DirectIntentKind.QueryTemperature => "QueryTemperature",
+        _ => "QueryState"
+    };
+}
 
 public static class LanguageParser
 {
@@ -28,9 +37,7 @@ public sealed class IntentClassifier
 {
     public IntentMatch? Classify(string Message)
     {
-        var Text = LanguageParser.Normalize(Message);
-        if (Text.StartsWith("please ", StringComparison.Ordinal)) { Text = Text[7..]; }
-        if (Text.EndsWith(" please", StringComparison.Ordinal)) { Text = Text[..^7]; }
+        var Text = Normalize(Message);
 
         var Match = Pattern(Text, @"^turn (?<target>.+) (?<power>on|off)$");
         if (!Match.Success) { Match = Pattern(Text, @"^turn (?<power>on|off) (?<target>.+)$"); }
@@ -52,6 +59,14 @@ public sealed class IntentClassifier
         Match = Pattern(Text, @"^(?:what is|what's) the (?:state|status) of (?<target>.+)$");
         if (!Match.Success) { Match = Pattern(Text, @"^is (?<target>.+) (?:on|off)$"); }
         return Match.Success ? Slots(DirectIntentKind.QueryState, Match.Groups["target"].Value) : null;
+    }
+
+    public static string Normalize(string Message)
+    {
+        var Text = LanguageParser.Normalize(Message);
+        if (Text.StartsWith("please ", StringComparison.Ordinal)) { Text = Text[7..]; }
+        if (Text.EndsWith(" please", StringComparison.Ordinal)) { Text = Text[..^7]; }
+        return Text;
     }
 
     private static Match Pattern(string Text, string Pattern) => Regex.Match(Text, Pattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));

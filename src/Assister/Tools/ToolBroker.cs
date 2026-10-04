@@ -24,8 +24,10 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
     public async Task<string> ExecuteAsync(LlmToolCall Call, IReadOnlySet<string> Selected, ToolExecutionContext Context,
         CancellationToken CancellationToken)
     {
-        using var Trace = RunTracing.Start("Tool broker", "Validate selected tool arguments, apply a timeout and bound the result.");
-        Trace.Detail("tool", Call.Function.Name);
+        using var Trace = RunTracing.Start("ToolCall", Call.Function.Name, "Validate selected tool arguments, apply a timeout and bound the result.");
+        Trace.Input(DiagnosticSanitizer.ParseJson(Call.Function.Arguments));
+        Trace.Metadata(new { toolCallId = Call.Id, toolName = Call.Function.Name,
+            stateChanging = Registry.All.TryGetValue(Call.Function.Name, out var Registered) && Registered.StateChanging, resultTruncated = false });
         async Task Audit(string Outcome)
         {
             if (Store is not null)
@@ -39,6 +41,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
         if (!Selected.Contains(Call.Function.Name) || !Registry.All.TryGetValue(Call.Function.Name, out var Tool))
         {
             Trace.Complete("rejected");
+            Trace.Output(new { error = "Tool not selected for this request." });
             await Audit("rejected");
             return "{\"error\":\"Tool was not selected for this request.\"}";
         }
@@ -51,8 +54,13 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
             using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
             Timeout.CancelAfter(TimeSpan.FromSeconds(12));
             var Result = await Tool.ExecuteAsync(Arguments.RootElement, Context, Timeout.Token);
-            if (Encoding.UTF8.GetByteCount(Result) > 16384) { throw new InvalidDataException(); }
+            if (Encoding.UTF8.GetByteCount(Result) > 16384)
+            {
+                Trace.Detail("resultTruncated", true);
+                throw new InvalidDataException();
+            }
             Trace.Complete();
+            Trace.Output(DiagnosticSanitizer.ParseJson(Result));
             await Audit("succeeded");
             return Result;
         }
@@ -60,6 +68,8 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
         catch (Exception Error) when (Error is JsonException or InvalidDataException or InvalidOperationException or HttpRequestException or OperationCanceledException or KeyNotFoundException or FormatException or ArgumentException)
         {
             Trace.Complete("failed");
+            Trace.Output(new { failureCategory = Error.GetType().Name, error = Tool.StateChanging
+                ? "Control rejected or completion unconfirmed. Do not retry automatically." : "Invalid arguments or unavailable data source." });
             await Audit("failed");
             return JsonSerializer.Serialize(new { error = Tool.StateChanging
                 ? "Control was rejected or completion could not be confirmed. Do not retry automatically."

@@ -19,9 +19,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
 
     public async Task<LlmResponse> CompleteAsync(LlmRequest Request, CancellationToken CancellationToken)
     {
-        using var Trace = RunTracing.Start("LLM", "Generate a model response from supplied messages and tool definitions.");
-        Trace.Detail("model", Configuration["LanguageModel:Model"]);
-        Trace.Detail("messageCount", Request.Messages.Count);
+        using var Trace = RunTracing.CurrentKind == "LanguageModel" ? null : LlmDiagnostics.Start(Request, Configuration, "LLM invocation");
         using var Timeout = CreateTimeout(CancellationToken);
         using var Message = CreateRequest(Request, false);
         using var Response = await Http.SendAsync(Message, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
@@ -38,23 +36,15 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         var Envelope = Parse(Buffer.ToArray());
         var Choice = SingleChoice(Envelope);
         if (Choice.Message is null) { throw InvalidResponse(); }
-        Trace.Detail("finishReason", Choice.FinishReason);
-        Trace.Detail("toolCount", Choice.Message.ToolCalls?.Count ?? 0);
         var Result = BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason);
-        Trace.Detail("finishReason", Result.FinishReason);
-        Trace.Detail("toolCount", Result.ToolCalls.Count);
-        Trace.Detail("response", Result.Content);
-        Trace.Detail("toolCalls", JsonSerializer.Serialize(Result.ToolCalls, Json));
-        Trace.Complete();
+        if (Trace is not null) { LlmDiagnostics.Output(Trace, Result); }
         return Result;
     }
 
     public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request,
         [EnumeratorCancellation] CancellationToken CancellationToken)
     {
-        using var Trace = RunTracing.Start("LLM", "Generate a model response from supplied messages and tool definitions.");
-        Trace.Detail("model", Configuration["LanguageModel:Model"]);
-        Trace.Detail("messageCount", Request.Messages.Count);
+        using var Trace = RunTracing.CurrentKind == "LanguageModel" ? null : LlmDiagnostics.Start(Request, Configuration, "LLM invocation");
         using var Timeout = CreateTimeout(CancellationToken);
         using var Message = CreateRequest(Request, true);
         using var Response = await Http.SendAsync(Message, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
@@ -82,11 +72,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             {
                 var Result = BuildResponse(Text.Length == 0 ? null : Text.ToString(),
                     Calls.Values.Select(Call => Call.Build()).ToArray(), Finish);
-                Trace.Detail("finishReason", Result.FinishReason);
-                Trace.Detail("toolCount", Result.ToolCalls.Count);
-                Trace.Detail("response", Result.Content);
-                Trace.Detail("toolCalls", JsonSerializer.Serialize(Result.ToolCalls, Json));
-                Trace.Complete();
+                if (Trace is not null) { LlmDiagnostics.Output(Trace, Result); }
                 yield return new(Completed: Result);
                 yield break;
             }

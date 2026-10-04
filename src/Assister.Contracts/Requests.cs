@@ -1,9 +1,13 @@
 namespace Assister.Contracts;
 
-public sealed record UserRequest(string Message, string SatelliteId = "test", string? Area = null, Guid? ConversationId = null);
+public sealed record UserRequest(string Message, string SatelliteId = "test", string? Area = null, Guid? ConversationId = null, bool NewConversation = false);
 
-public sealed record RequestResult(string Response, Guid? ConversationId, string HandledBy, Guid TraceId,
-    string Outcome, IReadOnlyList<string> EntityIds, double? ResolutionConfidence, double DurationMilliseconds);
+public sealed record RequestResult(string Response, Guid? ConversationId, string HandledBy, Guid RunId,
+    string Outcome, IReadOnlyList<string> EntityIds, double? ResolutionConfidence, double DurationMilliseconds, string? SpokenResponse = null)
+{
+    // Compatibility for existing clients and audit columns. This is the Assister interaction ID, never an Activity trace ID.
+    public Guid TraceId => RunId;
+}
 
 public interface IRequestCoordinator
 {
