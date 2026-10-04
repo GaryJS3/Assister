@@ -36,7 +36,7 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
             try
             {
                 using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
-                Timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                Timeout.CancelAfter(TimeSpan.FromSeconds(60));
                 var Text = $"Your {Row[1]} has finished.";
                 await Satellite!.SendEventAsync(new("timer-expired", Text, Session), Timeout.Token);
                 await Satellite.SendAudioAsync(Tts.SynthesizeAsync(Text, new(), Timeout.Token), Timeout.Token);

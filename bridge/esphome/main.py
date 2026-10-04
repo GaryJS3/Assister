@@ -37,14 +37,20 @@ async def connect_once(inspect_only=False):
         conversation_id = ""
         capturing = False
         task_set = set()
+        entities, _ = await client.list_entities_services()
+        players = [entity for entity in entities if type(entity).__name__ == "MediaPlayerInfo"
+                   and any(fmt.purpose == 1 for fmt in entity.supported_formats)]
+        if len(players) != 1:
+            raise RuntimeError("A single announcement media player is required")
+        player_key = players[0].key
         playback = None
         playing = False
 
         def media_state(state):
             nonlocal playing
-            if not isinstance(state, MediaPlayerEntityState) or playback is None:
+            if not isinstance(state, MediaPlayerEntityState) or state.key != player_key or playback is None:
                 return
-            if state.state == MediaPlayerState.ANNOUNCING:
+            if state.state in (MediaPlayerState.ANNOUNCING, MediaPlayerState.PLAYING):
                 playing = True
             elif playing and state.state == MediaPlayerState.IDLE and not playback.done():
                 playback.set_result(True)
@@ -86,20 +92,13 @@ async def connect_once(inspect_only=False):
             while True:
                 yield await outgoing.get()
 
-        async def announce(url):
-            try:
-                result = await client.send_voice_assistant_announcement_await_response(url, timeout=30)
-                await send("playback-finished", text="succeeded" if result.success else "failed")
-            except Exception:
-                await send("playback-finished", text="failed")
-
         async def play_response(url):
             nonlocal playback, playing
             playback = asyncio.get_running_loop().create_future()
             playing = False
             print(json.dumps({"status": "playback-starting", "session": current_session}), flush=True)
             try:
-                event(Event.VOICE_ASSISTANT_TTS_END, {"url": url})
+                client.media_player_command(player_key, media_url=url, announcement=True)
                 await asyncio.wait_for(playback, timeout=40)
                 await send("playback-finished", text="succeeded")
                 print(json.dumps({"status": "playback-completed", "session": current_session}), flush=True)
@@ -135,14 +134,9 @@ async def connect_once(inspect_only=False):
                         event(Event.VOICE_ASSISTANT_INTENT_END, {"conversation_id": frame.conversation_id})
                         event(Event.VOICE_ASSISTANT_TTS_START, {"text": frame.text})
                     elif frame.type == "audio-ready":
-                        if frame.text == "announcement":
-                            task = asyncio.create_task(announce(frame.url))
-                            task_set.add(task)
-                            task.add_done_callback(task_set.discard)
-                        else:
-                            task = asyncio.create_task(play_response(frame.url))
-                            task_set.add(task)
-                            task.add_done_callback(task_set.discard)
+                        task = asyncio.create_task(play_response(frame.url))
+                        task_set.add(task)
+                        task.add_done_callback(task_set.discard)
                     elif frame.type == "finished":
                         event(Event.VOICE_ASSISTANT_RUN_END)
                     elif frame.type == "session-result":
