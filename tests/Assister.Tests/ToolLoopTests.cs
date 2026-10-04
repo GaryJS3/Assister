@@ -155,7 +155,7 @@ public sealed class ToolLoopTests
         public List<LlmRequest> Requests { get; } = [];
         public Task<LlmResponse> CompleteAsync(LlmRequest Request, CancellationToken CancellationToken)
         {
-            Requests.Add(Request);
+            Requests.Add(Request with { Messages = Request.Messages.ToArray() });
             return Task.FromResult(Responses.Dequeue());
         }
         public IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request, CancellationToken CancellationToken) => throw new NotSupportedException();
