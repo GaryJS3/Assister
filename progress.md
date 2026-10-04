@@ -243,3 +243,18 @@ explicit current-request execution instruction produced ha_search. The control u
 now emphasizes that earlier confirmations are previous actions and that this request needs
 new search/control execution. A phase-order/history regression test brings C# validation to
 82 unit plus 10 integration tests (92 total). No model service was modified.
+
+Final live verification: application revision 7e7f08a is deployed through Dockhand and its
+running image label matches 7e7f08aeb42d0d7d6c24886433b3b954b5c6f6bd. /health is Healthy.
+All environment fingerprints and mounts match the pre-change snapshot. ESPHome bridge image
+remains ed8d918. The --controls probe passed with zero failures against light.living_room_lights:
+direct off/on/50% and the exact "Set living room light to 100." transcript; LLM "Dim Living Room
+Lights to 40 percent", "Could you make Living Room Lights fully bright?", and "Could you switch
+Living Room Lights off?". Each LLM request had exactly one successful matching ha_control trace.
+Independent HA state/member reads and the subscribed cache confirmed every requested result.
+Direct controls took 246-358 ms; LLM controls took 9.34-10.14 seconds including search/control
+rounds and final reply. The original on/brightness-255 setting was restored and verified;
+backup is /data/live-light-backup-20261004181316.json. Subscriber delivered 1834 events during
+the run, including unrelated HA activity. 92 C# tests pass and git diff --check passes.
+These checks use the shared text/voice coordinator through the test API; a new microphone/
+spoken control request after this deployment has not yet been physically confirmed.

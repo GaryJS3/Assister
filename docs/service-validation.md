@@ -52,3 +52,24 @@ The host previously ran out of general disk space while staging the probe. It ha
 Assister and the bridge are deployed at revision `f96b8ea`. Home Assistant's ESPHome integration for HA Voice 0a587e was disabled by the user so the Assister bridge owns voice input. The user confirmed button-triggered temperature questions now receive spoken results. Correlated traces confirm office temperature direct routing, Wyoming synthesis and device playing-to-idle completion. The device also fetched and played a test FLAC through its native media-player API. Audio is encoded in C# through FFmpeg as 48 kHz mono 16-bit FLAC; independent FFprobe validation confirmed those parameters.
 
 Revision `cd104c6` corrects speech endpointing. The user reported a much better response delay. The correlated office-temperature trace captured 3.36 seconds of audio and ended on silence; total STT including capture took 4.42 seconds, compared with earlier 16–21-second STT stages. Direct routing took 51 ms and playback completed successfully. The 15.52-second total session includes the entire spoken answer. The 58-test suite passes. This does not yet establish all MVP acceptance scenarios or streaming/barge-in.
+
+## Direct and LLM control confirmation, October 4, 2026
+
+The C# probe now supports `--controls --light light.authorized_entity` for both deterministic
+and model-mediated control. It captures a durable credential-free backup, tests power and
+brightness, checks matching LLM control traces and independent HA state/member/cache results,
+and restores original settings in finally. This mode performs actual device controls.
+
+On deployed revision `7e7f08a`, all seven control requests passed for
+`light.living_room_lights`, including the exact transcript "Set living room light to 100."
+and LLM dim-to-40%, fully-bright and switch-off requests. Every LLM action had one matching
+successful ha_control trace; every requested state/brightness was confirmed independently.
+The probe restored original on/255 settings. Backup:
+`/data/live-light-backup-20261004181316.json`. Direct timings were 246-358 ms; LLM timings
+were 9.34-10.14 seconds. 92 C# tests pass. A new spoken satellite control remains a separate
+physical acceptance check; shared coordinator execution is verified.
+
+Both action paths now wait for HA state readback rather than treating HTTP service acceptance
+as completion. LLM controls require current-request search/control tool execution; older
+confirmation replies cannot authorize reporting a new action as successful. Failed/unexecuted
+control returns a failed response instead of passing through model success prose.
