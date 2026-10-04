@@ -24,7 +24,9 @@ services:
       TextToSpeech__Port: ${TTS_PORT:-10200}
       TextToSpeech__Voice: ${TTS_VOICE:-}
       EchoMuse__ControllerUrl: ${ECHOMUSE_CONTROLLER_URL:-}
-      # Reserved until the satellite bridge is implemented.
+      EchoMuse__Enabled: ${ECHOMUSE_ENABLED:-false}
+      EchoMuse__Username: ${ECHOMUSE_USERNAME:-admin}
+      EchoMuse__Password: ${ECHOMUSE_PASSWORD:-}
       EspHome__Host: ${ESPHOME_HOST:-}
       EspHome__Port: ${ESPHOME_PORT:-6053}
       EspHome__Name: ${ESPHOME_NAME:-}

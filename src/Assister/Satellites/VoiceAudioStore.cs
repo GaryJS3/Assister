@@ -26,6 +26,7 @@ public sealed class VoiceAudioStore : IDisposable
         }
     }
     public byte[]? Get(Guid Id) => Audio.TryGetValue(Id, out var Item) && Item.Expires > DateTimeOffset.UtcNow ? Item.Data : null;
+    public void Remove(Guid Id) => Audio.TryRemove(Id, out _);
     public void Dispose() => Cleanup.Dispose();
 
     public static async Task<byte[]> WaveAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
@@ -48,5 +49,35 @@ public sealed class VoiceAudioStore : IDisposable
         Writer.Write(Format.SampleRate * Format.Channels * 2); Writer.Write((short)(Format.Channels * 2)); Writer.Write((short)16);
         Writer.Write("data"u8); Writer.Write((int)Pcm.Length); Writer.Write(Pcm.ToArray());
         return Wave.ToArray();
+    }
+
+    public static async Task<byte[]> Wave48kAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
+    {
+        var Source = await WaveAsync(Chunks, Token);
+        var Channels = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(Source.AsSpan(22));
+        var Rate = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(Source.AsSpan(24));
+        if (Rate == 48000 && Channels == 1) { return Source; }
+        var Frames = (Source.Length - 44) / (Channels * 2);
+        var Count = checked((int)Math.Ceiling(Frames * 48000.0 / Rate));
+        if (Count > (8 * 1024 * 1024 - 44) / 2) { throw new InvalidDataException("Response audio is too large."); }
+        var Pcm = new byte[Count * 2];
+        double Sample(int Index)
+        {
+            double Sum = 0;
+            for (var Channel = 0; Channel < Channels; Channel++)
+                Sum += System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(Source.AsSpan(44 + (Index * Channels + Channel) * 2));
+            return Sum / Channels;
+        }
+        for (var Index = 0; Index < Count; Index++)
+        {
+            if (Index % 4096 == 0) { Token.ThrowIfCancellationRequested(); }
+            var Position = Index * Rate / 48000.0;
+            var Left = Math.Min((int)Position, Frames - 1);
+            var Right = Math.Min(Left + 1, Frames - 1);
+            var Value = Sample(Left) + (Sample(Right) - Sample(Left)) * (Position - Left);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(Pcm.AsSpan(Index * 2), (short)Math.Clamp(Math.Round(Value), short.MinValue, short.MaxValue));
+        }
+        return await WaveAsync(Output(), Token);
+        async IAsyncEnumerable<AudioChunk> Output() { yield return new(Pcm, 48000, 2, 1); await Task.CompletedTask; }
     }
 }

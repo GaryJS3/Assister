@@ -145,3 +145,22 @@ and 12 adapter tests pass (84 total), JavaScript syntax and git diff --check pas
 No device playback, ownership changes, restarts or physical tests were performed for this
 increment. These changes are not deployed. A final read-only image check found Assister at
 f47804f (the separately committed timing-bar UI work) and the bridge at ed8d918; both were preserved.
+
+## Forked EchoMuse external voice integration
+
+Implemented native C# external voice v1 provider for the user's deployed fork: one authenticated
+controller WebSocket, authenticated approved-device inventory, persistent logical EchoMuse
+satellites, independent bounded turn queues and exact device/session correlation. It uses the
+existing Wyoming STT/TTS and shared coordinator, respects controller endpointing, suppresses
+no-speech responses, cancels matching work and refreshes inventory/re-authenticates on reconnect.
+Standalone announcements/stop use request/device pairs through SatelliteManager. Output is
+opaque device-reachable 48 kHz mono PCM WAV, retained through acknowledged playback and then
+removed. Configuration credentials remain outside Git. Runtime writes not yet verified through
+the REST API remain unsupported; normal observed volume/mute/wake information is displayed.
+
+Local validation: 69 unit tests and 10 C# integration tests pass. New tests cover shared-pipeline
+voice delivery, stale/wrong IDs, cancellation/no speech, distinct standalone playback, disconnect,
+invalid audio, and a real in-process authenticated WebSocket multiplexing two devices with the
+same session ID. Existing 12 bridge adapter tests remain applicable (91 total). Live encrypted
+HA Voice transport is preserved. Deployment and physical EchoMuse acceptance are still pending
+for this increment; device inventory confirms MBedroom is online and unmuted, Kitchen muted.

@@ -281,7 +281,20 @@ Never write credentials to records, audit, API/UI, logs or Git.
 Device-reachable HTTP audio URLs use opaque random identifiers, correct MIME, bounded object
 count/size and short TTL with periodic cleanup. Assister serves its own audio directly.
 
-Current devices such as HA Voice and EchoMuse-style ESPHome satellites use ESPHome Native API rather than Wyoming.
+HA Voice and compatible ESPHome satellites use ESPHome Native API rather than Wyoming.
+The deployed EchoMuse fork also provides an external voice v1 WebSocket protocol. Use a
+native C# EchoMuse provider for that distinct protocol: one authenticated controller socket
+multiplexes approved inventory devices, microphone turns and playback acknowledgments.
+Correlate every turn by both controller device ID and session ID; standalone announcements
+use request ID plus device ID. EchoMuse owns its hardware capture/endpointing and playback
+transport; Assister uses the same VoicePipeline and request coordinator as other satellites.
+Do not double-apply energy endpointing. No HA Assist pipeline participates in external turns.
+Serve opaque 48 kHz mono WAV response URLs through Assister; retain them through playback,
+then remove them or expire by TTL. Controller credentials stay in deployment secrets.
+This adapter is justified by the fork's protocol, not the Echo brand. Native ESPHome devices
+continue to use the existing encrypted bridge. Approved controller inventory can initialize
+logical records when this explicitly configured provider is enabled; it does not add mDNS
+discovery, provisioning, firmware management or a second conversation/request pipeline.
 
 For the initial implementation, create an optional `esphome-bridge` container based on `aioesphomeapi`.
 

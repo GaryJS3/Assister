@@ -101,7 +101,7 @@ public static class SatelliteEndpoints
     private static bool Valid(SatelliteRegistration Input) => !string.IsNullOrWhiteSpace(Input.Id) && Input.Id.Length <= 128 &&
         Input.Id.All(Character => char.IsAsciiLetterOrDigit(Character) || Character is '-' or '_') &&
         !string.IsNullOrWhiteSpace(Input.Name) && Input.Name.Length <= 128 && (Input.AreaId?.Length ?? 0) <= 128 &&
-        Input.ProviderType == "ESPHome" && Input.Endpoint is not null && Input.Endpoint.Length <= 253 &&
+        Input.ProviderType is "ESPHome" or "EchoMuse" && Input.Endpoint is not null && Input.Endpoint.Length <= 253 &&
         (Input.Endpoint.Length == 0 || Uri.CheckHostName(Input.Endpoint) != UriHostNameType.Unknown);
 }
 

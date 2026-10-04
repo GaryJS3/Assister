@@ -48,6 +48,7 @@ public sealed class SatelliteManager
         Record(Connection.SatelliteId, "Disconnected");
     }
     public bool BeginSession(string Satellite, Guid Session) => Sessions.TryAdd(Satellite, Session);
+    public bool IsBusy(string Satellite) => Sessions.ContainsKey(Satellite);
     public void EndSession(string Satellite, Guid Session)
     {
         if (((ICollection<KeyValuePair<string, Guid>>)Sessions).Remove(new(Satellite, Session)))

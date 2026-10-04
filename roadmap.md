@@ -9,6 +9,9 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 ## Next: satellite realignment acceptance
 
 The manager, provider boundary, runtime UI and core physical request path are deployed.
+Integrate the forked EchoMuse external voice v1 controller through a native C# provider,
+using its authenticated inventory and one multiplexed WebSocket. Validate independent
+device/session correlation, no-speech/cancellation, opaque WAV playback and reconnects.
 An accurate audible reply and correct LED completion are user-confirmed. Before further
 physical checks, finish trace correlation and automated disconnect/reconnect/backoff tests.
 Remaining hardware checks: cancellation LEDs, deterministic spoken brightness, standalone

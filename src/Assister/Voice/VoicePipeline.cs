@@ -35,7 +35,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
         try
         {
             await Satellite.SendEventAsync(new("transcribing", SessionId: Session.Id), Timeout.Token);
-            var Input = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false)
+            var Input = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true }
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
                 : Satellite.ReceiveAudioAsync(Timeout.Token);
             DateTimeOffset? AudioEnded = null;

@@ -52,6 +52,8 @@ Builder.Services.AddScoped<TimerIntentHandler>();
 Builder.Services.AddSingleton<SatelliteManager>();
 Builder.Services.AddScoped<SatelliteConfiguration>();
 Builder.Services.AddScoped<VoicePipeline>();
+Builder.Services.AddHttpClient("echomuse").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+Builder.Services.AddHostedService<EchoMuseProvider>();
 Builder.Services.AddTransient<ISpeechToTextProvider>(Services =>
 {
     var Config = Services.GetRequiredService<IConfiguration>();
