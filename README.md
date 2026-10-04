@@ -10,6 +10,8 @@ Milestone 2 includes native C# Wyoming framing, bounded message parsing, describ
 
 ## Development
 
+Live service checks and their limits are recorded in [docs/service-validation.md](docs/service-validation.md). The C# `tools/Assister.ServiceProbe` CLI runs read-only dependency checks using the container environment, including a synthetic TTS-to-STT round trip and a short LLM completion.
+
 Run `dotnet test Assister.sln` and `dotnet run --project src/Assister`.
 The database defaults to `data/assister.db`. Environment variables override ASP.NET configuration. Never commit credentials.
 
