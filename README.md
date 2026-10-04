@@ -15,6 +15,8 @@ The database defaults to `data/assister.db`. Environment variables override ASP.
 
 ## Docker / Dockhand
 
+`ECHOMUSE_CONTROLLER_URL` configures the EchoMuse controller address (currently `http://10.44.0.33:8768`). This is separate from a device's ESPHome Native API address. The controller adapter is not implemented yet; this setting reserves its configuration.
+
 Integration settings are listed in `.env.example` and mapped in `compose.yaml`. In Dockhand, add overrides using the names from `.env.example`: `STT_HOST`, `STT_PORT`, `STT_LANGUAGE`, `TTS_HOST`, `TTS_PORT`, `TTS_VOICE`, and `LLM_MODEL`, alongside the HA/LLM URL and credential settings. Mark credentials as secret. `ESPHOME_*` settings reserve configuration for the upcoming bridge; they are not consumed yet. Speech settings likewise prepare deployment configuration; the providers are not yet connected to the application pipeline. Adding settings does not activate these integrations.
 
 Build with `docker compose build`; start with `docker compose up -d`. The container runs as `app`, listens on 8080, and persists SQLite under `/data` in a named volume. Startup migrations run before serving requests. Run one replica.
