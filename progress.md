@@ -12,10 +12,10 @@ The service skeleton is deployed and healthy. Native C# Wyoming speech providers
 | 2. Wyoming | Core implementation complete | Buffered framing with partial reads, bounded lengths, JSON data merging, payloads, describe/info, STT, TTS audio streaming and transcript events. Fake TCP tests and real TTS/STT round trip pass. Providers are not yet wired into the pipeline. |
 | 3. Home Assistant | Core implementation deployed and verified | Authenticated REST/WebSocket, state/service/registry reads and event subscription passed through the probe. Persistent C# client, state cache, registry joins/entity index, startup event replay, bounded messages and reconnect/backoff are deployed and verified with a fresh 1965-entity cache and delivered state events. |
 | 4. Direct intents | Core implementation deployed and verified | Separate parser/classifier/slots, conservative area/name/alias/ID resolver, validated light/switch on/off, brightness and cached temperature/state handlers; shared `POST /api/test/message`. Fake/HTTP tests pass. Live off/on, 50% brightness, cache updates and restoration passed for the user-selected `light.living_room_lights`; office temperature query passed. |
-| 5. LLM and tools | Client implemented locally; orchestration pending | Injectable C# completion/SSE client, function-call assembly, bounded request/response sizes and cancellation are fake-HTTP tested. Broker, selection, bounded tool loop and HA tools remain pending. New client has not been deployed or live-validated. |
-| 6. Conversations | Pending | Persistence, continuity and bounded context. |
-| 7. Satellites | Controller API verified; implementation pending | EchoMuse web/setup APIs passed. Controller transport, physical-device audio and lifecycle are untested. ESPHome Native API settings remain reserved. |
-| 8. Timers and memory | Pending | Persistent timers, announcements, SQLite FTS and memory tools. |
+| 5. LLM and tools | Implemented locally; live validation in progress | Fixed-schema broker, selected HA tools, bounded tool loop and unmatched routing; optional Qwen thinking setting and bounded history summaries. |
+| 6. Conversations | Implemented locally | SQLite turns, satellite ownership checks, five-minute continuity, bounded recent turns/topic notes; raw tool results excluded. |
+| 7. Satellites | Bridge implemented; physical audio pending | Shared C# pipeline and authenticated gRPC transport tested. HA Voice encrypted connection/capabilities verified; microphone/playback still require live testing. |
+| 8. Timers and memory | Implemented locally | Restart-safe timers, deferred announcements, SQLite FTS memory and compact persisted tool audit. |
 | 9. Streaming latency | Pending | Sentence-boundary synthesis, early playback and barge-in. |
 
 ## Verified baseline
@@ -51,3 +51,12 @@ Validation: 35 tests pass and `git diff --check` passes. The exact Git archive w
 The host filesystem filled during build/probe staging. Removed only unused probe platform binaries and this build's identified cache records; installed a Linux-only framework-dependent probe. Last disk check showed approximately 126 MB available on the 15 GB root filesystem. More capacity or approved broader cleanup is needed before further builds. No other containers or volumes were changed.
 
 The direct coordinator has no LLM dependency and the HTTP test uses an unreachable model URL. The live model server was not stopped. Complete satellite acceptance and persisted conversation behavior remain pending.
+
+
+## MVP implementation increment - October 3, 2026
+
+56 automated tests pass, including native timer restart persistence, FTS search/delete, selected-tool validation and loop limits, satellite conversation separation, STT/TTS failure handling, and authenticated gRPC microphone input/WAV delivery. Deployment and spoken acceptance are still pending for this increment.
+
+HA Voice 0a587e at 10.44.65.164 authenticated through the bridge and advertised voice feature flags 125. This was a read-only capability inspection. The key stays outside Git and is stored as a Dockhand secret. EchoMuse's installed controller supports only HA as its backend, so the HA Voice device is the initial adapter target. Host disk space was rechecked: 45 GB free, resolving the previous disk blocker.
+
+Live isolated text validation passed the office temperature query, but model requests sometimes finished with length at 500 tokens and were correctly rejected. A direct function-call contract check passed. The voice deployment now explicitly disables Qwen thinking and raises its bounded token cap to 1024; that change still needs live loop validation. No shared model service was stopped.

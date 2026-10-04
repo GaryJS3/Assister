@@ -10,7 +10,7 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 
 - HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
 - The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
-- Continue milestone 5: completion/streaming client and function-call assembly are implemented and fake-HTTP tested. Next implement selected tools, a validating broker and bounded tool loop, then connect unmatched requests to that path. Keep direct intents independent of LLM availability.
+- Continue milestone 5: completion/streaming client and function-call assembly are implemented and fake-HTTP tested. Selected tools, validating broker and bounded loop are now implemented locally and connected to unmatched requests. Complete live validation. Keep direct intents independent of LLM availability.
 - Recheck HA authentication after the user's credential rotation. Registry metadata currently refreshes on reconnect.
 ## Remaining milestones
 
@@ -30,7 +30,7 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 - Keep the text and voice paths on the same coordinator. Retain response text on TTS failure; do not invoke the LLM on STT failure.
 - Repair the Dockhand agent's build configuration, restore Git-backed rebuilds and verify revision, image, container and live readiness separately.
 - Reuse the C# service probe after endpoint, credential, firewall or deployment changes. Do not log raw secret-bearing API responses.
-- Increase host disk headroom before further image builds; the latest deployment left about 126 MB available on the root filesystem.
+- Host headroom rechecked: 45 GB free. Preserve other volumes and existing environment overrides during deployment.
 
 ## Final MVP verification
 

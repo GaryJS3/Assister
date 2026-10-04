@@ -15,6 +15,8 @@ services:
       LanguageModel__BaseUrl: ${LLM_BASE_URL:-}
       LanguageModel__ApiKey: ${LLM_API_KEY:-}
       LanguageModel__Model: ${LLM_MODEL:-qwen}
+      LanguageModel__EnableThinking: ${LLM_ENABLE_THINKING:-false}
+      LanguageModel__MaxTokens: ${LLM_MAX_TOKENS:-1024}
       SpeechToText__Host: ${STT_HOST:-}
       SpeechToText__Port: ${STT_PORT:-10300}
       SpeechToText__Language: ${STT_LANGUAGE:-en}
@@ -25,8 +27,29 @@ services:
       # Reserved until the satellite bridge is implemented.
       EspHome__Host: ${ESPHOME_HOST:-}
       EspHome__Port: ${ESPHOME_PORT:-6053}
-      EspHome__EncryptionKey: ${ESPHOME_ENCRYPTION_KEY:-}
       EspHome__Name: ${ESPHOME_NAME:-}
       EspHome__Area: ${ESPHOME_AREA:-}
+      EspHome__SatelliteId: ${ESPHOME_SATELLITE_ID:-}
+      SatelliteBridge__Enabled: ${SATELLITE_BRIDGE_ENABLED:-false}
+      SatelliteBridge__Token: ${SATELLITE_BRIDGE_TOKEN:-}
+      SatelliteBridge__UseEnergyVad: ${SATELLITE_BRIDGE_ENABLED:-false}
+      Assister__PublicUrl: ${ASSISTER_PUBLIC_URL:-}
+      Weather__EntityId: ${WEATHER_ENTITY_ID:-}
+  esphome-bridge:
+    profiles: [voice]
+    build:
+      context: .
+      dockerfile: docker/EspHomeBridge.Dockerfile
+    restart: unless-stopped
+    depends_on: [assister]
+    environment:
+      ASSISTER_GRPC: assister:8082
+      SATELLITE_BRIDGE_TOKEN: ${SATELLITE_BRIDGE_TOKEN:-}
+      ESPHOME_HOST: ${ESPHOME_HOST:-}
+      ESPHOME_PORT: ${ESPHOME_PORT:-6053}
+      ESPHOME_ENCRYPTION_KEY: ${ESPHOME_ENCRYPTION_KEY:-}
+      ESPHOME_SATELLITE_ID: ${ESPHOME_SATELLITE_ID:-}
+      ESPHOME_NAME: ${ESPHOME_NAME:-}
+      ESPHOME_AREA: ${ESPHOME_AREA:-}
 volumes:
   assister-data:

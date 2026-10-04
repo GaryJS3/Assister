@@ -38,6 +38,8 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         var Envelope = Parse(Buffer.ToArray());
         var Choice = SingleChoice(Envelope);
         if (Choice.Message is null) { throw InvalidResponse(); }
+        Trace.Detail("finishReason", Choice.FinishReason);
+        Trace.Detail("toolCount", Choice.Message.ToolCalls?.Count ?? 0);
         var Result = BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason);
         Trace.Detail("finishReason", Result.FinishReason);
         Trace.Detail("toolCount", Result.ToolCalls.Count);
@@ -137,6 +139,8 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             Request.Messages,
             Tools = Request.Tools is { Count: > 0 } ? Request.Tools : null,
             ToolChoice = Request.Tools is { Count: > 0 } ? Request.ToolChoice : null,
+            ChatTemplateKwargs = Configuration.GetValue<bool?>("LanguageModel:EnableThinking") is { } Thinking
+                ? new Dictionary<string, bool> { ["enable_thinking"] = Thinking } : null,
             Stream
         }, Json);
         if (Payload.Length > MaximumBytes) { throw new ArgumentException("Language model request is too large."); }

@@ -1,0 +1,21 @@
+syntax = "proto3";
+option csharp_namespace = "Assister.Satellites.Protocol";
+package assister.satellite;
+service SatelliteTransport {
+  rpc Connect(stream BridgeFrame) returns (stream BridgeFrame);
+}
+message BridgeFrame {
+  string type = 1;
+  string satellite_id = 2;
+  string name = 3;
+  string area = 4;
+  string session_id = 5;
+  string conversation_id = 6;
+  bytes pcm = 7;
+  int32 sample_rate = 8;
+  int32 sample_width = 9;
+  int32 channels = 10;
+  string text = 11;
+  string url = 12;
+  string voice_session_id = 13;
+}

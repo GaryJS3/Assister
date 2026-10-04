@@ -10,6 +10,22 @@ namespace Assister.Tests;
 public sealed class LanguageModelTests
 {
     [Fact]
+    public async Task ThinkingExtensionIsOptionalAndUsesABooleanWhenConfigured()
+    {
+        var Handler = new FakeHandler("""{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}""");
+        var Configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["LanguageModel:BaseUrl"] = "http://localhost/v1", ["LanguageModel:Model"] = "qwen", ["LanguageModel:EnableThinking"] = "false"
+        }).Build();
+        await new OpenAiCompatibleLanguageModel(new HttpClient(Handler), Configuration).CompleteAsync(new([new("user", "test")]), default);
+        using var Request = JsonDocument.Parse(Handler.Body!);
+        Assert.False(Request.RootElement.GetProperty("chat_template_kwargs").GetProperty("enable_thinking").GetBoolean());
+        await Create(Handler).CompleteAsync(new([new("user", "test")]), default);
+        using var Default = JsonDocument.Parse(Handler.Body!);
+        Assert.False(Default.RootElement.TryGetProperty("chat_template_kwargs", out _));
+    }
+
+    [Fact]
     public async Task CompletionUsesConfiguredRouteFixedLengthAndSelectedTools()
     {
         var Handler = new FakeHandler("""{"choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call1","type":"function","function":{"name":"ha.search","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}""");

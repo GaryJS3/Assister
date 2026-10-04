@@ -5,6 +5,17 @@ using System.Text.Json;
 using Assister.Contracts;
 using Assister.Speech.Wyoming;
 
+if (args.Contains("--llm-contract"))
+{
+    return await MvpProbe.CheckModelContractAsync();
+}
+
+if (args.Contains("--mvp-readonly"))
+{
+    var Index = Array.IndexOf(args, "--url");
+    return await MvpProbe.RunAsync(Index >= 0 && Index + 1 < args.Length ? args[Index + 1] : "http://127.0.0.1:8080");
+}
+
 if (args.Contains("--direct-intents"))
 {
     var Index = Array.IndexOf(args, "--light");

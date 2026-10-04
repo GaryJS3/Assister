@@ -3,13 +3,17 @@ using System.Diagnostics;
 using Assister.Contracts;
 using Assister.Intents;
 using Assister.Modules.HomeAssistant;
+using Assister.Llm;
+using Assister.Modules.Timers;
 
 namespace Assister.Voice;
 
 public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
-    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger) : IRequestCoordinator
+    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null) : IRequestCoordinator
 {
-    public async Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
+    public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
+
+    public async Task<RequestResult> ProcessWithHistoryAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken)
     {
         using var Run = RunTracing.Start("Request", "Process a text request through direct intent routing.");
         var TraceId = Guid.NewGuid();
@@ -35,6 +39,10 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
+        if (Timers is not null && await Timers.TryHandleAsync(Request, CancellationToken) is { } TimerResponse)
+        {
+            return Result(TimerResponse, "succeeded", "timer");
+        }
         IntentMatch? Intent;
         using (var Step = RunTracing.Start("Intent classification", "Match supported deterministic commands before selecting a device."))
         {
@@ -42,7 +50,20 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             Step.Detail("intent", Intent?.Kind);
             Step.Complete(Intent is null ? "unmatched" : "matched");
         }
-        if (Intent is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
+        if (Intent is null)
+        {
+            if (LanguageModel is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
+            try
+            {
+                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId), "succeeded", "language-model");
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.IO.IOException or System.Text.Json.JsonException)
+            {
+                Logger.LogWarning("Language model request failed ({FailureType}).", Error.GetType().Name);
+                return Result("The language model is unavailable. You can still use supported direct device commands.", "unavailable", "language-model");
+            }
+        }
         if (Intent.Kind == DirectIntentKind.SetBrightness && Intent.BrightnessPercent is not (>= 0 and <= 100))
         {
             return Result("Brightness must be between 0 and 100 percent.", "invalid-request");

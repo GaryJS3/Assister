@@ -38,7 +38,7 @@ public sealed class ComponentHealth(IConfiguration Configuration, IHttpClientFac
                 Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Configuration["LanguageModel:ApiKey"]);
             using var Response = await Client.SendAsync(Request, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
             return new("Language model", Response.IsSuccessStatusCode ? "Healthy" : "Unavailable",
-                $"Models endpoint HTTP {(int)Response.StatusCode}; inference not tested. Request routing not wired.");
+                $"Models endpoint HTTP {(int)Response.StatusCode}; inference not tested by this probe.");
         }
         catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or ArgumentException or InvalidOperationException)
         { return new("Language model", "Unavailable", "Models endpoint probe failed or timed out"); }
@@ -46,7 +46,7 @@ public sealed class ComponentHealth(IConfiguration Configuration, IHttpClientFac
     private async Task<ComponentStatus> ProbeSpeech(string Section, string Name, string Capability, int DefaultPort, CancellationToken Token)
     {
         var Host = Configuration[$"{Section}:Host"];
-        if (string.IsNullOrWhiteSpace(Host)) return new(Name, "NotConfigured", $"Set {Section}:Host and Port; voice pipeline not wired");
+        if (string.IsNullOrWhiteSpace(Host)) return new(Name, "NotConfigured", $"Set {Section}:Host and Port");
         var Port = int.TryParse(Configuration[$"{Section}:Port"], out var ConfiguredPort) ? ConfiguredPort : DefaultPort;
         try
         {
@@ -54,7 +54,7 @@ public sealed class ComponentHealth(IConfiguration Configuration, IHttpClientFac
             Timeout.CancelAfter(TimeSpan.FromSeconds(3));
             await using var Connection = await WyomingConnection.ConnectAsync(new(Host, Port), Timeout.Token);
             var Info = await Connection.DescribeAsync(Timeout.Token);
-            return new(Name, Info.Supports(Capability) ? "Healthy" : "Unavailable", "Live Wyoming capability check; voice pipeline not wired");
+            return new(Name, Info.Supports(Capability) ? "Healthy" : "Unavailable", "Live Wyoming capability check; audio inference not tested by this probe");
         }
         catch (Exception Error) when (Error is System.Net.Sockets.SocketException or IOException or OperationCanceledException or ArgumentException or InvalidOperationException)
         { return new(Name, "Unavailable", "Wyoming capability probe failed or timed out"); }

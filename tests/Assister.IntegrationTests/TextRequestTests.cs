@@ -26,6 +26,13 @@ public sealed class TextRequestTests
         Assert.Equal("direct-intent", Result.HandledBy);
         Assert.Equal(["light.desk"], Result.EntityIds);
         Assert.Single(Factory.Fake.Calls);
+        Assert.NotNull(Result.ConversationId);
+        var FollowUp = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("what is the state of light.desk"));
+        Assert.Equal(Result.ConversationId, (await FollowUp.Content.ReadFromJsonAsync<RequestResult>())!.ConversationId);
+        var OtherSatellite = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("what is the state of light.desk", "other"));
+        Assert.NotEqual(Result.ConversationId, (await OtherSatellite.Content.ReadFromJsonAsync<RequestResult>())!.ConversationId);
+        var CrossSatellite = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("hello", "other", ConversationId: Result.ConversationId));
+        Assert.Equal(HttpStatusCode.BadRequest, CrossSatellite.StatusCode);
 
         Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("set the light to 150 percent", Area: "office"));
         Assert.Equal(HttpStatusCode.BadRequest, Response.StatusCode);
