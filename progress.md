@@ -55,6 +55,8 @@ The direct coordinator has no LLM dependency and the HTTP test uses an unreachab
 
 ## MVP implementation increment - October 3, 2026
 
+October 4 update: revision `f96b8ea` is deployed in Assister and the bridge. HA Voice button input, office temperature resolution, synthesis and physical spoken playback are confirmed by the user and correlated traces. Playback uses the announcement media player and 48 kHz mono FLAC; successful turns now wait for a playing-to-idle acknowledgment. A timer announcement also completed with an acknowledgment. The persistent volume and HA/STT/TTS/model environment fingerprint were preserved. Speech capture currently takes 16–21 seconds in observed turns; endpointing is the next correction. Forecast/history acceptance, spoken controls and streaming/barge-in remain pending. Earlier deployment notes below are historical.
+
 56 automated tests pass, including native timer restart persistence, FTS search/delete, selected-tool validation and loop limits, satellite conversation separation, STT/TTS failure handling, and authenticated gRPC microphone input/WAV delivery. Deployment and spoken acceptance are still pending for this increment.
 
 HA Voice 0a587e at 10.44.65.164 authenticated through the bridge and advertised voice feature flags 125. This was a read-only capability inspection. The key stays outside Git and is stored as a Dockhand secret. EchoMuse's installed controller supports only HA as its backend, so the HA Voice device is the initial adapter target. Host disk space was rechecked: 45 GB free, resolving the previous disk blocker.

@@ -45,4 +45,10 @@ The C# probe supports `--ha-only` for read-only HA checks. `--direct-intents --l
 
 These direct controls do not invoke an LLM client. The separate model server was not stopped; physical satellite acceptance, conversation persistence and LLM tools remain pending. HA reconnect/stale behavior is fake-tested; a forced live HA outage was not performed. Credential rotation remains unverified.
 
-The host ran out of general disk space while staging the probe. Removed unused platform binaries from the development probe and specifically identified cache records from this build; installed a Linux-only probe. Database, other containers and other volumes were preserved. Final filesystem check: roughly 126 MB available on the 15 GB root filesystem; obtain more headroom before future builds.
+The host previously ran out of general disk space while staging the probe. It has since been expanded to 61 GB; the playback deployment recheck showed 43 GB free.
+
+## Physical HA Voice acceptance
+
+Assister and the bridge are deployed at revision `f96b8ea`. Home Assistant's ESPHome integration for HA Voice 0a587e was disabled by the user so the Assister bridge owns voice input. The user confirmed button-triggered temperature questions now receive spoken results. Correlated traces confirm office temperature direct routing, Wyoming synthesis and device playing-to-idle completion. The device also fetched and played a test FLAC through its native media-player API. Audio is encoded in C# through FFmpeg as 48 kHz mono 16-bit FLAC; independent FFprobe validation confirmed those parameters.
+
+Speech capture remains slow: observed STT stages include about 16–21 seconds of capture, while a direct office lookup took 34 ms. The new endpoint detector removes DC offsets and accounts for steady background energy; synthetic DC/background cases stop about 0.9 seconds after speech. Real-device latency validation is pending. The 58-test suite passes. This does not yet establish all MVP acceptance scenarios or streaming/barge-in.
