@@ -102,6 +102,27 @@ public sealed class ToolLoopTests
         Assert.Empty(Model.Requests[0].Tools!);
     }
 
+    [Fact]
+    public async Task EarlierConfirmationsDoNotReplaceCurrentSearchAndControl()
+    {
+        var Search = new FakeTool();
+        var Control = new FakeControlTool();
+        var Registry = new ToolRegistry([Search, Control]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("search", new("ha_search", "{\"query\":\"living room lights\"}"))], "tool_calls"));
+        Model.Responses.Enqueue(new(null, [new("control", new("ha_control", "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("Done.", [], "stop"));
+        var History = new LlmMessage[] { new("user", "Set living room light to 100."), new("assistant", "Set to 100 percent.") };
+        Assert.Equal("Done.", await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("Dim living room lights to 40 percent"), History, CancellationToken.None));
+        Assert.Equal("ha_search", Assert.Single(Model.Requests[0].Tools!).Function.Name);
+        Assert.Contains("Current device-control request", Model.Requests[0].Messages.Last().Content);
+        Assert.Contains(Model.Requests[1].Tools!, Tool => Tool.Function.Name == "ha_control");
+        Assert.Equal("required", Model.Requests[1].ToolChoice);
+        Assert.Equal("none", Model.Requests[2].ToolChoice);
+        Assert.Equal(1, Control.Calls);
+    }
+
     private sealed class FakeControlTool : IAssisterTool
     {
         public int Calls { get; private set; }
@@ -124,6 +145,7 @@ public sealed class ToolLoopTests
         public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken CancellationToken)
         {
             Calls++;
+            Context.ObservedEntities.Add("light.living_room_lights");
             return Task.FromResult("{\"state\":\"74\"}");
         }
     }

@@ -235,3 +235,11 @@ tools; the new guard correctly returned failed, and the probe restored the origi
 state. Follow-up requires search/control tool use until a confirmed mutation, then disables
 further tool calls for the final reply. Control rounds offer only the relevant search/control
 schemas, with search required before control is offered. Live revalidation remains pending.
+
+Required-tool replay isolated a model/history interaction: repeated direct-control confirmation
+phrases in the probe conversation caused the server to return HTTP 400 because the model did
+not emit the required call. A fresh request succeeded, and replaying the same history with an
+explicit current-request execution instruction produced ha_search. The control user message
+now emphasizes that earlier confirmations are previous actions and that this request needs
+new search/control execution. A phase-order/history regression test brings C# validation to
+82 unit plus 10 integration tests (92 total). No model service was modified.
