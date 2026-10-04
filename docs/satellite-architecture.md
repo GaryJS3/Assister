@@ -93,3 +93,13 @@ The user heard the HA media test; announcement duck/resume is still unverified b
 completion acknowledgment timed out. Do not generalize that result to Music Assistant.
 ESPHome 2026.5.2 on this device reports empty available/active models and maximum zero;
 runtime wake-word editing is unavailable despite observed physical Okay Nabu detection.
+
+## Forked EchoMuse transport
+
+The user's deployed fork exposes external voice v1 independently of its legacy ESPHome façade.
+Its native C# provider owns protocol translation on one authenticated controller WebSocket;
+EchoMuse retains hardware/audio capture, wake detection, endpointing and playback transport.
+SatelliteManager, VoicePipeline and the shared coordinator remain unchanged boundaries.
+See [EchoMuse provider](echomuse-provider.md) for configuration and acceptance limitations.
+The MBedroom announcement HTTP fetch and controller playback acknowledgment passed on the
+live device; audible wake-to-reply and media coexistence still require physical acceptance.

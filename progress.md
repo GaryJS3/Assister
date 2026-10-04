@@ -164,3 +164,24 @@ invalid audio, and a real in-process authenticated WebSocket multiplexing two de
 same session ID. Existing 12 bridge adapter tests remain applicable (91 total). Live encrypted
 HA Voice transport is preserved. Deployment and physical EchoMuse acceptance are still pending
 for this increment; device inventory confirms MBedroom is online and unmuted, Kitchen muted.
+
+EchoMuse deployment verified: Assister image revision a784345 is running through Dockhand;
+HA Voice bridge image is unchanged at ed8d918. Non-EchoMuse environment fingerprints and all
+mounts match the pre-deployment snapshot. Dockhand's cached Compose definition required adding
+the three provider settings; normal enable/user settings are in the existing environment file,
+while the password is a masked Dockhand secret value. No credentials were committed.
+Authenticated external WebSocket hello and approved inventory succeeded. Kitchen and MBedroom
+are online and OwnedByAssister; Kitchen remains muted, MBedroom unmuted. Restart during image
+update released/reacquired the single backend connection successfully. /health is Healthy.
+
+The first speaker test exposed integer multiplication overflow while resampling longer TTS;
+a784345 fixes it and adds a five-second duration/sample-value regression test. Validation now
+passes 70 unit, 10 C# integration and 12 bridge adapter tests (92 total). The repeated live
+MBedroom announcement returned HTTP 200 in 3.565 seconds with controller play_started and
+play_finished acknowledgment, then returned output to idle with zero active sessions. The
+controller fetched Assister's opaque HTTP WAV directly. Audible confirmation and actual EchoMuse
+wake/microphone → shared routing → reply remain pending until someone is at the device.
+
+HA Voice was already unreachable before this deployment (bridge logs at 15:53 UTC onward show
+Native API network unreachable; app deployment began later). Its configuration, image and
+volume were preserved. No HA integrations, device mute states or controller firmware were changed.
