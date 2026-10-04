@@ -11,7 +11,7 @@ public enum DirectIntentKind
     QueryTemperature
 }
 
-public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null)
+public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null, string? TargetDomain = null)
 {
     public string MatchedRule => Kind switch
     {
@@ -33,8 +33,9 @@ public static class LanguageParser
     }
 }
 
-public sealed class IntentClassifier
+public sealed class IntentClassifier : IIntentEngine
 {
+    public Task<IntentDecision> MatchAsync(string Text, CancellationToken Token) => Task.FromResult(IntentMatching.Match(Text, IntentCatalog.BuiltIns, this));
     public IntentMatch? Classify(string Message)
     {
         var Text = Normalize(Message);

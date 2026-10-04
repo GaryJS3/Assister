@@ -143,7 +143,7 @@ public sealed class DirectIntentTests
             Json("""[{"area_id":"office","name":"Office"},{"area_id":"kitchen","name":"Kitchen"}]"""));
         Cache.SetStale(false);
         var Fake = new FakeHomeAssistant();
-        return (new(new(), new HomeAssistantEntityResolver(), new(Fake), Cache, NullLogger<RequestCoordinator>.Instance), Fake, Cache);
+        return (new(new IntentClassifier(), new HomeAssistantEntityResolver(), new(Fake), Cache, NullLogger<RequestCoordinator>.Instance), Fake, Cache);
     }
 
     private static JsonElement Json(string Text) => JsonSerializer.Deserialize<JsonElement>(Text);

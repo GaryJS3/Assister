@@ -8,8 +8,9 @@ using Assister.Modules.Timers;
 
 namespace Assister.Voice;
 
-public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
-    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null) : IRequestCoordinator
+public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
+    HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
+    IConfiguration? Configuration = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -46,13 +47,22 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             return Result(TimerResponse, "succeeded", "timer");
         }
         IntentMatch? Intent;
+        IntentDecision Decision;
         using (var Step = RunTracing.Start("Intent classification", "Match supported deterministic commands before selecting a device."))
         {
-            Intent = Classifier.Classify(Request.Message);
+            Decision = await Classifier.MatchAsync(Request.Message, CancellationToken);
+            Intent = Decision.Match?.Intent;
             Step.Input(new { originalInput = Request.Message, normalizedInput = IntentClassifier.Normalize(Request.Message) }, false);
-            Step.Output(new { matched = Intent is not null, rule = Intent?.MatchedRule, intent = Intent?.Kind.ToString(),
-                Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Intent is null ? "No deterministic intent rule matched. Route to the language model." : "Deterministic rule matched." }, false);
-            Step.Complete(Intent is null ? "unmatched" : "matched");
+            Step.Output(new { matched = Decision.Status == "matched", rule = Decision.Match?.Definition.BuiltIn == true && Intent is not null ? Intent.MatchedRule : Decision.Match?.Definition.Id, intent = Intent?.Kind.ToString(),
+                Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Decision.Reason }, false);
+            Step.Metadata(new { ruleId = Decision.Match?.Definition.Id, handler = Decision.Match?.Definition.Handler,
+                pattern = Decision.Match?.Pattern, candidates = Decision.Candidates.Select(Item => Item.Definition.Id), Decision.Reason });
+            Step.Complete(Decision.Status);
+        }
+        if (Decision.Status is "ambiguous" or "invalid-request") { return Result(Decision.Reason, Decision.Status); }
+        if (Decision.Match is { Intent: null } Simple)
+        {
+            return Result(IntentResponses.Render(Simple, "", Configuration ?? new ConfigurationBuilder().Build()), "succeeded");
         }
         if (Intent is null)
         {
@@ -109,7 +119,8 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
                 Step.Output(new { Response.Response, Response.Outcome });
                 Step.Complete(Response.Outcome);
             }
-            return Result(Response.Response, Response.Outcome);
+            return Result(Response.Outcome == "succeeded" && Decision.Match is { } Matched
+                ? IntentResponses.Render(Matched, Response.Response, Configuration ?? new ConfigurationBuilder().Build()) : Response.Response, Response.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
         catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.Text.Json.JsonException or System.IO.IOException)

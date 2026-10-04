@@ -4,6 +4,8 @@ Updated: October 4, 2026. This file records completed work and verification; [ro
 
 ## Current state
 
+The intent workbench is implemented at `/intents.html`: persisted definition/example management, shared runtime matching, draft inspection, explicit execution with stale-plan rejection, conflict detection and recent LLM request candidates. All 104 automated tests pass (91 unit, 13 integration). Browser checks cover custom intent creation/editing, inspection, saved tests and explicit Reply execution. See [intent-workbench.md](docs/intent-workbench.md) for grammar and Home Assistant reference/license boundaries. Live deployment acceptance is recorded separately below.
+
 The existing deployment has user-confirmed button/microphone input, office temperature responses, acknowledged physical playback and a timer announcement (see October 4 evidence below). The local satellite realignment extends that implementation; exclusive wake ownership and HA media coexistence acceptance are separate and are not yet established.
 
 | Milestone | Status | Evidence / remaining work |

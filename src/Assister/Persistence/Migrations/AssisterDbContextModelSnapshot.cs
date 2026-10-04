@@ -9,6 +9,21 @@ public sealed class AssisterDbContextModelSnapshot : ModelSnapshot
     protected override void BuildModel(ModelBuilder ModelBuilder)
     {
         ModelBuilder.HasAnnotation("ProductVersion", "10.0.10");
+        ModelBuilder.Entity<Assister.Intents.IntentDefinitionRow>(Entity =>
+        {
+            Entity.Property(Row => Row.Id).HasColumnType("TEXT");
+            Entity.Property(Row => Row.Payload).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.Version).IsConcurrencyToken().HasColumnType("INTEGER");
+            Entity.HasKey(Row => Row.Id);
+            Entity.ToTable("IntentDefinitions");
+        });
+        ModelBuilder.Entity<Assister.Intents.IntentExampleRow>(Entity =>
+        {
+            Entity.Property(Row => Row.Id).HasColumnType("TEXT");
+            Entity.Property(Row => Row.Payload).IsRequired().HasColumnType("TEXT");
+            Entity.HasKey(Row => Row.Id);
+            Entity.ToTable("IntentExamples");
+        });
         ModelBuilder.Entity<Assister.Satellites.Satellite>(Entity =>
         {
             Entity.Property(Row => Row.Id).HasColumnType("TEXT");

@@ -17,7 +17,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         var Target = LanguageParser.Noun(Intent.Target);
         var Candidates = Snapshot.Entities.Where(Entity => Eligible(Entity, Intent.Kind)).ToArray();
         var Area = Intent.ExplicitArea;
-        var Domain = Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null;
+        var Domain = Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null);
         EntityResolutionResult Result(IReadOnlyList<HomeAssistantEntity> Entities, double Confidence, IReadOnlyList<HomeAssistantEntity> Alternatives)
             => new(Entities, Confidence, Alternatives, Area ?? Entities.FirstOrDefault()?.AreaName,
                 Domain ?? (Intent.Kind == DirectIntentKind.QueryTemperature ? "temperature sensor" : Intent.Kind is DirectIntentKind.TurnOn or DirectIntentKind.TurnOff ? "light or switch" : null));
@@ -54,8 +54,8 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         }
 
         var Words = Target.Split(' ');
-        if (Words.LastOrDefault() is "light" or "lights") { Domain = "light"; }
-        else if (Words.LastOrDefault() is "switch" or "switches") { Domain = "switch"; }
+        if (Domain is null && Words.LastOrDefault() is "light" or "lights") { Domain = "light"; }
+        else if (Domain is null && Words.LastOrDefault() is "switch" or "switches") { Domain = "switch"; }
         if (Domain is not null) { Candidates = Candidates.Where(Entity => Entity.Domain == Domain).ToArray(); }
 
         if (Area is not null)

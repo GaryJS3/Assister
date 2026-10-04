@@ -39,6 +39,9 @@ Builder.Services.AddHostedService(Services => Services.GetRequiredService<HomeAs
 Builder.Services.AddHttpClient<IHomeAssistantClient, HomeAssistantActionClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 Builder.Services.AddSingleton<IntentClassifier>();
+Builder.Services.AddScoped<IntentStore>();
+Builder.Services.AddScoped<IIntentEngine, IntentEngine>();
+Builder.Services.AddScoped<IntentWorkbench>();
 Builder.Services.AddSingleton<IEntityResolver, HomeAssistantEntityResolver>();
 Builder.Services.AddTransient<DirectIntentHandler>();
 Builder.Services.AddTransient<RequestCoordinator>();
@@ -92,6 +95,7 @@ App.UseDefaultFiles();
 App.UseStaticFiles();
 App.MapDashboard();
 App.MapSatellites();
+App.MapIntents();
 await using (var Scope = App.Services.CreateAsyncScope())
 {
     var Database = Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
@@ -105,6 +109,7 @@ await using (var Scope = App.Services.CreateAsyncScope())
         await Database.Database.CloseConnectionAsync();
     }
     await Database.Database.MigrateAsync();
+    await Scope.ServiceProvider.GetRequiredService<IntentStore>().InitializeAsync(CancellationToken.None);
     var SatelliteId = Builder.Configuration["EspHome:SatelliteId"];
     if (!string.IsNullOrWhiteSpace(SatelliteId) && !await Database.Satellites.AnyAsync(Row => Row.Id == SatelliteId))
     {

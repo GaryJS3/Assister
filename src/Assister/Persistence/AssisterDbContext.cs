@@ -8,9 +8,12 @@ public sealed class AssisterDbContext(DbContextOptions<AssisterDbContext> Option
     public DbSet<Assister.Satellites.Satellite> Satellites => Set<Assister.Satellites.Satellite>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<Assister.Intents.IntentDefinitionRow> IntentDefinitions => Set<Assister.Intents.IntentDefinitionRow>();
+    public DbSet<Assister.Intents.IntentExampleRow> IntentExamples => Set<Assister.Intents.IntentExampleRow>();
 
     protected override void OnModelCreating(ModelBuilder ModelBuilder)
     {
+        ModelBuilder.Entity<Assister.Intents.IntentDefinitionRow>().Property(Row => Row.Version).IsConcurrencyToken();
         ModelBuilder.Entity<Conversation>().HasIndex(Row => Row.SatelliteId);
         ModelBuilder.Entity<ConversationTurn>().HasIndex(Row => new { Row.ConversationId, Row.Id });
         ModelBuilder.Entity<ConversationTurn>().HasOne<Conversation>().WithMany().HasForeignKey(Row => Row.ConversationId).OnDelete(DeleteBehavior.Cascade);
