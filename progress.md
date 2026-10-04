@@ -1,10 +1,10 @@
 # Assister progress
 
-Updated: October 3, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) is the original specification.
+Updated: October 4, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) contains durable architectural decisions.
 
 ## Current state
 
-The service skeleton is deployed and healthy. Native C# Wyoming speech providers are implemented and tested. External service checks pass. The deployed shared text coordinator now implements deterministic HA controls and queries; end-to-end voice and conversations remain pending.
+The existing deployment has user-confirmed button/microphone input, office temperature responses, acknowledged physical playback and a timer announcement (see October 4 evidence below). The local satellite realignment extends that implementation; exclusive wake ownership and HA media coexistence acceptance are separate and are not yet established.
 
 | Milestone | Status | Evidence / remaining work |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ The service skeleton is deployed and healthy. Native C# Wyoming speech providers
 | 4. Direct intents | Core implementation deployed and verified | Separate parser/classifier/slots, conservative area/name/alias/ID resolver, validated light/switch on/off, brightness and cached temperature/state handlers; shared `POST /api/test/message`. Fake/HTTP tests pass. Live off/on, 50% brightness, cache updates and restoration passed for the user-selected `light.living_room_lights`; office temperature query passed. |
 | 5. LLM and tools | Implemented locally; live validation in progress | Fixed-schema broker, selected HA tools, bounded tool loop and unmatched routing; optional Qwen thinking setting and bounded history summaries. |
 | 6. Conversations | Implemented locally | SQLite turns, satellite ownership checks, five-minute continuity, bounded recent turns/topic notes; raw tool results excluded. |
-| 7. Satellites | Bridge implemented; physical audio pending | Shared C# pipeline and authenticated gRPC transport tested. HA Voice encrypted connection/capabilities verified; microphone/playback still require live testing. |
+| 7. Satellites | Existing physical pipeline verified; management realignment implemented locally | Shared C# coordinator, authenticated gRPC, HA Voice microphone/temperature/playback and timer acknowledgment have prior live evidence. New ownership/capability/configuration/UI hardening has local automated evidence; wake/media coexistence acceptance remains pending. |
 | 8. Timers and memory | Implemented locally | Restart-safe timers, deferred announcements, SQLite FTS memory and compact persisted tool audit. |
 | 9. Streaming latency | Pending | Sentence-boundary synthesis, early playback and barge-in. |
 
@@ -64,3 +64,38 @@ October 4 update: revision `f96b8ea` is deployed in Assister and the bridge. HA 
 HA Voice 0a587e at 10.44.65.164 authenticated through the bridge and advertised voice feature flags 125. This was a read-only capability inspection. The key stays outside Git and is stored as a Dockhand secret. EchoMuse's installed controller supports only HA as its backend, so the HA Voice device is the initial adapter target. Host disk space was rechecked: 45 GB free, resolving the previous disk blocker.
 
 Live isolated text validation passed the office temperature query, but model requests sometimes finished with length at 500 tokens and were correctly rejected. A direct function-call contract check passed. The voice deployment now explicitly disables Qwen thinking and raises its bounded token cap to 1024; that change still needs live loop validation. No shared model service was stopped.
+
+## Satellite realignment - October 4, 2026
+
+Implemented locally: additive normalized gRPC metadata/capabilities/configuration/ownership and
+playback identity, persisted satellite registration/desired wake words, volatile observed state,
+bounded event history, capability-gated runtime APIs and Satellites list/detail page. Existing
+encrypted bridge, mono microphone PCM, Wyoming, shared coordinator, FLAC/HTTP response and
+announcement playback are preserved. Timers now use SatelliteManager.AnnounceAsync.
+
+Wake-word validation covers reported models, active count, drift and readback. Firmware values
+remain read-only. Ownership stays Unknown until device voice activation confirms it; a short
+error-log subscription detects explicit other-client conflict. Conflict is passive with manual
+retry after release. Reconnect delay grows from 5 to 60 seconds. Diagnostic warning logs use
+60-second leases, bounded sanitized events, and explicit device log disable.
+
+Duplicate starts and late audio/playback acknowledgments cannot replace/finish another session.
+Cancellation now sends a terminal result to release bridge busy state and RUN_END to reset
+hardware feedback; bridge shutdown also ends feedback while the native connection is available.
+Synthesis failures retain completed text and now report tts-failed separately from playback-failed.
+Audio objects have opaque identifiers, count/size bounds, 2-minute TTL and periodic cleanup.
+
+Local validation: 63 unit tests, 8 C# integration tests and 9 isolated adapter tests pass (80 total).
+Tests cover exclusive ownership conflict/recovery, wake proof, model read/update, normalized mask
+125, multi-channel metadata, announcement completion when music resumes, playback failure,
+cancellation/next-session independence, duplicate/late events, persistence/drift, unsupported
+actions and redacted events. JavaScript syntax checks and git diff --check pass. The actual
+local browser renders list/detail and disables offline unsupported playback controls.
+
+During baseline live inspection, a wake activation reached Assister microphone/STT capture,
+then cancelled after 12.3 seconds without transcript. The user reported LEDs remaining active
+after cancellation; the old bridge had no terminal cancellation acknowledgment. A targeted
+Dockhand bridge restart completed to clear that state. This is evidence of the old deployment,
+not verification of the new reset code. New physical wake/playback, wake-word changes, HA entity
+disable/media coexistence, conflict/reboot and LED-reset acceptance remain pending. See the
+acceptance ledger in docs/satellite-architecture.md. No Milestone 9 work was added.

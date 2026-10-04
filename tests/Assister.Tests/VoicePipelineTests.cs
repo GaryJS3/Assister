@@ -34,7 +34,7 @@ public sealed class VoicePipelineTests
         Assert.Equal("stt-failed", Result.Outcome);
         Assert.Null(Coordinator.Request);
         Result = await new VoicePipeline(new FakeStt(), new FakeTts(true), Coordinator, Manager, Config).RunAsync(new FakeSatellite(), null, CancellationToken.None);
-        Assert.Equal("playback-failed", Result.Outcome);
+        Assert.Equal("tts-failed", Result.Outcome);
         Assert.Equal("74°F", Result.Request!.Response);
         Assert.Equal(0, Manager.ActiveSessionCount);
     }

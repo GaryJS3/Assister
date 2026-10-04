@@ -1,6 +1,6 @@
 # Assister roadmap
 
-Updated: October 3, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
+Updated: October 4, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
 
 ## Architectural rules
 
@@ -19,11 +19,27 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 | 4 follow-ups | Add other specified controls intentionally; validate deployment and carry direct routing into voice. | Shared coordinator remains deterministic and uncertain targets never silently execute. |
 | 5 | OpenAI-compatible completion/streaming client, bounded tool loop, registry/broker/selector, schema validation and HA search/state/control/history tools. | Fake-client tests plus live completion, streaming and tool-call checks. Validate actions and bound history/results; no arbitrary URLs, SQL or shell execution. |
 | 6 | SQLite conversations/turns/tool audit, satellite-aware continuity, context builder, summary and budget handling. | Follow-up uses the right conversation; independent satellites remain separate; old raw tool results stay out of prompts. |
-| 7 | Satellite abstraction/manager, voice session lifecycle and coordinator. Inspect EchoMuse controller APIs and protocol before choosing its adapter. Add optional isolated ESPHome bridge only if a device requires it. | Real microphone → STT → shared routing → response formatting → TTS → playback. Confirm controller authentication and device capabilities; web reachability alone is insufficient. |
+| 7 | Expand the existing manager, isolated ESPHome bridge and authenticated gRPC boundary with persistent identity, normalized capabilities, exclusive voice ownership, runtime configuration, satellite UI and diagnostics. Inspect EchoMuse protocol before selecting an adapter. | Real wake/microphone → STT → shared routing → TTS → physical playback, with verified voice ownership and HA non-voice/media coexistence. TCP/Noise success alone is insufficient. |
 | 8 | Native persisted timers and expiry notifications; memory store/search/delete using SQLite FTS. | Restart-safe timers, cancellation, satellite announcements and relevant-only memory retrieval. |
 | 9 | LLM sentence streaming, Wyoming streaming-text synthesis, early playback and cancellation/barge-in where supported. | Measured time to first audio, stage durations and cancellation without corrupting the next session. |
 
 ## Cross-cutting work
+
+### Milestone 7 incremental acceptance
+
+1. Preserve the working pipeline; document exclusive voice ownership and inspect current contracts.
+2. Add persistent logical devices and volatile observed state/capabilities; keep the bridge a protocol adapter.
+3. Refresh metadata, capabilities/configuration and ownership on reconnect; bound backoff and event/log buffers.
+4. Verify physical wake, microphone, shared routing and acknowledged HTTP audio playback on HA Voice 10.44.65.164.
+5. Read/update device-supported wake-word IDs, honor limits, restore desired configuration and display drift.
+6. Route timers/test announcements through SatelliteManager; verify duck/resume with HA media and Music Assistant.
+7. Expose list/detail runtime configuration and firmware information; link satellite requests to bounded traces.
+8. Test duplicate/late events, disconnect cleanup, changing capabilities, ownership conflict/recovery and redaction.
+9. Verify the installed HA entity-disable procedure before claiming coexistence; keep the ESPHome integration.
+
+The current local increment and remaining acceptance gaps are recorded in progress.md and
+[satellite-architecture.md](docs/satellite-architecture.md). Do not begin streaming/barge-in,
+firmware management, discovery or whole-home grouping to satisfy this realignment.
 
 - Wire speech configuration into runtime providers and make status report real connectivity/capability checks as integrations arrive.
 - Add trace-correlated stage timings, bounded audit data and a recent-run diagnostics page.

@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Assister.Contracts;
 using Assister.Satellites;
 using Assister.Satellites.Protocol;
+using Protocol = Assister.Satellites.Protocol;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting;
@@ -33,6 +34,8 @@ public sealed class SatelliteTransportTests
         Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
         Assert.Equal("registered", Call.ResponseStream.Current.Type);
         await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "transport-session" });
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "transport-session" });
+        await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "old-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
         await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "transport-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
         await Call.RequestStream.WriteAsync(new() { Type = "stop", SessionId = "transport-session" });
         var Events = new List<BridgeFrame>();
@@ -41,7 +44,16 @@ public sealed class SatelliteTransportTests
             Events.Add(Call.ResponseStream.Current);
             if (Call.ResponseStream.Current.Type == "audio-ready")
             {
-                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", SessionId = "transport-session", Text = "succeeded" });
+                var Id = Call.ResponseStream.Current.PlaybackId;
+                Assert.False(string.IsNullOrWhiteSpace(Id));
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "old-session", Text = "succeeded" });
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "transport-session", Text = "succeeded" });
+                // An old acknowledgement must not complete the current delivery.
+                var Next = Call.ResponseStream.MoveNext(Timeout.Token);
+                Assert.NotSame(Next, await Task.WhenAny(Next, Task.Delay(100, Timeout.Token)));
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = Id, SessionId = "transport-session", Text = "succeeded" });
+                Assert.True(await Next);
+                Events.Add(Call.ResponseStream.Current);
             }
             if (Call.ResponseStream.Current.Type == "session-result") { break; }
         }
@@ -51,6 +63,96 @@ public sealed class SatelliteTransportTests
         Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Wave, 0, 4));
         Assert.Equal("succeeded", Events.Last().Text);
         await Call.RequestStream.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task OwnershipMetadataConfigurationAndRedactedEventsReachTheProviderIndependentApi()
+    {
+        await using var Factory = new Application();
+        using var Http = Factory.CreateDefaultClient();
+        using var Channel = GrpcChannel.ForAddress(Http.BaseAddress!, new() { HttpClient = Http });
+        var Client = new SatelliteTransport.SatelliteTransportClient(Channel);
+        using var Call = Client.Connect(new Metadata { { "authorization", "Bearer test-bridge-secret" } });
+        await Call.RequestStream.WriteAsync(new() { Type = "register", SatelliteId = "voice" });
+        using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        var Manager = Factory.Services.GetRequiredService<SatelliteManager>();
+        Assert.Equal(VoiceOwnership.Unknown, Manager.State("voice").VoiceOwnership);
+        await Call.RequestStream.WriteAsync(new() { Type = "metadata", Device = new() { Model = "Fake", EsphomeVersion = "2026.test", ApiVersion = "1.12" },
+            Capabilities = new() { Microphone = true, VoiceAssistant = true, MultiChannelMicrophone = true, AnnouncementPlayback = true } });
+        await Call.RequestStream.WriteAsync(new() { Type = "configuration", Configuration = new()
+            { AvailableWakeWords = { new Protocol.WakeWord { Id = "nabu", Name = "Okay Nabu" }, new Protocol.WakeWord { Id = "jarvis", Name = "Hey Jarvis" } },
+                ActiveWakeWords = { "nabu" }, MaxActiveWakeWords = 1 } });
+        await Call.RequestStream.WriteAsync(new() { Type = "ownership", Ownership = "Conflict" });
+        await Call.RequestStream.WriteAsync(new() { Type = "device-log", Text = "authorization=Bearer test-bridge-secret" });
+        await WaitAsync(() => Manager.Events("voice").Any(Event => Event.Type == "ESPHome log"), Timeout.Token);
+        Assert.Equal(1, Manager.Count);
+        Assert.Equal(VoiceOwnership.Conflict, Manager.State("voice").VoiceOwnership);
+        Assert.Contains("Another ESPHome", Manager.State("voice").LastError);
+        Assert.True(Manager.State("voice").Capabilities.MultiChannelMicrophone);
+        var Events = await Http.GetStringAsync("/api/satellites/voice/events", Timeout.Token);
+        Assert.DoesNotContain("test-bridge-secret", Events);
+        var Rejected = await Http.PutAsync("/api/satellites/voice/wake-words", new StringContent("[\"jarvis\"]", System.Text.Encoding.UTF8, "application/json"), Timeout.Token);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, Rejected.StatusCode);
+        await Call.RequestStream.WriteAsync(new() { Type = "ownership", Ownership = "OwnedByAssister" });
+        await WaitAsync(() => Manager.State("voice").VoiceOwnership == VoiceOwnership.OwnedByAssister, Timeout.Token);
+        foreach (var Words in new[] { "[\"missing\"]", "[\"nabu\",\"jarvis\"]" })
+        {
+            var Response = await Http.PutAsync("/api/satellites/voice/wake-words", new StringContent(Words, System.Text.Encoding.UTF8, "application/json"), Timeout.Token);
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, Response.StatusCode);
+        }
+        var Accepted = await Http.PutAsync("/api/satellites/voice/wake-words", new StringContent("[\"jarvis\"]", System.Text.Encoding.UTF8, "application/json"), Timeout.Token);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, Accepted.StatusCode);
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        Assert.Equal("set-wake-words", Call.ResponseStream.Current.Type);
+        Assert.Equal("[\"jarvis\"]", Call.ResponseStream.Current.Text);
+        await Call.RequestStream.CompleteAsync();
+        Assert.False(await Call.ResponseStream.MoveNext(Timeout.Token));
+        Assert.Equal("Offline", Manager.State("voice").ConnectionState);
+        var Persisted = await Http.GetStringAsync("/api/satellites", Timeout.Token);
+        Assert.Contains("jarvis", Persisted);
+        Assert.DoesNotContain("test-bridge-secret", Persisted);
+    }
+
+    private static async Task WaitAsync(Func<bool> Ready, CancellationToken Token)
+    {
+        while (!Ready()) { await Task.Delay(10, Token); }
+    }
+
+    [Fact]
+    public async Task CancellationAcknowledgesTheAbortedSessionAndNextSessionIsIndependent()
+    {
+        await using var Factory = new Application();
+        using var Http = Factory.CreateDefaultClient();
+        using var Channel = GrpcChannel.ForAddress(Http.BaseAddress!, new() { HttpClient = Http });
+        var Client = new SatelliteTransport.SatelliteTransportClient(Channel);
+        using var Call = Client.Connect(new Metadata { { "authorization", "Bearer test-bridge-secret" } });
+        using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await Call.RequestStream.WriteAsync(new() { Type = "register", SatelliteId = "voice" });
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "cancelled-session" });
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        Assert.Equal("transcribing", Call.ResponseStream.Current.Type);
+        await Call.RequestStream.WriteAsync(new() { Type = "cancel", SessionId = "cancelled-session" });
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        Assert.Equal("session-result", Call.ResponseStream.Current.Type);
+        Assert.Equal("cancelled", Call.ResponseStream.Current.Text);
+        Assert.Equal("cancelled-session", Call.ResponseStream.Current.SessionId);
+        Assert.Equal(0, Factory.Services.GetRequiredService<SatelliteManager>().ActiveSessionCount);
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "next-session" });
+        await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "cancelled-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
+        await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "next-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
+        await Call.RequestStream.WriteAsync(new() { Type = "stop", SessionId = "next-session" });
+        while (await Call.ResponseStream.MoveNext(Timeout.Token))
+        {
+            var Frame = Call.ResponseStream.Current;
+            if (Frame.Type == "audio-ready") await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", SessionId = Frame.SessionId, PlaybackId = Frame.PlaybackId, Text = "succeeded" });
+            if (Frame.Type == "session-result") { Assert.Equal("succeeded", Frame.Text); break; }
+        }
+        // A repeated old start cannot reopen a previously completed session.
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "cancelled-session" });
+        await Call.RequestStream.CompleteAsync();
+        Assert.False(await Call.ResponseStream.MoveNext(Timeout.Token));
     }
     private sealed class Application : WebApplicationFactory<Program>
     {

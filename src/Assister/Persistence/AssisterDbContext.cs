@@ -5,6 +5,7 @@ namespace Assister.Persistence;
 public sealed class AssisterDbContext(DbContextOptions<AssisterDbContext> Options) : DbContext(Options)
 {
     public DbSet<Installation> Installations => Set<Installation>();
+    public DbSet<Assister.Satellites.Satellite> Satellites => Set<Assister.Satellites.Satellite>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
 

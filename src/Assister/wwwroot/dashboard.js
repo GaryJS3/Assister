@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 let runs = [], selected = null, currentRun = null, busy = false, quick = 'All', sending = false, detailSignature = '';
+selected = new URLSearchParams(location.search).get('run');
 const openRounds = new Set();
 function node(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function pretty(value) { return JSON.stringify(value, null, 2); }

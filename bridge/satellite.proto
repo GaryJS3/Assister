@@ -18,4 +18,44 @@ message BridgeFrame {
   string text = 11;
   string url = 12;
   string voice_session_id = 13;
+  // Normalized provider metadata; native ESPHome feature bits stay in the bridge.
+  DeviceMetadata device = 14;
+  Capabilities capabilities = 15;
+  VoiceConfiguration configuration = 16;
+  string ownership = 17;
+  string wake_word = 18;
+  string playback_id = 19;
+  string trace_id = 20;
+  double volume = 21;
+  bool muted = 22;
+  int32 source_channels = 23;
+}
+message DeviceMetadata {
+  string device_name = 1;
+  string model = 2;
+  string firmware_version = 3;
+  string esphome_version = 4;
+  string api_version = 5;
+}
+message Capabilities {
+  bool microphone = 1;
+  bool multi_channel_microphone = 2;
+  bool voice_assistant = 3;
+  bool api_audio = 4;
+  bool wake_word = 5;
+  bool wake_word_configuration = 6;
+  bool speaker = 7;
+  bool media_player = 8;
+  bool media_playback = 9;
+  bool announcement_playback = 10;
+  bool volume_control = 11;
+  bool mute_control = 12;
+  bool timers = 13;
+  bool start_conversation = 14;
+}
+message WakeWord { string id = 1; string name = 2; }
+message VoiceConfiguration {
+  repeated WakeWord available_wake_words = 1;
+  repeated string active_wake_words = 2;
+  int32 max_active_wake_words = 3;
 }

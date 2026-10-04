@@ -3,18 +3,30 @@ using Assister.Contracts;
 
 namespace Assister.Satellites;
 
-public sealed class VoiceAudioStore
+public sealed class VoiceAudioStore : IDisposable
 {
     private readonly ConcurrentDictionary<Guid, (byte[] Data, DateTimeOffset Expires)> Audio = new();
+    private readonly object Gate = new();
+    private readonly Timer Cleanup;
+    public VoiceAudioStore() => Cleanup = new Timer(_ => RemoveExpired(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    private void RemoveExpired()
+    {
+        foreach (var Item in Audio.Where(Item => Item.Value.Expires <= DateTimeOffset.UtcNow)) { Audio.TryRemove(Item.Key, out _); }
+    }
     public Guid Add(byte[] Wave)
     {
-        foreach (var Item in Audio.Where(Item => Item.Value.Expires < DateTimeOffset.UtcNow)) { Audio.TryRemove(Item.Key, out _); }
-        if (Audio.Count >= 16) { throw new InvalidOperationException("Audio storage is full."); }
-        var Id = Guid.NewGuid();
-        Audio[Id] = (Wave, DateTimeOffset.UtcNow.AddMinutes(2));
-        return Id;
+        if (Wave.Length is < 1 or > 8 * 1024 * 1024) { throw new InvalidDataException("Audio object size is invalid."); }
+        lock (Gate)
+        {
+            RemoveExpired();
+            if (Audio.Count >= 16) { throw new InvalidOperationException("Audio storage is full."); }
+            var Id = Guid.NewGuid();
+            Audio[Id] = (Wave, DateTimeOffset.UtcNow.AddMinutes(2));
+            return Id;
+        }
     }
     public byte[]? Get(Guid Id) => Audio.TryGetValue(Id, out var Item) && Item.Expires > DateTimeOffset.UtcNow ? Item.Data : null;
+    public void Dispose() => Cleanup.Dispose();
 
     public static async Task<byte[]> WaveAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
     {

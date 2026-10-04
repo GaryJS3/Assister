@@ -226,6 +226,61 @@ Create a manager responsible for:
 
 ## ESPHome satellites
 
+### Authoritative ownership (Milestone 7 realignment)
+
+Assister owns the voice-assistant subscription, wake events, microphone audio, voice sessions,
+conversations, STT, shared deterministic/LLM/tool routing, TTS and voice playback on managed
+satellites. Home Assistant remains an external automation/data/media backend. Never route
+Assister voice requests through Home Assistant Assist.
+
+ESPHome supports multiple Native API connections, but `voice_assistant` has one active API
+client and rejects another subscriber. HA's ESPHome Assist Satellite entity subscribes to
+the same component. TCP/Noise success does not prove voice ownership. Represent Unknown,
+Available, OwnedByAssister, Conflict and Unsupported explicitly. The current subscription
+protocol has no success acknowledgment: an incoming voice request confirms ownership;
+the explicit device rejection log confirms conflict. Otherwise ownership remains Unknown.
+Do not steal ownership or reconnect aggressively on conflict.
+
+Keep HA's ESPHome integration for compatible normal entities, `media_player`, volume, sensors,
+buttons and Music Assistant. Validate media and media-player announcement coexistence on
+hardware before claiming support. HA `assist_satellite.announce` is outside this guarantee.
+See [satellite-architecture.md](docs/satellite-architecture.md) for sources and acceptance.
+
+The boundaries remain: ESPHome owns hardware/audio primitives; the thin Python bridge owns
+encrypted protocol translation; SatelliteManager owns endpoint state/capabilities/output
+routing; VoicePipeline owns spoken interaction; the shared coordinator owns request semantics;
+the HA module owns validated HA queries/actions. Use one ESPHome provider for compatible
+devices regardless of brand; inspect EchoMuse's actual protocol before selecting an adapter.
+
+Persist identity, name, area, provider, manually configured endpoint, enabled policy and desired
+runtime configuration in existing SQLite. Keep observed connection, capabilities, metadata,
+ownership, voice session and playback state in memory. Refresh on reconnect, since firmware
+may change capabilities. Satellite, transport session, voice session, conversation and trace
+identities must stay separate. Reject duplicate starts and drop late audio/playback events.
+
+Native ESPHome feature bits stay inside the bridge. Expose normalized microphone, multiple
+source channels, API audio, wake word/configuration, speaker, media/announcement playback,
+volume/mute, timers and start-conversation capabilities. Hide/disable unsupported UI actions.
+Preserve source-channel metadata while choosing the existing mono STT stream.
+
+Separate voice response, announcement and media. Preserve HTTP response delivery and the
+device announcement pipeline; let firmware duck/resume music. No custom mixer or music
+system. Timer policy remains in Assister; expiry and future notifications use SatelliteManager.
+
+Wake-word selection must use reported model IDs, obey the active-model limit, and read back
+actual configuration. Persist desired configuration, reconcile without silently substituting
+missing models, and display drift. Firmware-derived settings are read-only. No compiler,
+flasher, discovery, custom firmware, or Milestone 9 streaming/barge-in work in this increment.
+
+Use bounded semantic traces and satellite events, with session/trace correlation and sanitized
+debug payloads. Preserve completed response text on TTS/playback failure and never route after
+STT failure. Device logs use short explicit diagnostic leases and turn off at timeout. Secrets
+remain external; separate bridges can use separate encryption-key files or secret values.
+Never write credentials to records, audit, API/UI, logs or Git.
+
+Device-reachable HTTP audio URLs use opaque random identifiers, correct MIME, bounded object
+count/size and short TTL with periodic cleanup. Assister serves its own audio directly.
+
 Current devices such as HA Voice and EchoMuse-style ESPHome satellites use ESPHome Native API rather than Wyoming.
 
 For the initial implementation, create an optional `esphome-bridge` container based on `aioesphomeapi`.

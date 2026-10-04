@@ -30,20 +30,11 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
         var Pending = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' ORDER BY DueAt LIMIT 20", Token);
         foreach (var Row in Pending)
         {
-            if (!Satellites.TryGet(Row[2], out var Satellite)) { continue; }
-            var Session = Guid.NewGuid();
-            if (!Satellites.BeginSession(Row[2], Session)) { continue; }
-            try
+            if (await Satellites.AnnounceAsync(Row[2], $"Your {Row[1]} has finished.", Tts, Token))
             {
-                using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
-                Timeout.CancelAfter(TimeSpan.FromSeconds(60));
-                var Text = $"Your {Row[1]} has finished.";
-                await Satellite!.SendEventAsync(new("timer-expired", Text, Session), Timeout.Token);
-                await Satellite.SendAudioAsync(Tts.SynthesizeAsync(Text, new(), Timeout.Token), Timeout.Token);
                 // At-least-once delivery: a crash between playback and this update may repeat an announcement.
                 await Store.ExecuteAsync("UPDATE Timers SET Status='completed' WHERE Id=$p0 AND Status='notification-pending'", Token, Row[0]);
             }
-            finally { Satellites.EndSession(Row[2], Session); }
         }
     }
 }

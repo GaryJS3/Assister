@@ -9,6 +9,20 @@ public sealed class AssisterDbContextModelSnapshot : ModelSnapshot
     protected override void BuildModel(ModelBuilder ModelBuilder)
     {
         ModelBuilder.HasAnnotation("ProductVersion", "10.0.10");
+        ModelBuilder.Entity<Assister.Satellites.Satellite>(Entity =>
+        {
+            Entity.Property(Row => Row.Id).HasColumnType("TEXT");
+            Entity.Property(Row => Row.Name).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.AreaId).HasColumnType("TEXT");
+            Entity.Property(Row => Row.ProviderType).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.Endpoint).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.Enabled).HasColumnType("INTEGER");
+            Entity.Property(Row => Row.Configuration).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.CreatedAt).HasColumnType("TEXT");
+            Entity.Property(Row => Row.UpdatedAt).HasColumnType("TEXT");
+            Entity.HasKey(Row => Row.Id);
+            Entity.ToTable("Satellites");
+        });
         ModelBuilder.Entity<Installation>(Entity =>
         {
             Entity.Property(Row => Row.Id).ValueGeneratedOnAdd().HasColumnType("INTEGER");

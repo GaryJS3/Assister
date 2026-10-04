@@ -9,3 +9,5 @@ data/
 *.db-shm
 *.db-wal
 /dev.md
+**/__pycache__/
+/bridge/esphome/.test-runtime/

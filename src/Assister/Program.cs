@@ -50,6 +50,7 @@ Builder.Services.AddTransient<ToolRegistry>();
 Builder.Services.AddScoped<LocalStore>();
 Builder.Services.AddScoped<TimerIntentHandler>();
 Builder.Services.AddSingleton<SatelliteManager>();
+Builder.Services.AddScoped<SatelliteConfiguration>();
 Builder.Services.AddScoped<VoicePipeline>();
 Builder.Services.AddTransient<ISpeechToTextProvider>(Services =>
 {
@@ -88,6 +89,7 @@ App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore A
 App.UseDefaultFiles();
 App.UseStaticFiles();
 App.MapDashboard();
+App.MapSatellites();
 await using (var Scope = App.Services.CreateAsyncScope())
 {
     var Database = Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
@@ -101,6 +103,14 @@ await using (var Scope = App.Services.CreateAsyncScope())
         await Database.Database.CloseConnectionAsync();
     }
     await Database.Database.MigrateAsync();
+    var SatelliteId = Builder.Configuration["EspHome:SatelliteId"];
+    if (!string.IsNullOrWhiteSpace(SatelliteId) && !await Database.Satellites.AnyAsync(Row => Row.Id == SatelliteId))
+    {
+        Database.Satellites.Add(new Satellite { Id = SatelliteId, Name = Builder.Configuration["EspHome:Name"] ?? SatelliteId,
+            AreaId = Builder.Configuration["EspHome:Area"], Endpoint = Builder.Configuration["EspHome:Host"] ?? "",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        await Database.SaveChangesAsync();
+    }
 }
 App.MapGet("/health", async (AssisterDbContext Database, CancellationToken CancellationToken) =>
     await Database.Database.CanConnectAsync(CancellationToken)
