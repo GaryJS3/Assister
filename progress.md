@@ -111,3 +111,8 @@ despite physical wake detection. Runtime model changes are therefore unavailable
 Follow-up fix uses native announcement acknowledgment after proven voice ownership, retains the
 observed wake word across button activations, and disables unavailable wake configuration.
 Validation: 71 C# tests and 11 adapter tests pass (82 total). Physical follow-up remains pending.
+Revision ed8d918 deployed through Dockhand: both running image revision labels match the exact
+commit; /health is Healthy, satellite is Online and playback IDLE. Environment fingerprints and
+/data volume match pre-deployment values. No overlapping test audio is being generated while
+awaiting the user's next physical request. This is readiness evidence, not a successful spoken
+request or LED-reset acceptance.

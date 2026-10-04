@@ -15,7 +15,7 @@ start conversation and multiple microphone channels; raw speaker is absent. Actu
 announcement/media output support also requires a discovered supported media-player path.
 The existing HA Voice response remains device-fetched HTTP FLAC on its announcement pipeline.
 
-## HA coexistence procedure to verify
+## HA coexistence procedure
 
 1. Record installed HA and device firmware/API versions, ESPHome entity states, active wake-word IDs and media state.
 2. In HA Settings → Devices & services → Entities, locate this device's `assist_satellite` entity. Disable that entity (do not merely hide it, change its pipeline, or mute the device).
@@ -24,8 +24,8 @@ The existing HA Voice response remains device-fetched HTTP FLAC on its announcem
 5. Confirm HA's ESPHome integration remains connected, normal entity updates arrive, media_player playback and supported media-player announcements work, and Music Assistant remains usable.
 6. With normal music playing, invoke Assister and confirm response/announcement completion and music resumption. Media transitions ANNOUNCING → PLAYING/PAUSED/IDLE can acknowledge the announcement without waiting for long-form media to end.
 
-This procedure is a candidate supported by source inspection, not yet a verified recipe for
-the installed HA deployment. HA `assist_satellite.announce` is not promised while Assister owns
+Entity disable and retained HA integration/media access were verified on HA 2026.9.4.
+Full announcement duck/resume and Music Assistant acceptance remain pending. HA `assist_satellite.announce` is not promised while Assister owns
 voice. A successful second encrypted API connection is not coexistence acceptance.
 
 ## Runtime and deployment
@@ -73,9 +73,9 @@ transcripts, routing/tool/model details and raw/spoken responses. Audio is not d
 | Connection success vs voice conflict; wake proves ownership | Fake ESPHome/gRPC adapter tests |
 | Capabilities refresh and wake configuration/drift | Automated manager/configuration and adapter tests |
 | Announcements unsupported/busy/failing | Fake provider tests |
-| Two API clients, HA entity/media retention | Pending physical verification |
+| Two API clients, HA entity/media retention | Verified HA 2026.9.4 integration loaded, Assist entity disabled, media audible, real wake received |
 | Real wake → deterministic living-room brightness → TTS/playback; no LLM | Pending physical verification |
-| Supported wake-word change/new phrase/disabled old phrase/restoration | Pending physical verification |
+| Supported wake-word change/new phrase/disabled old phrase/restoration | Unavailable on installed firmware: API reports no models and maximum zero |
 | Music/announcement duck/resume and Music Assistant | Pending physical verification |
 | Physical ownership conflict/release/retry and satellite reboot | Pending physical verification |
 
