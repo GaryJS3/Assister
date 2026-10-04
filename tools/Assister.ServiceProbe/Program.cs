@@ -5,6 +5,12 @@ using System.Text.Json;
 using Assister.Contracts;
 using Assister.Speech.Wyoming;
 
+if (args.Contains("--direct-intents"))
+{
+    var Index = Array.IndexOf(args, "--light");
+    return await LiveIntentProbe.RunAsync(Index >= 0 && Index + 1 < args.Length ? args[Index + 1] : null);
+}
+
 var Results = new List<object>();
 var Failures = 0;
 var SynthesizedAudio = new List<AudioChunk>();
@@ -174,6 +180,10 @@ return Failures == 0 ? 0 : 1;
 
 async Task CheckAsync(string Name, Func<CancellationToken, Task<string>> Check)
 {
+    if (args.Contains("--ha-only") && !Name.StartsWith("Home Assistant") && !Name.StartsWith("Assister"))
+    {
+        return;
+    }
     if (args.Contains("--llm-only") && !Name.StartsWith("LLM"))
     {
         return;

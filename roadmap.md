@@ -6,18 +6,17 @@ Updated: October 3, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md)
 
 Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use native C# for Wyoming and SQLite/EF Core for persistence. Prefer deterministic intents over LLM calls. Retrieve only relevant context and expose only relevant tools. Home Assistant remains an external automation/data platform. Separate voice sessions, conversations and trace IDs.
 
-## Next: Home Assistant integration
+## Next: deployment verification, then LLM and tools
 
-- Implement an authenticated persistent WebSocket client with cancellation and reconnect/backoff.
-- Load states, services and entity/device/area registries; build the local cache and entity index.
-- Subscribe to state changes; retain cached states as stale during disconnects and block state-changing operations until connectivity returns.
-- Test authentication, registry joins, cache updates, failures and reconnection with fakes, then verify live reads/subscriptions. Recheck credentials after rotation.
-
+- Deploy the tested HA/direct-intent implementation and verify live cache, area metadata, state events, direct queries and one explicitly authorized light control/restoration.
+- The shared text coordinator, parser, resolver and action handlers are implemented locally. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
+- Implement milestone 5: bounded OpenAI-compatible completion/streaming, selected tools and a validating broker. Keep direct intents independent of LLM availability.
+- Recheck HA authentication after the user's credential rotation. Registry metadata currently refreshes on reconnect.
 ## Remaining milestones
 
 | Order | Deliverable | Acceptance checkpoint |
 | --- | --- | --- |
-| 4 | Separate language parsing, intent classification, slot extraction, area-aware entity resolution and action execution. Start with on/off, brightness and basic state queries; add the other specified controls intentionally. | Shared `POST /api/test/message` path; ambiguity never silently controls an uncertain target. Deterministic controls work while the LLM is offline. |
+| 4 follow-ups | Add other specified controls intentionally; validate deployment and carry direct routing into voice. | Shared coordinator remains deterministic and uncertain targets never silently execute. |
 | 5 | OpenAI-compatible completion/streaming client, bounded tool loop, registry/broker/selector, schema validation and HA search/state/control/history tools. | Fake-client tests plus live completion, streaming and tool-call checks. Validate actions and bound history/results; no arbitrary URLs, SQL or shell execution. |
 | 6 | SQLite conversations/turns/tool audit, satellite-aware continuity, context builder, summary and budget handling. | Follow-up uses the right conversation; independent satellites remain separate; old raw tool results stay out of prompts. |
 | 7 | Satellite abstraction/manager, voice session lifecycle and coordinator. Inspect EchoMuse controller APIs and protocol before choosing its adapter. Add optional isolated ESPHome bridge only if a device requires it. | Real microphone → STT → shared routing → response formatting → TTS → playback. Confirm controller authentication and device capabilities; web reachability alone is insufficient. |

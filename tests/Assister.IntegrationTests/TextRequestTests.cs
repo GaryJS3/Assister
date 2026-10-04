@@ -1,0 +1,76 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Assister.Contracts;
+using Assister.Modules.HomeAssistant;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace Assister.IntegrationTests;
+
+public sealed class TextRequestTests
+{
+    [Fact]
+    public async Task TextEndpointExecutesDirectControlsAndRejectsInvalidRequests()
+    {
+        var Directory = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString());
+        await using var Factory = new TestApplication(Directory);
+        using var Http = Factory.CreateClient();
+        var Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("turn the light off", Area: "office"));
+        Assert.Equal(HttpStatusCode.OK, Response.StatusCode);
+        var Result = await Response.Content.ReadFromJsonAsync<RequestResult>();
+        Assert.Equal("succeeded", Result!.Outcome);
+        Assert.Equal("direct-intent", Result.HandledBy);
+        Assert.Equal(["light.desk"], Result.EntityIds);
+        Assert.Single(Factory.Fake.Calls);
+
+        Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("set the light to 150 percent", Area: "office"));
+        Assert.Equal(HttpStatusCode.BadRequest, Response.StatusCode);
+        Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest(""));
+        Assert.Equal(HttpStatusCode.BadRequest, Response.StatusCode);
+        Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("turn the kitchen light off", Area: "office"));
+        Assert.Equal("not-found", (await Response.Content.ReadFromJsonAsync<RequestResult>())!.Outcome);
+        Assert.Single(Factory.Fake.Calls);
+    }
+
+    private sealed class TestApplication(string Directory) : WebApplicationFactory<Program>
+    {
+        public FakeHomeAssistant Fake { get; } = new();
+
+        protected override void ConfigureWebHost(IWebHostBuilder Builder)
+        {
+            Builder.ConfigureAppConfiguration((_, Configuration) => Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Assister:DataPath"] = Directory,
+                ["HomeAssistant:Url"] = "",
+                ["LanguageModel:BaseUrl"] = "http://127.0.0.1:1/v1"
+            }));
+            Builder.ConfigureServices(Services =>
+            {
+                var Cache = new HomeAssistantStateCache();
+                Cache.Load(JsonSerializer.Deserialize<JsonElement>("""[{"entity_id":"light.desk","state":"on","attributes":{"friendly_name":"Desk"}}]"""),
+                    JsonSerializer.Deserialize<JsonElement>("{}"),
+                    JsonSerializer.Deserialize<JsonElement>("""[{"entity_id":"light.desk","area_id":"office"}]"""),
+                    JsonSerializer.Deserialize<JsonElement>("[]"), JsonSerializer.Deserialize<JsonElement>("""[{"area_id":"office","name":"Office"}]"""));
+                Cache.SetStale(false);
+                Services.RemoveAll<HomeAssistantStateCache>();
+                Services.AddSingleton(Cache);
+                Services.RemoveAll<IHomeAssistantClient>();
+                Services.AddSingleton<IHomeAssistantClient>(Fake);
+            });
+        }
+    }
+
+    private sealed class FakeHomeAssistant : IHomeAssistantClient
+    {
+        public List<HomeAssistantControl> Calls { get; } = [];
+        public Task ControlAsync(HomeAssistantControl Control, CancellationToken CancellationToken)
+        {
+            Calls.Add(Control);
+            return Task.CompletedTask;
+        }
+    }
+}

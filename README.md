@@ -6,11 +6,32 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup migrations, structured console logs, health/status endpoints, Docker packaging, and persistence/API tests.
 
-Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. These providers are not yet wired into a voice pipeline. Home Assistant, intents, LLM, conversations, satellites, timers and memory are pending. See PROJECT.md for the full brief and acceptance criteria.
+Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. These providers are not yet wired into a voice pipeline.
+
+Home Assistant now has a persistent authenticated connection, state subscriptions, registry/area joins, and reconnecting cache. Direct intents support light/switch on/off, light brightness and cached temperature/state queries through a shared request coordinator. Ambiguous targets require clarification; stale HA connectivity blocks actions. LLM, persisted conversations, satellites, timers and memory remain pending. See PROJECT.md for the full brief and acceptance criteria.
+
+## Text requests
+
+`POST /api/test/message` accepts `message`, `satelliteId` (defaults to `test`), `area` and optional `conversationId`:
+
+```json
+{
+  "message": "set the kitchen lights to 50 percent",
+  "satelliteId": "test",
+  "area": "kitchen",
+  "conversationId": null
+}
+```
+
+Try `turn the kitchen light off`, `what is the temperature in the office` or `what is the state of light.desk`. An explicitly plural area request targets all matching lights in that area (up to 64); a singular request with several candidates asks for clarification. Brightness must be 0–100 percent; zero turns the light off. Unsupported brightness devices are rejected.
+
+Responses include `response`, `handledBy`, `outcome`, resolved `entityIds`, confidence, trace ID and total duration. Invalid requests return HTTP 400. Conversations are not created or persisted yet; a supplied conversation ID is only echoed. Voice integration will use the same coordinator. No LLM client is invoked on this path.
+
+`GET /api/homeassistant/entities?query=office&limit=10` returns a bounded cache search with names, areas and state values. `/api/status` reports connection status, freshness and received state-event counts. Raw attributes and credentials are excluded. These development APIs are intended for the trusted local network; complex authentication is outside the MVP scope.
 
 ## Development
 
-Live service checks and their limits are recorded in [docs/service-validation.md](docs/service-validation.md). The C# `tools/Assister.ServiceProbe` CLI runs read-only dependency checks using the container environment, including a synthetic TTS-to-STT round trip and a short LLM completion.
+Live service checks and their limits are recorded in [docs/service-validation.md](docs/service-validation.md). The C# `tools/Assister.ServiceProbe` CLI runs read-only dependency checks using the container environment, including a synthetic TTS-to-STT round trip and a short LLM completion. `--ha-only` narrows read-only checks. The explicit `--direct-intents --light light.authorized_entity` mode performs real controls and restores original member states/brightness; use it only with an authorized target.
 
 Run `dotnet test Assister.sln` and `dotnet run --project src/Assister`.
 The database defaults to `data/assister.db`. Environment variables override ASP.NET configuration. Never commit credentials.
