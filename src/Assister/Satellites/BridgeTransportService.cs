@@ -123,16 +123,20 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken CancellationToken)
         {
             var Wave = await VoiceAudioStore.WaveAsync(Chunks, CancellationToken);
-            var Id = Audio.Add(Wave);
+            var UseFlac = Configuration.GetValue("SatelliteBridge:UseFlac", true);
+            var Data = UseFlac ? await VoiceAudioEncoder.FlacAsync(Wave, CancellationToken) : Wave;
+            var Id = Audio.Add(Data);
             var Base = Configuration["Assister:PublicUrl"] ?? throw new InvalidOperationException("Public audio URL is required.");
-            if (Announcement) { Playback = new(TaskCreationOptions.RunContinuationsAsynchronously); }
-            await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id,
+            Playback = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
                 Text = Announcement ? "announcement" : "", SessionId = Announcement ? "" : TransportSession }, CancellationToken);
             if (Playback is not null)
             {
                 try
                 {
-                    if (!await Playback.Task.WaitAsync(CancellationToken)) { throw new IOException("Playback failed."); }
+                    using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+                    Timeout.CancelAfter(TimeSpan.FromSeconds(45));
+                    if (!await Playback.Task.WaitAsync(Timeout.Token)) { throw new IOException("Playback failed."); }
                 }
                 finally { Playback = null; Announcement = false; }
             }

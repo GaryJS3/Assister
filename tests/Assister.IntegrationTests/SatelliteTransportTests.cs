@@ -39,6 +39,10 @@ public sealed class SatelliteTransportTests
         while (await Call.ResponseStream.MoveNext(Timeout.Token))
         {
             Events.Add(Call.ResponseStream.Current);
+            if (Call.ResponseStream.Current.Type == "audio-ready")
+            {
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", SessionId = "transport-session", Text = "succeeded" });
+            }
             if (Call.ResponseStream.Current.Type == "session-result") { break; }
         }
         Assert.Contains(Events, Frame => Frame.Type == "response" && Frame.Text == "Done.");
@@ -56,6 +60,7 @@ public sealed class SatelliteTransportTests
             {
                 ["Assister:DataPath"] = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()),
                 ["SatelliteBridge:Enabled"] = "true", ["SatelliteBridge:Token"] = "test-bridge-secret",
+                ["SatelliteBridge:UseFlac"] = "false",
                 ["EspHome:SatelliteId"] = "voice", ["Assister:PublicUrl"] = "http://localhost"
             }));
             Builder.ConfigureServices(Services =>

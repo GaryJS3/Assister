@@ -83,8 +83,8 @@ Builder.Services.AddSingleton<ComponentHealth>();
 Builder.Services.AddHostedService(Services => Services.GetRequiredService<ComponentHealth>());
 var App = Builder.Build();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }
-App.MapGet("/api/voice/audio/{id:guid}", (Guid Id, VoiceAudioStore Audio) => Audio.Get(Id) is { } Wave
-    ? Results.File(Wave, "audio/wav", enableRangeProcessing: true) : Results.NotFound());
+App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore Audio) => Audio.Get(Id) is { } Data
+    ? Results.File(Data, Data.AsSpan().StartsWith("fLaC"u8) ? "audio/flac" : "audio/wav", enableRangeProcessing: true) : Results.NotFound());
 App.UseDefaultFiles();
 App.UseStaticFiles();
 App.MapDashboard();

@@ -11,6 +11,7 @@ RUN dotnet publish tools/Assister.ServiceProbe/Assister.ServiceProbe.csproj -c R
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN mkdir /data && chown app:app /data
 WORKDIR /app
 COPY --from=build /app .

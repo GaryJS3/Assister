@@ -6,7 +6,7 @@ import sys
 import uuid
 
 import grpc
-from aioesphomeapi import APIClient, VoiceAssistantEventType as Event
+from aioesphomeapi import APIClient, VoiceAssistantEventType as Event, MediaPlayerEntityState, MediaPlayerState
 import satellite_pb2 as wire
 import satellite_pb2_grpc as services
 
@@ -37,6 +37,19 @@ async def connect_once(inspect_only=False):
         conversation_id = ""
         capturing = False
         task_set = set()
+        playback = None
+        playing = False
+
+        def media_state(state):
+            nonlocal playing
+            if not isinstance(state, MediaPlayerEntityState) or playback is None:
+                return
+            if state.state == MediaPlayerState.ANNOUNCING:
+                playing = True
+            elif playing and state.state == MediaPlayerState.IDLE and not playback.done():
+                playback.set_result(True)
+
+        client.subscribe_states(media_state)
 
         async def send(kind, **fields):
             await outgoing.put(wire.BridgeFrame(type=kind, satellite_id=satellite_id,
@@ -80,6 +93,22 @@ async def connect_once(inspect_only=False):
             except Exception:
                 await send("playback-finished", text="failed")
 
+        async def play_response(url):
+            nonlocal playback, playing
+            playback = asyncio.get_running_loop().create_future()
+            playing = False
+            print(json.dumps({"status": "playback-starting", "session": current_session}), flush=True)
+            try:
+                event(Event.VOICE_ASSISTANT_TTS_END, {"url": url})
+                await asyncio.wait_for(playback, timeout=40)
+                await send("playback-finished", text="succeeded")
+                print(json.dumps({"status": "playback-completed", "session": current_session}), flush=True)
+            except Exception as error:
+                await send("playback-finished", text="failed")
+                print(json.dumps({"status": "playback-failed", "failure_type": type(error).__name__}), flush=True)
+            finally:
+                playback = None
+
         async with grpc.aio.insecure_channel(os.environ.get("ASSISTER_GRPC", "assister:8082"),
                 options=[("grpc.max_receive_message_length", 131072)]) as channel:
             stub = services.SatelliteTransportStub(channel)
@@ -111,7 +140,9 @@ async def connect_once(inspect_only=False):
                             task_set.add(task)
                             task.add_done_callback(task_set.discard)
                         else:
-                            event(Event.VOICE_ASSISTANT_TTS_END, {"url": frame.url})
+                            task = asyncio.create_task(play_response(frame.url))
+                            task_set.add(task)
+                            task.add_done_callback(task_set.discard)
                     elif frame.type == "finished":
                         event(Event.VOICE_ASSISTANT_RUN_END)
                     elif frame.type == "session-result":
