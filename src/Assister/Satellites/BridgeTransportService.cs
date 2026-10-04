@@ -100,7 +100,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     else if (Frame.Type == "stop") { Connection.StopAudio(); }
                     else if (Frame.Type == "cancel") { SessionCancellation?.Cancel(); Connection.StopAudio(); }
                 }
-                if (Frame.Type == "playback-started" && Connection.IsCurrentPlayback(Frame.PlaybackId, Frame.SessionId))
+                if (Frame.Type == "playback-started" && Connection.PlaybackStarted(Frame.PlaybackId, Frame.SessionId))
                 {
                     var Current = Manager.State(Connection.SatelliteId).CurrentVoiceSessionId;
                     if (Current is { } Id) { Manager.Stage(Connection.SatelliteId, Id, VoiceSessionState.PlayingResponse); }
@@ -181,7 +181,19 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         private TaskCompletionSource<bool>? Playback;
         private string PlaybackId = "";
         private string PlaybackSession = "";
+        private RunTracing.TraceStep? PlaybackTrace;
+        private bool StartedPlayback;
         public bool IsCurrentPlayback(string Id, string Session) => Playback is not null && Session == PlaybackSession && Id == PlaybackId;
+        public bool PlaybackStarted(string Id, string Session)
+        {
+            if (!IsCurrentPlayback(Id, Session)) { return false; }
+            if (!StartedPlayback)
+            {
+                StartedPlayback = true;
+                PlaybackTrace?.Detail("playbackStartedAt", DateTimeOffset.UtcNow);
+            }
+            return true;
+        }
         public string SatelliteId => Registration.SatelliteId;
         public string TransportSession { get; set; } = "";
         public string Name => Registration.Name;
@@ -218,6 +230,8 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             PlaybackSession = Announcement ? "" : TransportSession;
             using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Publish audio-ready and wait for the satellite's explicit playback acknowledgement.");
             Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow });
+            StartedPlayback = false;
+            PlaybackTrace = Delivery;
             await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
                 Text = Announcement ? "announcement" : "", SessionId = PlaybackSession, PlaybackId = PlaybackId, TraceId = RunTracing.RunId.ToString() }, CancellationToken);
             if (Playback is not null)
@@ -230,7 +244,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow });
                     Delivery.Complete();
                 }
-                finally { Playback = null; Announcement = false; }
+                finally { Playback = null; PlaybackTrace = null; Announcement = false; }
             }
         }
         public async Task SendEventAsync(SatelliteEvent Event, CancellationToken CancellationToken)

@@ -57,6 +57,16 @@ function renderDetail(r) {
     const info=node('div',null,'facts');for(const [name,value]of [['RunId',r.runId],['Handled by',r.handledBy],['Satellite',r.satelliteId],['Area',r.area],['Conversation ID',r.conversationId],['Voice session ID',r.voiceSessionId],['Total duration',time(r.durationMilliseconds)],['Infrastructure trace',r.activityTraceId]]){const f=node('div',null,'fact');f.append(node('span',name),node('strong',value || '—'));if(name==='RunId')f.append(copyButton(r.runId,'RunId'));info.append(f);}card.append(info);d.append(card);
     const timings=node('section',null,'timings');timings.append(node('h3','Where the time went'),node('p','Audio capture and STT finalization are shown separately. Nested timings can overlap.','muted'));
     const audio=r.steps.find(s=>s.name==='Microphone audio'); const stt=r.steps.find(s=>s.kind==='SpeechToText');
+    if(audio){
+        const ended=Date.parse(audio.output?.audioInputCompletedAt ?? stt?.metadata?.audioInputCompletedAt);
+        const playback=r.steps.find(s=>s.name==='Satellite playback');
+        const began=Date.parse(playback?.metadata?.playbackStartedAt);
+        const available=Number.isFinite(ended)&&Number.isFinite(began)&&began>=ended;
+        const highlight=node('div',null,'response-latency');
+        highlight.append(node('span','End of speech → playback'),node('strong',available?time(began-ended):'Unavailable'));
+        highlight.append(node('small',available?'From audio input completion to the satellite’s playback-start signal.':r.finishedAt?'Playback start timing was not recorded for this run.':'Waiting for audio completion and playback start.'));
+        timings.append(highlight);
+    }
     const lanes=[];if(audio)lanes.push({name:'Audio (PCM)',duration:audio.output?.audioDurationMilliseconds || 0,offset:0,cls:''});
     if(stt&&stt.metadata?.postAudioLatencyMilliseconds!=null)lanes.push({name:'STT finalize',duration:stt.metadata.postAudioLatencyMilliseconds,offset:Date.parse(stt.metadata.audioInputCompletedAt)-Date.parse(r.startedAt),cls:'stt'});
     for(const s of r.steps){if(['IntentClassification','EntityResolution','ToolSelection','LanguageModel','ToolCall','TextToSpeech'].includes(s.kind)||s.kind==='Playback'&&s.name!=='Playback delivery')lanes.push({name:s.name,duration:s.durationMilliseconds,offset:Date.parse(s.startedAt)-Date.parse(r.startedAt),cls:s.kind==='ToolCall'?'tools':s.kind==='LanguageModel'?'stt':''});}

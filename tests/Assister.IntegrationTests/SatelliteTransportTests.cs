@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Assister.Contracts;
+using Assister.Diagnostics;
 using Assister.Satellites;
 using Assister.Satellites.Protocol;
 using Protocol = Assister.Satellites.Protocol;
@@ -39,18 +40,27 @@ public sealed class SatelliteTransportTests
         await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "transport-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
         await Call.RequestStream.WriteAsync(new() { Type = "stop", SessionId = "transport-session" });
         var Events = new List<BridgeFrame>();
+        DateTimeOffset? StartSentAt = null;
+        Guid RunId = default;
         while (await Call.ResponseStream.MoveNext(Timeout.Token))
         {
             Events.Add(Call.ResponseStream.Current);
             if (Call.ResponseStream.Current.Type == "audio-ready")
             {
                 var Id = Call.ResponseStream.Current.PlaybackId;
+                RunId = Guid.Parse(Call.ResponseStream.Current.TraceId);
                 Assert.False(string.IsNullOrWhiteSpace(Id));
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-started", PlaybackId = "old-playback", SessionId = "transport-session" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "old-session", Text = "succeeded" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = "old-playback", SessionId = "transport-session", Text = "succeeded" });
                 // An old acknowledgement must not complete the current delivery.
                 var Next = Call.ResponseStream.MoveNext(Timeout.Token);
                 Assert.NotSame(Next, await Task.WhenAny(Next, Task.Delay(100, Timeout.Token)));
+                var Store = Factory.Services.GetRequiredService<RunStore>();
+                var BeforeStart = Assert.Single(Store.Get(RunId)!.Steps, Step => Step.Name == "Satellite playback");
+                Assert.False(BeforeStart.Metadata!.Value.TryGetProperty("playbackStartedAt", out _));
+                StartSentAt = DateTimeOffset.UtcNow;
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-started", PlaybackId = Id, SessionId = "transport-session" });
                 await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", PlaybackId = Id, SessionId = "transport-session", Text = "succeeded" });
                 Assert.True(await Next);
                 Events.Add(Call.ResponseStream.Current);
@@ -62,6 +72,12 @@ public sealed class SatelliteTransportTests
         var Wave = await Http.GetByteArrayAsync(new Uri(Audio.Url).PathAndQuery, Timeout.Token);
         Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Wave, 0, 4));
         Assert.Equal("succeeded", Events.Last().Text);
+        var Run = Factory.Services.GetRequiredService<RunStore>().Get(RunId)!;
+        var Playback = Assert.Single(Run.Steps, Step => Step.Name == "Satellite playback");
+        var StartedAt = Playback.Metadata!.Value.GetProperty("playbackStartedAt").GetDateTimeOffset();
+        Assert.True(StartedAt >= StartSentAt);
+        var Input = Assert.Single(Run.Steps, Step => Step.Name == "Microphone audio");
+        Assert.True(StartedAt >= Input.Output!.Value.GetProperty("audioInputCompletedAt").GetDateTimeOffset());
         await Call.RequestStream.CompleteAsync();
     }
 
