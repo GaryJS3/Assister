@@ -162,8 +162,8 @@ Local validation: 69 unit tests and 10 C# integration tests pass. New tests cove
 voice delivery, stale/wrong IDs, cancellation/no speech, distinct standalone playback, disconnect,
 invalid audio, and a real in-process authenticated WebSocket multiplexing two devices with the
 same session ID. Existing 12 bridge adapter tests remain applicable (91 total). Live encrypted
-HA Voice transport is preserved. Deployment and physical EchoMuse acceptance are still pending
-for this increment; device inventory confirms MBedroom is online and unmuted, Kitchen muted.
+HA Voice transport is preserved. At this implementation checkpoint deployment and physical
+EchoMuse acceptance were pending; the subsequent verified results are recorded below.
 
 EchoMuse deployment verified: Assister image revision a784345 is running through Dockhand;
 HA Voice bridge image is unchanged at ed8d918. Non-EchoMuse environment fingerprints and all
@@ -196,3 +196,13 @@ capture and playback; post-input STT finalization was 1.044 seconds, model gener
 voice session or error. The user explicitly confirmed hearing the reply and LEDs returning
 to idle afterward. This completes the initial MBedroom physical wake/request/reply acceptance.
 Deterministic HA control, physical cancellation and media coexistence remain acceptance work.
+
+Reboot/reconnect verification: the user identified the spinning-LED startup issue as line
+endings in the EchoMuse fork scripts, with no Assister fix required. Assister recorded the
+MBedroom disconnect at 12:26:35 EDT and reconnect at 12:48:20 EDT on 2026-10-04. A subsequent
+voice request at 13:09:37 EDT completed microphone/STT/shared routing/TTS/playback in 7.677
+seconds without errors (trace `0d56b136-3c42-41d2-a86f-2ba10876a780`). Live verification
+found Online, OwnedByAssister, observed firmware v2.17.0, idle output and no active session
+or last error; Assister health is Healthy. Re-ran all 70 unit and 10 C# integration tests:
+80 passed. Reconnect and post-reconnect voice processing are verified; this reboot occurred
+outside an active request, so mid-request disconnect acceptance remains separate.

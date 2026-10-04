@@ -42,3 +42,10 @@ in 8.348 seconds, returning the session to idle without errors (trace
 `8f213ddb-ee7b-456d-b23c-6757a19087df`). The user confirmed hearing the reply and LEDs
 returning to idle afterward. Initial MBedroom physical wake/request/reply acceptance passed.
 Deterministic HA control, physical cancellation and media coexistence remain acceptance work.
+
+MBedroom also recovered after a physical power cycle and a user-reported EchoMuse script
+line-ending correction. Assister recorded disconnect/reconnect on 2026-10-04 and a later
+successful voice trace (`0d56b136-3c42-41d2-a86f-2ba10876a780`, 7.677 seconds), then reported
+Online/OwnedByAssister with idle output and no active session or error. No Assister code
+change was needed. This verifies reconnect and subsequent voice processing; physical
+disconnect during an active request remains untested.
