@@ -185,3 +185,13 @@ wake/microphone → shared routing → reply remain pending until someone is at 
 HA Voice was already unreachable before this deployment (bridge logs at 15:53 UTC onward show
 Native API network unreachable; app deployment began later). Its configuration, image and
 volume were preserved. No HA integrations, device mute states or controller firmware were changed.
+
+Live MBedroom wake/request verified on 2026-10-04 at 12:24:57 EDT: device-reported
+`hey_jarvis_v0.1` activation, 16 kHz mono microphone capture, Wyoming STT transcript
+"What time is it?", shared coordinator language-model response "It is 12:25 PM EDT.",
+Wyoming TTS, opaque HTTP WAV delivery and matching controller playback completion all
+succeeded. Trace `8f213ddb-ee7b-456d-b23c-6757a19087df` took 8.348 seconds including
+capture and playback; post-input STT finalization was 1.044 seconds, model generation
+0.544 seconds and TTS 0.305 seconds. Runtime returned to Complete/idle with no active
+voice session or error. Audible reply and LED behavior still require explicit confirmation;
+deterministic HA control, physical cancellation and media coexistence remain acceptance work.

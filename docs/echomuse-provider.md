@@ -36,6 +36,9 @@ software mixer, firmware flashing or HA integration changes are included.
 
 Fake-provider and real in-process WebSocket tests cover shared routing, concurrent device
 turns with the same session ID, wrong/stale IDs, cancellation/no speech, WAV delivery,
-standalone stop and cleanup. Physical wake/microphone and media coexistence remain acceptance
-work; a successful backend handshake or controller playback acknowledgment alone does not
-prove an audible reply.
+standalone stop and cleanup. A live MBedroom Hey Jarvis request on 2026-10-04 verified
+microphone → STT → shared coordinator → TTS → HTTP WAV → controller playback completion
+in 8.348 seconds, returning the session to idle without errors (trace
+`8f213ddb-ee7b-456d-b23c-6757a19087df`). Audible reply/LED confirmation, deterministic HA
+control, physical cancellation and media coexistence remain acceptance work; controller
+playback acknowledgment alone does not prove an audible reply.
