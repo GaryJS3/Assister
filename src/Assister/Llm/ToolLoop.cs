@@ -49,7 +49,12 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
         var ControlConfirmed = false;
         for (var Index = 0; Index <= Iterations; Index++)
         {
-            var ModelRequest = new LlmRequest(Messages, Tools, Index == Iterations ? "none" : "auto");
+            var RoundTools = Control && !ControlConfirmed
+                ? Tools.Where(Tool => Tool.Function.Name == "ha_search"
+                    || Tool.Function.Name == "ha_control" && (Context.ObservedEntities.Count > 0 || !Selected.Contains("ha_search"))).ToArray()
+                : Tools;
+            var Choice = Index == Iterations || ControlConfirmed ? "none" : Control && RoundTools.Length > 0 ? "required" : "auto";
+            var ModelRequest = new LlmRequest(Messages, RoundTools, Choice);
             using var Round = LlmDiagnostics.Start(ModelRequest, Configuration, $"LLM Round {Index + 1}");
             var Response = await Model.CompleteAsync(ModelRequest, Timeout.Token);
             LlmDiagnostics.Output(Round, Response);

@@ -65,6 +65,7 @@ public sealed class ToolLoopTests
         var Loop = new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build());
         await Assert.ThrowsAsync<ControlNotConfirmedException>(() => Loop.RespondAsync(new(Message), [], CancellationToken.None));
         Assert.Contains(Model.Requests[0].Tools!, Tool => Tool.Function.Name == "ha_control");
+        Assert.Equal("required", Model.Requests[0].ToolChoice);
     }
 
     [Theory]
@@ -82,7 +83,11 @@ public sealed class ToolLoopTests
         {
             await Assert.ThrowsAsync<ControlNotConfirmedException>(() => Loop.RespondAsync(new("Dim living room lights"), [], CancellationToken.None));
         }
-        else { Assert.Equal("Done.", await Loop.RespondAsync(new("Dim living room lights"), [], CancellationToken.None)); }
+        else
+        {
+            Assert.Equal("Done.", await Loop.RespondAsync(new("Dim living room lights"), [], CancellationToken.None));
+            Assert.Equal("none", Model.Requests.Last().ToolChoice);
+        }
         Assert.Equal(1, Tool.Calls);
     }
 

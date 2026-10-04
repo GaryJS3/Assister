@@ -228,3 +228,10 @@ selection, ranked search ambiguity and accepted-service/no-state-change behavior
 adds --controls --light to verify direct and LLM actions, matching tool traces, independent HA
 state/member reads and cache delivery, with durable original-state backup and restoration.
 Deployment and live control verification are pending at this implementation checkpoint.
+
+First deployment/live check: exact bare-number request and direct off/on/50%/100% controls
+passed independent HA state/cache checks. The LLM still emitted prose without using offered
+tools; the new guard correctly returned failed, and the probe restored the original on/255
+state. Follow-up requires search/control tool use until a confirmed mutation, then disables
+further tool calls for the final reply. Control rounds offer only the relevant search/control
+schemas, with search required before control is offered. Live revalidation remains pending.
