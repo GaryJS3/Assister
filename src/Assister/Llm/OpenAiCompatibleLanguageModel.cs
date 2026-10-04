@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -18,6 +19,9 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
 
     public async Task<LlmResponse> CompleteAsync(LlmRequest Request, CancellationToken CancellationToken)
     {
+        using var Trace = RunTracing.Start("LLM", "Generate a model response from supplied messages and tool definitions.");
+        Trace.Detail("model", Configuration["LanguageModel:Model"]);
+        Trace.Detail("messageCount", Request.Messages.Count);
         using var Timeout = CreateTimeout(CancellationToken);
         using var Message = CreateRequest(Request, false);
         using var Response = await Http.SendAsync(Message, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
@@ -34,12 +38,21 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         var Envelope = Parse(Buffer.ToArray());
         var Choice = SingleChoice(Envelope);
         if (Choice.Message is null) { throw InvalidResponse(); }
-        return BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason);
+        var Result = BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason);
+        Trace.Detail("finishReason", Result.FinishReason);
+        Trace.Detail("toolCount", Result.ToolCalls.Count);
+        Trace.Detail("response", Result.Content);
+        Trace.Detail("toolCalls", JsonSerializer.Serialize(Result.ToolCalls, Json));
+        Trace.Complete();
+        return Result;
     }
 
     public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request,
         [EnumeratorCancellation] CancellationToken CancellationToken)
     {
+        using var Trace = RunTracing.Start("LLM", "Generate a model response from supplied messages and tool definitions.");
+        Trace.Detail("model", Configuration["LanguageModel:Model"]);
+        Trace.Detail("messageCount", Request.Messages.Count);
         using var Timeout = CreateTimeout(CancellationToken);
         using var Message = CreateRequest(Request, true);
         using var Response = await Http.SendAsync(Message, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
@@ -65,8 +78,14 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             EventData.Clear();
             if (Data == "[DONE]")
             {
-                yield return new(Completed: BuildResponse(Text.Length == 0 ? null : Text.ToString(),
-                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish));
+                var Result = BuildResponse(Text.Length == 0 ? null : Text.ToString(),
+                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish);
+                Trace.Detail("finishReason", Result.FinishReason);
+                Trace.Detail("toolCount", Result.ToolCalls.Count);
+                Trace.Detail("response", Result.Content);
+                Trace.Detail("toolCalls", JsonSerializer.Serialize(Result.ToolCalls, Json));
+                Trace.Complete();
+                yield return new(Completed: Result);
                 yield break;
             }
             var Envelope = Parse(Encoding.UTF8.GetBytes(Data));

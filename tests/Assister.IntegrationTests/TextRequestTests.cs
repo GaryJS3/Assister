@@ -34,6 +34,17 @@ public sealed class TextRequestTests
         Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("turn the kitchen light off", Area: "office"));
         Assert.Equal("not-found", (await Response.Content.ReadFromJsonAsync<RequestResult>())!.Outcome);
         Assert.Single(Factory.Fake.Calls);
+        var Runs = JsonDocument.Parse(await Http.GetStringAsync("/api/diagnostics/runs"));
+        var Run = Runs.RootElement.EnumerateArray().Single(Run => Run.GetProperty("steps")[0].GetProperty("details").GetProperty("traceId").GetString() == Result.TraceId.ToString());
+        Assert.Equal(4, Run.GetProperty("steps").GetArrayLength());
+        Assert.All(Run.GetProperty("steps").EnumerateArray(), Step =>
+        {
+            Assert.False(Step.GetProperty("active").GetBoolean());
+            Assert.True(Step.GetProperty("durationMilliseconds").GetDouble() >= 0);
+            Assert.False(string.IsNullOrWhiteSpace(Step.GetProperty("details").GetProperty("reason").GetString()));
+        });
+        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync("/api/diagnostics/runs/" + Run.GetProperty("id").GetString())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync("/api/diagnostics/runs/missing")).StatusCode);
     }
 
     private sealed class TestApplication(string Directory) : WebApplicationFactory<Program>

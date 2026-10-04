@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using System.Diagnostics;
 using Assister.Contracts;
 using Assister.Intents;
@@ -10,12 +11,19 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
 {
     public async Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
     {
+        using var Run = RunTracing.Start("Request", "Process a text request through direct intent routing.");
         var TraceId = Guid.NewGuid();
+        Run.Detail("traceId", TraceId);
+        Run.Detail("message", Request.Message);
+        Run.Detail("satellite", Request.SatelliteId);
         var Clock = Stopwatch.StartNew();
         using var Scope = Logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = TraceId, ["SatelliteId"] = Request.SatelliteId });
         EntityResolutionResult? Resolution = null;
         RequestResult Result(string Text, string Outcome, string HandledBy = "direct-intent")
         {
+            Run.Detail("response", Text);
+            Run.Detail("handledBy", HandledBy);
+            Run.Complete(Outcome);
             Logger.LogInformation("Request completed: {Outcome}, {DurationMilliseconds} ms.", Outcome, Clock.Elapsed.TotalMilliseconds);
             return new(Text, Request.ConversationId, HandledBy, TraceId, Outcome,
                 Resolution?.Entities.Select(Entity => Entity.EntityId).ToArray() ?? [], Resolution?.Confidence, Clock.Elapsed.TotalMilliseconds);
@@ -27,7 +35,13 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
-        var Intent = Classifier.Classify(Request.Message);
+        IntentMatch? Intent;
+        using (var Step = RunTracing.Start("Intent classification", "Match supported deterministic commands before selecting a device."))
+        {
+            Intent = Classifier.Classify(Request.Message);
+            Step.Detail("intent", Intent?.Kind);
+            Step.Complete(Intent is null ? "unmatched" : "matched");
+        }
         if (Intent is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
         if (Intent.Kind == DirectIntentKind.SetBrightness && Intent.BrightnessPercent is not (>= 0 and <= 100))
         {
@@ -36,7 +50,13 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
 
         var Snapshot = Cache.Snapshot();
         if (Snapshot.IsStale) { return Result("Home Assistant is unavailable. Please try again when it reconnects.", "unavailable"); }
-        Resolution = Resolver.Resolve(Intent, Request.Area, Snapshot);
+        using (var Step = RunTracing.Start("Entity resolution", "Resolve the named device against the current Home Assistant cache and requested area."))
+        {
+            Resolution = Resolver.Resolve(Intent, Request.Area, Snapshot);
+            Step.Detail("entities", string.Join(", ", Resolution.Entities.Select(Entity => Entity.EntityId)));
+            Step.Detail("confidence", Resolution.Confidence);
+            Step.Complete(Resolution.Entities.Count == 0 ? "unresolved" : "resolved");
+        }
         if (Resolution.Entities.Count == 0)
         {
             return Result(Resolution.Alternatives.Count > 0 ? "Which device do you mean? Please use its full name or a more specific area." : "I could not find that device in the requested area.",
@@ -45,7 +65,9 @@ public sealed class RequestCoordinator(IntentClassifier Classifier, IEntityResol
 
         try
         {
+            using var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state.");
             var Response = await Handler.ExecuteAsync(Intent, Resolution, CancellationToken);
+            Step.Complete(Response.Outcome);
             return Result(Response.Response, Response.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }

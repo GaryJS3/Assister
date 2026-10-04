@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using Assister.Persistence;
 using Assister.Modules.HomeAssistant;
 using Assister.Contracts;
@@ -28,7 +29,14 @@ Builder.Services.AddTransient<DirectIntentHandler>();
 Builder.Services.AddTransient<IRequestCoordinator, RequestCoordinator>();
 Builder.Services.AddHttpClient<ILanguageModel, OpenAiCompatibleLanguageModel>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+Builder.Services.AddSingleton<RunStore>();
+Builder.Services.AddHttpClient("diagnostics").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+Builder.Services.AddSingleton<ComponentHealth>();
+Builder.Services.AddHostedService(Services => Services.GetRequiredService<ComponentHealth>());
 var App = Builder.Build();
+App.UseDefaultFiles();
+App.UseStaticFiles();
+App.MapDashboard();
 await using (var Scope = App.Services.CreateAsyncScope())
 {
     var Database = Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
@@ -89,7 +97,7 @@ App.MapGet("/api/homeassistant/entities", (string? Query, int? Limit, HomeAssist
         Entities
     });
 });
-App.MapGet("/", () => Results.Content("Assister is running. See /health and /api/status.", "text/plain"));
+
 await App.RunAsync();
 
 public partial class Program

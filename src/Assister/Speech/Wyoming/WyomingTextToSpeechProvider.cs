@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using Assister.Contracts;
 using System.Runtime.CompilerServices;
 
@@ -8,6 +9,7 @@ public sealed class WyomingTextToSpeechProvider(WyomingEndpoint Endpoint) : ITex
     public async IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text,
         TextToSpeechOptions Options, [EnumeratorCancellation] CancellationToken CancellationToken)
     {
+        using var Trace = RunTracing.Start("TTS", "Invoke the Wyoming provider and consume its response.");
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         Timeout.CancelAfter(TimeSpan.FromSeconds(Endpoint.TimeoutSeconds));
         var Token = Timeout.Token;
@@ -52,6 +54,7 @@ public sealed class WyomingTextToSpeechProvider(WyomingEndpoint Endpoint) : ITex
                 {
                     throw new InvalidDataException("Wyoming audio stopped before start.");
                 }
+                Trace.Complete();
                 yield break;
             }
             else if (Event.Type == "error")

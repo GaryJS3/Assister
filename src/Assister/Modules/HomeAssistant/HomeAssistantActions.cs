@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -23,6 +24,9 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
 {
     public async Task ControlAsync(HomeAssistantControl Control, CancellationToken CancellationToken)
     {
+        using var Trace = RunTracing.Start("Tool · Home Assistant", "Send a validated service action to the resolved devices; never retry state-changing calls.");
+        Trace.Detail("action", Control.Action);
+        Trace.Detail("entities", string.Join(", ", Control.EntityIds));
         var Snapshot = Cache.Snapshot();
         if (Connection.Status != "Connected" || Snapshot.IsStale)
         {
@@ -74,5 +78,6 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
         {
             throw new InvalidOperationException("Home Assistant rejected the command.");
         }
+        Trace.Complete();
     }
 }

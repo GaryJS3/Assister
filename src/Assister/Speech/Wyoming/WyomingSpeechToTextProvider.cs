@@ -1,3 +1,4 @@
+using Assister.Diagnostics;
 using Assister.Contracts;
 using System.Text;
 
@@ -8,6 +9,7 @@ public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : ISpe
     public async Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio,
         SpeechToTextOptions Options, CancellationToken CancellationToken)
     {
+        using var Trace = RunTracing.Start("STT", "Invoke the Wyoming provider and consume its response.");
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         Timeout.CancelAfter(TimeSpan.FromSeconds(Endpoint.TimeoutSeconds));
         var Token = Timeout.Token;
@@ -49,6 +51,7 @@ public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : ISpe
         {
             if (Event.Type == "transcript")
             {
+                Trace.Complete();
                 return new(Event.Data.GetProperty("text").GetString() ?? "",
                     Event.Data.TryGetProperty("language", out var Language) ? Language.GetString() : Options.Language);
             }
@@ -58,6 +61,7 @@ public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : ISpe
             }
             if (Event.Type == "transcript-stop")
             {
+                Trace.Complete();
                 return new(Partial.ToString(), Options.Language);
             }
             if (Event.Type == "error")
