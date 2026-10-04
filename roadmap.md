@@ -6,10 +6,10 @@ Updated: October 3, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md)
 
 Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use native C# for Wyoming and SQLite/EF Core for persistence. Prefer deterministic intents over LLM calls. Retrieve only relevant context and expose only relevant tools. Home Assistant remains an external automation/data platform. Separate voice sessions, conversations and trace IDs.
 
-## Next: deployment verification, then LLM and tools
+## Next: LLM and tools
 
-- Deploy the tested HA/direct-intent implementation and verify live cache, area metadata, state events, direct queries and one explicitly authorized light control/restoration.
-- The shared text coordinator, parser, resolver and action handlers are implemented locally. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
+- HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
+- The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
 - Implement milestone 5: bounded OpenAI-compatible completion/streaming, selected tools and a validating broker. Keep direct intents independent of LLM availability.
 - Recheck HA authentication after the user's credential rotation. Registry metadata currently refreshes on reconnect.
 ## Remaining milestones
@@ -30,6 +30,7 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 - Keep the text and voice paths on the same coordinator. Retain response text on TTS failure; do not invoke the LLM on STT failure.
 - Repair the Dockhand agent's build configuration, restore Git-backed rebuilds and verify revision, image, container and live readiness separately.
 - Reuse the C# service probe after endpoint, credential, firewall or deployment changes. Do not log raw secret-bearing API responses.
+- Increase host disk headroom before further image builds; the latest deployment left about 126 MB available on the root filesystem.
 
 ## Final MVP verification
 
