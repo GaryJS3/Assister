@@ -81,8 +81,7 @@ public static class SatelliteEndpoints
         });
         App.MapPost("/api/satellites/{id}/stop", async (string Id, SatelliteManager Manager, CancellationToken Token) =>
         {
-            if (!Manager.State(Id).Capabilities.AnnouncementPlayback || !Manager.TryGet(Id, out var Connection)) { return Results.Conflict(); }
-            await Connection!.SendEventAsync(new("stop-playback"), Token);
+            if (!await Manager.StopAsync(Id, Token)) { return Results.Conflict(); }
             return Results.Accepted();
         });
         App.MapPost("/api/satellites/{id}/retry-ownership", async (string Id, SatelliteManager Manager, CancellationToken Token) =>

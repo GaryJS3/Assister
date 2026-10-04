@@ -27,6 +27,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     {
         lock (Gate)
         {
+            // Pipeline cleanup may finish just before the provider releases its old turn.
+            if (Voice is { } Previous && (Previous.IsCancelled || Previous.PipelineFinished) && !Manager.IsBusy(SatelliteId)) { Voice = null; }
             if (Voice is not null || Announcement is not null || Manager.IsBusy(SatelliteId)) { return null; }
             return Voice = new(this, SessionId, WakeWord, Token);
         }
@@ -38,7 +40,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         lock (Gate)
         {
             if (Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
-            if (Text(Message, "requestId") is { } Request && Announcement?.Id == Request)
+            if (Text(Message, "requestId") is { } Request && Announcement?.Id == Request && !Announcement.StopRequested)
             {
                 var Kind = Text(Message, "type");
                 if (Kind == "play_started")
@@ -74,7 +76,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         }
         catch
         {
-            await TryStopAsync(new { type = "stop", requestId = Operation.Id, deviceId = DeviceId });
+            if (!Operation.StopRequested) { await TryStopAsync(new { type = "stop", requestId = Operation.Id, deviceId = DeviceId }); }
             throw;
         }
         finally { lock (Gate) { if (ReferenceEquals(Announcement, Operation)) { Announcement = null; } } Audio.Remove(AudioId); }
@@ -83,13 +85,33 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     {
         if (Event.Type != "stop-playback") { return; }
         object? Command;
+        Turn? CancelledTurn = null;
+        Playback? CancelledPlayback = null;
         lock (Gate)
         {
-            Command = Announcement is { } Current ? new { type = "stop", requestId = Current.Id, deviceId = DeviceId } : null;
+            Command = null;
+            if (Announcement is { StopRequested: false } Current)
+            {
+                Current.StopRequested = true;
+                CancelledPlayback = Current;
+                Command = new { type = "stop", requestId = Current.Id, deviceId = DeviceId };
+            }
             if (Command is null && Voice is { } Active)
-            { Command = new { type = "turn_cancel", sessionId = Active.SessionId, deviceId = DeviceId }; Active.Cancel(); }
+            {
+                if (Active.ControllerEnded) { return; }
+                Active.MarkStopped();
+                CancelledTurn = Active;
+                Command = new { type = "turn_cancel", sessionId = Active.SessionId, deviceId = DeviceId };
+            }
         }
-        if (Command is not null) { await Send(Command, Token); }
+        try { if (Command is not null) { await Send(Command, Token); } }
+        finally
+        {
+            CancelledTurn?.Cancel();
+            CancelledPlayback?.Done.TrySetCanceled();
+            if (Command is not null)
+                Manager.Update(Id, State => State with { CurrentPlaybackState = "Assister output idle" });
+        }
     }
     private async Task TryStopAsync(object Command)
     {
@@ -105,7 +127,10 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     }
     public static string? Text(JsonElement Message, string Key) => Message.TryGetProperty(Key, out var Value) && Value.ValueKind == JsonValueKind.String ? Value.GetString() : null;
     private sealed record Playback(string Id, Guid? Trace)
-    { public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously); }
+    {
+        public bool StopRequested { get; set; }
+        public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
 
     public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, IDisposable
     {
@@ -134,11 +159,14 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         public VoiceActivation Activation { get; }
         public bool OwnsEndpointing => true;
         public CancellationToken Token => Lifetime.Token;
+        public bool IsCancelled => Lifetime.IsCancellationRequested;
+        public bool PipelineFinished { get; private set; }
         public bool NoReply { get; private set; }
         public bool ControllerEnded { get; private set; }
         public Task<string> InputEnded => End.Task;
         public bool Handle(JsonElement Message)
         {
+            if (Lifetime.IsCancellationRequested || ControllerEnded) { return false; }
             switch (Text(Message, "type"))
             {
                 case "audio":
@@ -158,7 +186,12 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
                     if (Reason != "speech_end") { NoReply = true; Cancel(); }
                     else { Input.Writer.TryComplete(); }
                     return true;
-                case "turn_cancel": ControllerEnded = true; Cancel(); return true;
+                case "turn_cancel":
+                    ControllerEnded = true;
+                    Owner.StateManager.Update(SatelliteId, State => State with { CurrentPlaybackState = "Assister output idle" });
+                    Owner.StateManager.Record(SatelliteId, "Controller cancelled turn", Text(Message, "reason"), VoiceSessionId, RunId);
+                    Cancel();
+                    return true;
                 case "turn_finished": ControllerEnded = true; return true;
                 case "play_started":
                     if (!PlaybackStarted)
@@ -180,7 +213,12 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
                 default: return false;
             }
         }
-        public void Cancel() { Lifetime.Cancel(); Input.Writer.TryComplete(); }
+        public void Cancel()
+        {
+            try { Lifetime.Cancel(); } catch (ObjectDisposedException) { }
+            Input.Writer.TryComplete();
+        }
+        public void MarkStopped() { ControllerEnded = true; }
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => Input.Reader.ReadAllAsync(Token);
         public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
         {
@@ -204,6 +242,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             VoiceSessionId ??= Event.SessionId;
             RunId = RunTracing.RunId;
             if (Event.Type == "response") { Response = Event.Text ?? ""; }
+            if (Event.Type == "finished") { PipelineFinished = true; }
             return Task.CompletedTask;
         }
         public Task SendErrorAsync(CancellationToken Token) => Owner.WriteAsync(new { type = "turn_error", sessionId = SessionId, deviceId = Owner.Device, message = "Assister could not complete this request." }, Token);

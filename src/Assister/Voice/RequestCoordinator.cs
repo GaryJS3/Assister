@@ -10,7 +10,7 @@ namespace Assister.Voice;
 
 public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
     HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
-    IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null) : IRequestCoordinator
+    IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null, Assister.Satellites.SatelliteManager? Satellites = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -42,6 +42,11 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
+        if (StopCommands.IsStop(Request.Message))
+        {
+            var Stopped = Satellites is not null && await Satellites.StopAsync(Request.SatelliteId, CancellationToken);
+            return Result(Stopped ? "Stopped." : "There is no connected satellite to stop.", Stopped ? "succeeded" : "unavailable", "satellite-stop");
+        }
         if (Timers is not null && await Timers.TryHandleAsync(Request, CancellationToken) is { } TimerResponse)
         {
             return Result(TimerResponse, "succeeded", "timer");

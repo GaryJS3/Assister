@@ -15,6 +15,28 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     public EntityResolutionResult Resolve(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
     {
         var Target = LanguageParser.Noun(Intent.Target);
+        if (Intent.Kind == DirectIntentKind.SetBrightness
+            && Target.Contains(" and ", StringComparison.Ordinal))
+        {
+            // Preserve real names containing "and" before interpreting a target list.
+            var Whole = ResolveSingle(Intent, SatelliteArea, Snapshot);
+            if (Whole.Entities.Count > 0) { return Whole; }
+            var Parts = Target.Split(" and ", StringSplitOptions.None);
+            if (Parts.Length > 8 || Parts.Any(string.IsNullOrWhiteSpace)) { return new([], 0, []); }
+            var Resolved = Parts.Select(Part => ResolveSingle(Intent with { Target = LanguageParser.Noun(Part) }, SatelliteArea, Snapshot)).ToArray();
+            if (Resolved.Any(Result => Result.Entities.Count == 0))
+                return new([], 0, Resolved.Where(Result => Result.Entities.Count == 0).SelectMany(Result => Result.Alternatives)
+                    .DistinctBy(Entity => Entity.EntityId).Take(5).ToArray(), Intent.ExplicitArea, Intent.TargetDomain);
+            var Entities = Resolved.SelectMany(Result => Result.Entities).DistinctBy(Entity => Entity.EntityId).ToArray();
+            return Entities.Length <= 64 ? new(Entities, Resolved.Min(Result => Result.Confidence), [], Intent.ExplicitArea,
+                Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null)) : new([], 0, []);
+        }
+        return ResolveSingle(Intent, SatelliteArea, Snapshot);
+    }
+
+    private EntityResolutionResult ResolveSingle(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
+    {
+        var Target = LanguageParser.Noun(Intent.Target);
         var Candidates = Snapshot.Entities.Where(Entity => Eligible(Entity, Intent.Kind)).ToArray();
         var Area = Intent.ExplicitArea;
         var Domain = Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null);

@@ -26,11 +26,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             Activation.Complete();
             Satellites.Record(Satellite.SatelliteId, "Voice session created", Observed?.WakeWord, Session.Id);
         }
-        if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id)) { Run.Complete("busy"); return new(Session, null, "busy"); }
+        using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+        if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id, Timeout)) { Run.Complete("busy"); return new(Session, null, "busy"); }
         Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.CapturingAudio);
         RequestResult? Result = null;
         var Phase = "stt-failed";
-        using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         Timeout.CancelAfter(TimeSpan.FromMinutes(3));
         try
         {
@@ -82,6 +82,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 RunTracing.Transcript(Transcript.Text);
             }
             if (string.IsNullOrWhiteSpace(Transcript.Text)) { Run.Complete("no-speech"); return new(Session, null, "no-speech"); }
+            if (StopCommands.IsStop(Transcript.Text))
+            {
+                await Satellites.StopAsync(Satellite.SatelliteId, Timeout.Token);
+                Timeout.Token.ThrowIfCancellationRequested();
+            }
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Routing);
             await Satellite.SendEventAsync(new("transcribed", Transcript.Text, Session.Id), Timeout.Token);
             await Satellite.SendEventAsync(new("processing", SessionId: Session.Id), Timeout.Token);
@@ -130,11 +135,12 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             Run.Complete(Result.Outcome);
             return new(Session, Result, Result.Outcome);
         }
-        catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested || Satellites.IsStopRequested(Session.Id))
         {
             Run.Complete("cancelled");
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Cancelled);
-            throw;
+            if (CancellationToken.IsCancellationRequested) { throw; }
+            return new(Session, Result, "cancelled");
         }
         catch (Exception Error) when (Error is IOException or System.Net.Sockets.SocketException or OperationCanceledException or InvalidOperationException)
         {

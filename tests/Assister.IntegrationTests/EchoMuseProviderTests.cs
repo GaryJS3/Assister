@@ -87,6 +87,33 @@ public sealed class EchoMuseProviderTests
         Assert.Equal(2, Targets.Count); Assert.Equal(1, Logins); Assert.Equal(1, Connections);
         while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
         Assert.Equal(VoiceOwnership.OwnedByAssister, Manager.State("echomuse-first").VoiceOwnership);
+        // Cancel through the public API during capture, then prove the next turn can play.
+        await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = "capture-to-cancel",
+            audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
+        while (Manager.ActiveSessionCount != 1) await Task.Delay(10, Timeout.Token);
+        using var Stop = await Http.PostAsync("/api/satellites/echomuse-first/stop", null, Timeout.Token);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, Stop.StatusCode);
+        var Cancel = await Responses.Reader.ReadAsync(Timeout.Token);
+        Assert.Equal("turn_cancel", Cancel.GetProperty("type").GetString());
+        Assert.Equal("capture-to-cancel", Cancel.GetProperty("sessionId").GetString());
+        while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
+        await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = "playback-to-cancel",
+            audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
+        await Send(Socket, new { type = "audio", deviceId = "first", sessionId = "playback-to-cancel", data = "AAA=" });
+        await Send(Socket, new { type = "audio_end", deviceId = "first", sessionId = "playback-to-cancel", reason = "speech_end" });
+        var NextResponse = await Responses.Reader.ReadAsync(Timeout.Token);
+        Assert.Equal("turn_response", NextResponse.GetProperty("type").GetString());
+        var NextAudioUrl = new Uri(NextResponse.GetProperty("audioUrl").GetString()!).PathAndQuery;
+        await Send(Socket, new { type = "play_started", deviceId = "first", sessionId = "playback-to-cancel" });
+        using var StopPlayback = await Http.PostAsync("/api/satellites/echomuse-first/stop", null, Timeout.Token);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, StopPlayback.StatusCode);
+        var CancelPlayback = await Responses.Reader.ReadAsync(Timeout.Token);
+        Assert.Equal("turn_cancel", CancelPlayback.GetProperty("type").GetString());
+        Assert.Equal("playback-to-cancel", CancelPlayback.GetProperty("sessionId").GetString());
+        while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
+        using var RemovedAudio = await Http.GetAsync(NextAudioUrl, Timeout.Token);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, RemovedAudio.StatusCode);
+        Assert.Equal("Assister output idle", Manager.State("echomuse-first").CurrentPlaybackState);
         await Factory.DisposeAsync(); Socket.Abort();
         await Controller.StopAsync(Timeout.Token);
     }

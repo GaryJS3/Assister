@@ -148,6 +148,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
             {
                 await using var Scope = Scopes.CreateAsyncScope();
                 var Result = await Scope.ServiceProvider.GetRequiredService<VoicePipeline>().RunAsync(Turn, null, Turn.Token);
+                if (Result.Outcome == "cancelled") { return; }
                 if (Result.Request is null || Result.Outcome is "stt-failed" or "tts-failed" or "processing-failed" or "playback-failed")
                 {
                     if (await Turn.InputEnded.WaitAsync(Turn.Token) == "speech_end" && !Turn.NoReply && !Turn.ControllerEnded)

@@ -15,6 +15,56 @@ namespace Assister.IntegrationTests;
 public sealed class TextRequestTests
 {
     [Fact]
+    public async Task TextStopBypassesBusyConversationAndCancelsOnlyItsSatellite()
+    {
+        await using var Factory = new TestApplication(Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()));
+        using var Http = Factory.CreateClient();
+        var Manager = Factory.Services.GetRequiredService<Assister.Satellites.SatelliteManager>();
+        var Satellite = new StopSatellite();
+        Manager.Register(Satellite);
+        using var Active = new CancellationTokenSource();
+        using var Other = new CancellationTokenSource();
+        var Session = Guid.NewGuid();
+        var OtherSession = Guid.NewGuid();
+        Manager.BeginSession("test", Session, Active);
+        Manager.BeginSession("other", OtherSession, Other);
+        var Gate = Factory.Services.GetRequiredService<Assister.Conversations.ConversationLocks>().For("test");
+        await Gate.WaitAsync();
+        try
+        {
+            using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("Please stop."), Timeout.Token);
+            var Result = await Response.Content.ReadFromJsonAsync<RequestResult>(Timeout.Token);
+            Assert.Equal("succeeded", Result!.Outcome);
+            Assert.Equal("satellite-stop", Result.HandledBy);
+            Assert.True(Active.IsCancellationRequested);
+            Assert.False(Other.IsCancellationRequested);
+            Assert.Equal("stop-playback", Assert.Single(Satellite.Events).Type);
+            Assert.Empty(Factory.Fake.Calls);
+        }
+        finally
+        {
+            Gate.Release();
+            Manager.EndSession("test", Session);
+            Manager.EndSession("other", OtherSession);
+        }
+    }
+
+    private sealed class StopSatellite : Assister.Satellites.ISatelliteConnection
+    {
+        public string SatelliteId => "test";
+        public string Name => "Test";
+        public string? Area => null;
+        public List<Assister.Satellites.SatelliteEvent> Events { get; } = [];
+        public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new NotSupportedException();
+        public Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) => throw new NotSupportedException();
+        public Task SendEventAsync(Assister.Satellites.SatelliteEvent Event, CancellationToken Token)
+        {
+            Events.Add(Event);
+            return Task.CompletedTask;
+        }
+    }
+    [Fact]
     public async Task TextEndpointExecutesDirectControlsAndRejectsInvalidRequests()
     {
         using var Parent = new Activity("shared-http-parent").Start();

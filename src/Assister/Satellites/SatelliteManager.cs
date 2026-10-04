@@ -26,6 +26,12 @@ public sealed class SatelliteManager
     public SatelliteManager(IConfiguration? Configuration = null) => Sanitizer = new(Configuration);
     private readonly ConcurrentDictionary<string, ISatelliteConnection> Connections = new();
     private readonly ConcurrentDictionary<string, Guid> Sessions = new();
+    private sealed class SessionCancellation(CancellationTokenSource Source)
+    {
+        public CancellationTokenSource Source { get; } = Source;
+        public volatile bool StopRequested;
+    }
+    private readonly ConcurrentDictionary<Guid, SessionCancellation> Cancellations = new();
     private readonly ConcurrentDictionary<string, SatelliteRuntimeState> Runtime = new();
     private readonly ConcurrentDictionary<string, ConcurrentQueue<SatelliteHistoryEvent>> History = new();
     public int Count => Connections.Count;
@@ -47,10 +53,32 @@ public sealed class SatelliteManager
             CurrentVoiceSessionId = null, Activity = VoiceSessionState.Disconnected, CurrentPlaybackState = "Unknown" }, false);
         Record(Connection.SatelliteId, "Disconnected");
     }
-    public bool BeginSession(string Satellite, Guid Session) => Sessions.TryAdd(Satellite, Session);
+    public bool BeginSession(string Satellite, Guid Session, CancellationTokenSource? Cancellation = null)
+    {
+        if (Cancellation is not null) { Cancellations[Session] = new(Cancellation); }
+        if (Sessions.TryAdd(Satellite, Session)) { return true; }
+        Cancellations.TryRemove(Session, out _);
+        return false;
+    }
+    public async Task<bool> StopAsync(string Id, CancellationToken Token)
+    {
+        if (!TryGet(Id, out var Connection)) { return false; }
+        var Session = Sessions.GetValueOrDefault(Id);
+        Cancellations.TryGetValue(Session, out var Cancellation);
+        if (Cancellation is not null) { Cancellation.StopRequested = true; }
+        Record(Id, "Stop requested", SessionId: Session == Guid.Empty ? null : Session);
+        try { await Connection!.SendEventAsync(new("stop-playback"), Token); }
+        finally
+        {
+            try { Cancellation?.Source.Cancel(); } catch (ObjectDisposedException) { }
+        }
+        return true;
+    }
     public bool IsBusy(string Satellite) => Sessions.ContainsKey(Satellite);
+    public bool IsStopRequested(Guid Session) => Cancellations.TryGetValue(Session, out var Cancellation) && Cancellation.StopRequested;
     public void EndSession(string Satellite, Guid Session)
     {
+        Cancellations.TryRemove(Session, out _);
         if (((ICollection<KeyValuePair<string, Guid>>)Sessions).Remove(new(Satellite, Session)))
             Update(Satellite, State => State with { CurrentVoiceSessionId = null }, false);
     }
@@ -79,14 +107,21 @@ public sealed class SatelliteManager
     {
         if (!State(Id).Capabilities.AnnouncementPlayback || !TryGet(Id, out var Connection)) { return false; }
         var Session = Guid.NewGuid();
-        if (!BeginSession(Id, Session)) { return false; }
+        using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        if (!BeginSession(Id, Session, Timeout)) { return false; }
         try
         {
-            using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
             Timeout.CancelAfter(TimeSpan.FromSeconds(60));
             await Connection!.SendEventAsync(new("announcement", Text, Session), Timeout.Token);
             await Connection.SendAudioAsync(Tts.SynthesizeAsync(Text, new(), Timeout.Token), Timeout.Token);
             Record(Id, "Announcement completed", SessionId: Session);
+            return true;
+        }
+        catch (Exception Error) when (Error is OperationCanceledException or IOException && !Token.IsCancellationRequested
+            && Cancellations.TryGetValue(Session, out var Cancellation) && Cancellation.StopRequested)
+        {
+            // Explicit dismissal consumes the notification; timers must not immediately replay it.
+            Record(Id, "Announcement cancelled", SessionId: Session);
             return true;
         }
         catch (Exception)

@@ -71,6 +71,10 @@ public sealed class IntentClassifier : IIntentEngine
     public static string Normalize(string Message)
     {
         var Text = LanguageParser.Normalize(Message);
+        foreach (var Prefix in new[] { "can you ", "could you ", "would you " })
+        {
+            if (Text.StartsWith(Prefix, StringComparison.Ordinal)) { Text = Text[Prefix.Length..]; break; }
+        }
         if (Text.StartsWith("please ", StringComparison.Ordinal)) { Text = Text[7..]; }
         if (Text.EndsWith(" please", StringComparison.Ordinal)) { Text = Text[..^7]; }
         return Text;
@@ -81,6 +85,7 @@ public sealed class IntentClassifier : IIntentEngine
     private static IntentMatch Slots(DirectIntentKind Kind, string Target, int? Percent = null)
     {
         Target = LanguageParser.Noun(Target);
+        if (Target.StartsWith("both ", StringComparison.Ordinal)) { Target = LanguageParser.Noun(Target[5..]); }
         var AreaMatch = Pattern(Target, @"^(?<target>.+) in (?<area>.+)$");
         return AreaMatch.Success
             ? new(Kind, LanguageParser.Noun(AreaMatch.Groups["target"].Value), Percent, LanguageParser.Noun(AreaMatch.Groups["area"].Value))

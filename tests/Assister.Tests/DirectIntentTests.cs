@@ -9,6 +9,51 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Fact]
+    public async Task ExactLiveTranscriptControlsTwoNamedLightsWithoutAreaAssignments()
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"light.living_room_lights","new_state":{"entity_id":"light.living_room_lights","state":"on","attributes":{"friendly_name":"Living Room Lights","supported_color_modes":["brightness"]}}}"""));
+        Cache.ApplyEvent(Json("""{"entity_id":"light.kitchen_lights","new_state":{"entity_id":"light.kitchen_lights","state":"on","attributes":{"friendly_name":"Kitchen Lights","supported_color_modes":["brightness"]}}}"""));
+        var Result = await Coordinator.ProcessAsync(new(" Can you set both the living room light and kitchen light to 100?"), CancellationToken.None);
+        Assert.Equal("succeeded", Result.Outcome);
+        var Call = Assert.Single(Fake.Calls);
+        Assert.Equal(["light.living_room_lights", "light.kitchen_lights"], Call.EntityIds);
+        Assert.Equal(100, Call.BrightnessPercent);
+    }
+
+    [Fact]
+    public async Task ARealNameContainingAndIsNotSplit()
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"light.group","new_state":{"entity_id":"light.group","state":"on","attributes":{"friendly_name":"Dining and kitchen lights","supported_color_modes":["brightness"]}}}"""));
+        var Result = await Coordinator.ProcessAsync(new("set dining and kitchen lights to 40 percent"), CancellationToken.None);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal(["light.group"], Assert.Single(Fake.Calls).EntityIds);
+    }
+    [Theory]
+    [InlineData("Can you set both light.desk and kitchen counter to 100?", 100)]
+    [InlineData("set reading lamp and kitchen counter to 40 percent", 40)]
+    public async Task CoordinatedBrightnessResolvesEveryTargetBeforeOneControl(string Text, int Percent)
+    {
+        var (Coordinator, Fake, _) = Create();
+        var Result = await Coordinator.ProcessAsync(new(Text), CancellationToken.None);
+        Assert.Equal("succeeded", Result.Outcome);
+        var Call = Assert.Single(Fake.Calls);
+        Assert.Equal(Percent, Call.BrightnessPercent);
+        Assert.Equal(["light.desk", "light.kitchen_counter"], Call.EntityIds);
+        Assert.Equal("direct-intent", Result.HandledBy);
+    }
+
+    [Theory]
+    [InlineData("set reading lamp and missing light to 40 percent", "not-found")]
+    [InlineData("set reading lamp and desk light to 40 percent", "ambiguous")]
+    public async Task AnUnresolvedListMemberPreventsAllControls(string Text, string Outcome)
+    {
+        var (Coordinator, Fake, _) = Create();
+        Assert.Equal(Outcome, (await Coordinator.ProcessAsync(new(Text), CancellationToken.None)).Outcome);
+        Assert.Empty(Fake.Calls);
+    }
     [Theory]
     [InlineData("Turn the kitchen light off.", DirectIntentKind.TurnOff, "kitchen light")]
     [InlineData("please turn on the office switch", DirectIntentKind.TurnOn, "office switch")]

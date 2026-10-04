@@ -40,7 +40,7 @@ async function renderDetail() {
         panel.append(facts({State:r.currentPlaybackState, Volume:r.currentVolume == null ? null : `${Math.round(r.currentVolume * 100)}%`, Muted:r.muteState}));
         const message = element('textarea'); message.value = 'This is an Assister test announcement.'; message.maxLength = 500; message.setAttribute('aria-label', 'Test announcement message'); panel.append(message);
         panel.append(action('Play test announcement', () => api(path + '/announcement', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:message.value})}), supported && r.capabilities.announcementPlayback && !r.currentVoiceSessionId));
-        panel.append(action('Stop announcement', () => api(path + '/stop', {method:'POST'}), supported && r.capabilities.announcementPlayback));
+        panel.append(action('Stop / cancel', () => api(path + '/stop', {method:'POST'}), r.connectionState === 'Online'));
         const volume = element('input'); volume.type = 'range'; volume.min = '0'; volume.max = '100'; volume.value = Math.round((r.currentVolume ?? 0.6) * 100); volume.setAttribute('aria-label', 'Volume percent'); volume.disabled = !supported || !r.capabilities.volumeControl; panel.append(volume);
         panel.append(action('Set volume', () => api(path + '/volume', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({volume:Number(volume.value)/100})}), supported && r.capabilities.volumeControl));
     } else if (selectedTab === 'Configuration') {

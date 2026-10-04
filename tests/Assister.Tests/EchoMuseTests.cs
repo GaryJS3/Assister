@@ -11,6 +11,69 @@ namespace Assister.Tests;
 
 public sealed class EchoMuseTests
 {
+    [Theory]
+    [InlineData("processing", false)]
+    [InlineData("synthesis", false)]
+    [InlineData("playback", false)]
+    [InlineData("playback", true)]
+    public async Task StopCancelsEachOutputStageAndLateEventsCannotRestartPlayback(string Stage, bool Button)
+    {
+        using var Audio = new VoiceAudioStore();
+        var Manager = new SatelliteManager();
+        var Reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var Messages = new System.Collections.Concurrent.ConcurrentQueue<JsonElement>();
+        var Device = new EchoMuseConnection("device", "logical", "Bedroom", null, (Value, _) =>
+        {
+            var Json = Message(Value);
+            Messages.Enqueue(Json);
+            if (EchoMuseConnection.Text(Json, "type") == "turn_response") { Reached.TrySetResult(); }
+            return Task.CompletedTask;
+        }, Audio, Config, Manager);
+        Manager.Register(Device);
+        using var Turn = Device.Start("session", null, CancellationToken.None)!;
+        var Work = new VoicePipeline(new Stt(), new StageTts(Stage, Reached), new StageCoordinator(Stage, Reached),
+            Manager, Config).RunAsync(Turn, null, Turn.Token);
+        Device.Handle(Message(new { type = "audio", sessionId = "session", deviceId = "device", data = "AAA=" }));
+        Device.Handle(Message(new { type = "audio_end", sessionId = "session", deviceId = "device", reason = "speech_end" }));
+        await Reached.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        if (Button) { Device.Handle(Message(new { type = "turn_cancel", sessionId = "session", deviceId = "device" })); }
+        else { await Manager.StopAsync("logical", CancellationToken.None); }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Work.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(0, Manager.ActiveSessionCount);
+        Assert.Equal(VoiceSessionState.Cancelled, Manager.State("logical").Activity);
+        Assert.False(Device.Handle(Message(new { type = "play_started", sessionId = "session", deviceId = "device" })));
+        Assert.False(Device.Handle(Message(new { type = "play_finished", sessionId = "session", deviceId = "device" })));
+        if (Stage == "playback")
+        {
+            var Response = Messages.Single(Item => EchoMuseConnection.Text(Item, "type") == "turn_response");
+            var AudioId = Guid.Parse(Path.GetFileNameWithoutExtension(new Uri(Response.GetProperty("audioUrl").GetString()!).AbsolutePath));
+            Assert.Null(Audio.Get(AudioId));
+        }
+        Assert.Equal(Button ? 0 : 1, Messages.Count(Item => EchoMuseConnection.Text(Item, "type") == "turn_cancel"));
+        using var Next = Device.Start("next", null, CancellationToken.None);
+        Assert.NotNull(Next);
+        Device.Release(Turn);
+        Assert.False(Device.Handle(Message(new { type = "turn_cancel", sessionId = "session", deviceId = "device" })));
+        Assert.False(Next!.Token.IsCancellationRequested);
+    }
+
+    private sealed class StageCoordinator(string Stage, TaskCompletionSource Reached) : IRequestCoordinator
+    {
+        public async Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken Token)
+        {
+            if (Stage == "processing") { Reached.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, Token); }
+            return new("Reply", null, "direct-intent", Guid.NewGuid(), "succeeded", [], null, 1);
+        }
+    }
+    private sealed class StageTts(string Stage, TaskCompletionSource Reached) : ITextToSpeechProvider
+    {
+        public async IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text, TextToSpeechOptions Options,
+            [EnumeratorCancellation] CancellationToken Token)
+        {
+            if (Stage == "synthesis") { Reached.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, Token); }
+            yield return new(new byte[2], 16000, 2, 1);
+        }
+    }
     private static IConfiguration Config => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     { ["Assister:PublicUrl"] = "http://assister:8080", ["SatelliteBridge:UseEnergyVad"] = "true" }).Build();
     private static JsonElement Message(object Value) => JsonSerializer.SerializeToElement(Value);
@@ -90,8 +153,11 @@ public sealed class EchoMuseTests
         Assert.False(Work.IsCompleted);
         await Device.SendEventAsync(new("stop-playback"), CancellationToken.None);
         Assert.Equal(Request, Messages[1].GetProperty("requestId").GetString());
-        Device.Handle(Message(new { type = "play_finished", requestId = Request, deviceId = "device", reason = "cancelled" }));
-        await Assert.ThrowsAsync<IOException>(async () => await Work);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Work.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(2, Messages.Count);
+        Assert.False(Device.Handle(Message(new { type = "play_finished", requestId = Request, deviceId = "device", reason = "cancelled" })));
+        using var Next = Device.Start("next", null, CancellationToken.None);
+        Assert.NotNull(Next);
     }
     [Fact]
     public async Task DisconnectAndInvalidAudioCancelOnlyTheOwnedTurn()

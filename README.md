@@ -29,6 +29,12 @@ Configure `LanguageModel:BaseUrl` (including `/v1`), `Model` and optional `ApiKe
 
 Try `turn the kitchen light off`, `what is the temperature in the office` or `what is the state of light.desk`. An explicitly plural area request targets all matching lights in that area (up to 64); a singular request with several candidates asks for clarification. Brightness must be 0–100 percent; zero turns the light off. Unsupported brightness devices are rejected.
 
+Brightness requests also support `set A and B to 40 percent`, including `Can you set both
+the living room light and kitchen light to 100?`. Up to eight target phrases resolve
+independently, with at most 64 distinct entities. Every phrase must resolve before a control
+is sent; missing or ambiguous targets prevent the entire command. A matching full device name
+containing `and` takes precedence over list interpretation.
+
 Responses include `response`, `handledBy`, `outcome`, resolved `entityIds`, confidence, trace ID and total duration. Invalid requests return HTTP 400. Requests reuse a satellite's conversation within five minutes, or accept an explicit conversation ID belonging to that satellite. Prompts contain at most twelve recent turns within a 12,000-character budget and bounded earlier topic notes. Raw tool results are never persisted as conversational turns. Unknown and cross-satellite conversation IDs are rejected.
 
 `set a tea timer for 5 minutes` and `cancel the tea timer` use native persisted timers without the LLM. Up to twenty timers per satellite are supported, from one second to 24 hours. Expired timers wait for a connected, idle satellite; announcement delivery is at least once, so a crash immediately after playback can repeat it. The memory tools store short facts on explicit remember requests, search SQLite FTS5 for relevant facts, and delete on explicit forget requests. Tool audits retain the most recent 5,000 metadata entries, excluding raw arguments/results and credentials.
@@ -61,6 +67,16 @@ Target: Dockhand **Automation (8)**, host `auto@10.44.0.33`. Git stack: https://
 The initial live deployment publishes port **8081** because 8080 is occupied. Dockhand Git stack ID is **10**. The agent currently fails image builds with `mkdir /root/.docker: read-only file system`. Its build-on-deploy setting is temporarily disabled; images were built over SSH, with service creation performed by Dockhand. Future Git syncs alone will not rebuild the image until the agent configuration is repaired or an image is built separately.
 
 ## Troubleshooting dashboard
+
+Satellite details include **Stop / cancel**, also available through `POST /api/satellites/{id}/stop`.
+It cancels the active capture, routing, synthesis or Assister playback for that satellite, including
+announcement synthesis. Spoken `stop`, `cancel`, `stop talking`, `stop speaking` and `cancel that`
+(optionally prefixed with `please`) are deterministic and silent: they do not call the LLM or TTS.
+Named timer cancellation still uses the timer handler. Spoken interruption requires a device that
+can start a new microphone turn during playback; this change does not add continuous listening.
+An explicitly stopped timer announcement is consumed rather than immediately retried. Cancellation
+cannot undo a device command already accepted by Home Assistant. Physical stop/LED acceptance
+for this increment remains pending.
 
 The unauthenticated Operations page at `/` is a semantic pipeline debugger. Each voice activation or `/api/test/message` submission gets one explicit `RunId`, independent of the upstream HTTP/gRPC Activity. Voice session IDs and conversation IDs remain separate. `RequestResult.runId` identifies the interaction; `traceId` is a compatibility alias for existing clients and audit columns, not an infrastructure trace ID.
 

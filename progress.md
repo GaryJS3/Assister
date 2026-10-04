@@ -4,6 +4,24 @@ Updated: October 4, 2026. This file records completed work and verification; [ro
 
 ## Current state
 
+Local multi-target brightness correction: live trace eef525e6-5556-4809-b672-44abbe774b1c
+contained "Can you set both the living room light and kitchen light to 100?". The polite
+prefix prevented direct matching; fallback model searches assumed HA areas and failed.
+Direct normalization now accepts can/could/would-you prefixes and "both"; brightness lists
+resolve every named target independently before one bounded, deduplicated control. Missing
+or ambiguous members prevent all controls, and whole names containing "and" remain intact.
+The exact transcript and these safety cases are regression-tested. This correction is local;
+deployment and new spoken acceptance remain pending.
+
+Local stop/cancel increment: the satellite Stop API and UI cancel active capture, processing,
+synthesis and playback through a shared operation lifetime. Exact spoken stop/cancel phrases are
+silent deterministic commands, bypassing LLM/TTS and conversation locks. EchoMuse stop uses the
+matching session/request ID, suppresses duplicate terminal commands, removes cancelled audio and
+ignores stale playback events. Immediate next-turn recovery covers completed and cancelled turns.
+Explicitly dismissed timer announcements are consumed to prevent replay. Device button cancellation
+during reply playback is regression-tested. Deployment and physical LED/audible-stop verification
+remain pending; interruption by speech requires a new device microphone turn.
+
 The integration foundation now registers Home Assistant and Assister with qualified action IDs, declared inputs and integration-specific execution dispatch. `/integrations.html` lists actions and connection status; the intent editor/inspector/confirmation show ownership explicitly. Existing JSON definitions receive an idempotent upgrade with a startup backup checkpoint. All 107 tests pass (93 unit, 14 integration), including upgrade and dispatch guards. Additional services, connection editing and dynamic plugin installation remain future work; see [integrations.md](docs/integrations.md).
 
 October 4 integration acceptance: source revision `26f69719c1fa7abadf0df641b5836b042bfd4061` is deployed and healthy. Home Assistant reports Connected with five actions; Assister reports Available with three. All seven existing definitions retained their names, patterns, responses and enabled states. The startup database backup `assister.db.before-20261004202608.db` was created. Five saved recognition tests pass; the exact living-room brightness preview resolves the qualified Home Assistant action and correct entity. Native time and a read-only Home Assistant state request succeed through normal routing. The deployed integration page and new intent selectors were checked in the browser. Both containers retain environment/mounts; the bridge image is unchanged.

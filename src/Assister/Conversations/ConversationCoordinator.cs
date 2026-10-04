@@ -22,6 +22,8 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
             || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128)
         { return await Coordinator.ProcessAsync(Request, CancellationToken); }
+        // Stop must reach the active operation rather than wait behind its conversation lock.
+        if (StopCommands.IsStop(Request.Message)) { return await Coordinator.ProcessAsync(Request, CancellationToken); }
         var Gate = Locks.For(Request.SatelliteId);
         await Gate.WaitAsync(CancellationToken);
         try
