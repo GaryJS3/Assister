@@ -143,4 +143,5 @@ existing transport tests verify ordered activation stages, durations, request/ev
 and duplicate playback-start suppression. Validation: 63 unit tests, 9 C# integration tests
 and 12 adapter tests pass (84 total), JavaScript syntax and git diff --check pass.
 No device playback, ownership changes, restarts or physical tests were performed for this
-increment. These changes are not deployed; the running voice services remain revision ed8d918.
+increment. These changes are not deployed. A final read-only image check found Assister at
+f47804f (the separately committed timing-bar UI work) and the bridge at ed8d918; both were preserved.
