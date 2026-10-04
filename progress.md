@@ -116,3 +116,9 @@ commit; /health is Healthy, satellite is Online and playback IDLE. Environment f
 /data volume match pre-deployment values. No overlapping test audio is being generated while
 awaiting the user's next physical request. This is readiness evidence, not a successful spoken
 request or LED-reset acceptance.
+Live request after ed8d918: trace 9e2f69f3-f9f0-4a03-83a8-30012d282ccc completed successfully
+at 01:47 local. Transcript "What time is it?" traversed STT, shared coordinator/LLM, TTS,
+FLAC HTTP delivery and native device playback acknowledgment. Total 9.642 seconds; STT 3.788,
+LLM 0.711, TTS 0.493, device playback 4.073. Runtime returned playback IDLE, no active session,
+no error, with voice ownership OwnedByAssister. Audible reply and LED behavior await user
+confirmation; deterministic brightness, media duck/resume, conflict and reboot remain pending.
