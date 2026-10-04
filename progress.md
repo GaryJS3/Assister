@@ -99,3 +99,15 @@ Dockhand bridge restart completed to clear that state. This is evidence of the o
 not verification of the new reset code. New physical wake/playback, wake-word changes, HA entity
 disable/media coexistence, conflict/reboot and LED-reset acceptance remain pending. See the
 acceptance ledger in docs/satellite-architecture.md. No Milestone 9 work was added.
+
+Deployment follow-up: revision 5c4880c was built and deployed through Dockhand with credentials
+and mounts preserved. On Home Assistant 2026.9.4, disabling only the ESPHome Assist Satellite
+entity before enabling/reloading its ESPHome entry retains normal entities and media_player.
+Both Native API clients connected; an actual Okay Nabu activation confirmed Assister ownership.
+The user heard the intentional Home Assistant media test. Assister's overlapping announcement
+completion timed out, so duck/resume and successful announcement acceptance are NOT established.
+The installed ESPHome 2026.5.2 firmware reports no configurable wake-word models (maximum zero),
+despite physical wake detection. Runtime model changes are therefore unavailable on this firmware.
+Follow-up fix uses native announcement acknowledgment after proven voice ownership, retains the
+observed wake word across button activations, and disables unavailable wake configuration.
+Validation: 71 C# tests and 11 adapter tests pass (82 total). Physical follow-up remains pending.

@@ -47,6 +47,9 @@ async def connect_once(inspect_only=False):
         conversation_id = ""
         capturing = False
         busy = False
+        voice_owned = False
+        response_text = ""
+        announcement_text = ""
         task_set = set()
         entities, _ = await client.list_entities_services()
         players = [entity for entity in entities if type(entity).__name__ == "MediaPlayerInfo"
@@ -70,7 +73,7 @@ async def connect_once(inspect_only=False):
                 pass
             if playback is None:
                 return
-            if state.state == MediaPlayerState.ANNOUNCING:
+            if state.state in (MediaPlayerState.ANNOUNCING, MediaPlayerState.PLAYING) and not playing:
                 if not playing and playback_frame is not None:
                     try:
                         outgoing.put_nowait(wire.BridgeFrame(type="playback-started", satellite_id=satellite_id,
@@ -152,7 +155,8 @@ async def connect_once(inspect_only=False):
             client.send_voice_assistant_event(kind, data)
 
         async def start(device_conversation, flags, settings, wake_word):
-            nonlocal current_session, current_trace, capturing, busy
+            nonlocal current_session, current_trace, capturing, busy, voice_owned
+            voice_owned = True
             if busy:
                 return 0
             busy = True
@@ -198,9 +202,18 @@ async def connect_once(inspect_only=False):
             try:
                 if player_key is None:
                     raise RuntimeError("Announcement playback unsupported")
-                client.media_player_command(player_key, media_url=frame.url, announcement=True)
-                if not await asyncio.wait_for(playback, timeout=40):
-                    raise RuntimeError("Playback was stopped")
+                if voice_owned and info.voice_assistant_feature_flags & 16:
+                    # Preserve the opaque HTTP URL and device announcement pipeline. Native
+                    # completion also works when ordinary media resumes rather than going idle.
+                    result = await client.send_voice_assistant_announcement_await_response(
+                        frame.url, timeout=40,
+                        text=announcement_text if frame.text == "announcement" else response_text)
+                    if not result.success:
+                        raise RuntimeError("Device announcement failed")
+                else:
+                    client.media_player_command(player_key, media_url=frame.url, announcement=True)
+                    if not await asyncio.wait_for(playback, timeout=40):
+                        raise RuntimeError("Playback was stopped")
                 await send("playback-finished", text="succeeded", playback_id=frame.playback_id, session_id=frame.session_id, trace_id=frame.trace_id)
                 print(json.dumps({"status": "playback-completed", "session": current_session}), flush=True)
             except Exception as error:
@@ -280,8 +293,11 @@ async def connect_once(inspect_only=False):
                     elif frame.type == "processing":
                         event(Event.VOICE_ASSISTANT_INTENT_START)
                     elif frame.type == "response":
+                        response_text = frame.text
                         event(Event.VOICE_ASSISTANT_INTENT_END, {"conversation_id": frame.conversation_id})
                         event(Event.VOICE_ASSISTANT_TTS_START, {"text": frame.text})
+                    elif frame.type in ("announcement", "timer-expired"):
+                        announcement_text = frame.text
                     elif frame.type == "audio-ready":
                         task = asyncio.create_task(play_response(frame))
                         task_set.add(task)

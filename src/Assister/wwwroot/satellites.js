@@ -68,7 +68,7 @@ async function refresh() {
             const row = element('tr'), cell = element('td'), button = element('button', d.name);
             button.onclick = () => { selectedId = d.id; history.replaceState(null, '', `?id=${encodeURIComponent(d.id)}`); renderDetail().catch(error => byId('notice').textContent = error.message); };
             cell.append(button, element('small', r.model || r.deviceName || d.id)); row.append(cell);
-            for (const text of [d.areaId || 'Unassigned',d.providerType,r.connectionState,ownership[r.voiceOwnership],r.voiceConfiguration.activeWakeWords.join(', ') || 'Unknown',activities[r.activity],r.lastSeen ? new Date(r.lastSeen).toLocaleString() : 'Never']) row.append(element('td',text));
+            for (const text of [d.areaId || 'Unassigned',d.providerType,r.connectionState,ownership[r.voiceOwnership],r.voiceConfiguration.activeWakeWords.join(', ') || r.wakeWord || 'Unknown',activities[r.activity],r.lastSeen ? new Date(r.lastSeen).toLocaleString() : 'Never']) row.append(element('td',text));
             byId('satellites').append(row);
         }
         if (!devices.length) byId('notice').textContent = 'No satellites configured.';

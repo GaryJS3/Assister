@@ -70,6 +70,10 @@ class FakeClient:
     async def disconnect(self):
         pass
 
+    async def send_voice_assistant_announcement_await_response(self, url, timeout, text):
+        self.commands.append({"announcement": True, "url": url, "text": text})
+        return Object(success=FakeCall.mode != "native-failure")
+
 
 class FakeChannel:
     async def __aenter__(self):
@@ -114,6 +118,13 @@ class FakeCall:
                 await client.handlers["handle_start"]("", 0, None, "Hey Jarvis")
                 await client.handlers["handle_stop"](True)
             elif self.mode == "cancel" and frame.type == "cancel":
+                self.responses.put_nowait(None)
+            elif self.mode in ("native", "native-failure") and frame.ownership == "Unknown":
+                await client.handlers["handle_start"]("", 0, None, "Hey Jarvis")
+            elif self.mode in ("native", "native-failure") and frame.type == "start":
+                self.responses.put_nowait(adapter.wire.BridgeFrame(type="audio-ready", url="http://fake/audio",
+                    playback_id="native-test", session_id=frame.session_id, trace_id="trace-test"))
+            elif self.mode in ("native", "native-failure") and frame.type == "playback-finished":
                 self.responses.put_nowait(None)
             elif self.mode == "configuration" and frame.type == "configuration":
                 if list(frame.configuration.active_wake_words) == ["jarvis"]:
@@ -230,6 +241,18 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         frames = await self.run_bridge("cancel")
         self.assertIn("cancel", [f.type for f in frames])
         self.assertIn(adapter.Event.VOICE_ASSISTANT_RUN_END, FakeClient.instance.events)
+
+    async def test_owned_voice_uses_native_announcement_acknowledgment(self):
+        frames = await self.run_bridge("native")
+        finished = next(f for f in frames if f.type == "playback-finished")
+        self.assertEqual("succeeded", finished.text)
+        self.assertEqual("native-test", finished.playback_id)
+        self.assertTrue(finished.session_id)
+        self.assertEqual("http://fake/audio", FakeClient.instance.commands[0]["url"])
+
+    async def test_native_announcement_failure_is_reported(self):
+        frames = await self.run_bridge("native-failure")
+        self.assertEqual("failed", next(f for f in frames if f.type == "playback-finished").text)
 
 
 if __name__ == "__main__":

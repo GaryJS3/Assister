@@ -81,3 +81,12 @@ transcripts, routing/tool/model details and raw/spoken responses. Audio is not d
 
 Do not mark Milestone 7 acceptance complete until the pending physical rows pass. No firmware
 management, discovery, mixer, music library or streaming/barge-in is included.
+
+Deployment evidence (2026-10-04): HA 2026.9.4 accepted disabling just
+assist_satellite.home_assistant_voice_0a587e_assist_satellite in its entity registry before
+re-enabling/reloading the ESPHome config entry. The entry loaded and ordinary entities and
+media_player remained enabled. Both API connections worked and Okay Nabu reached Assister.
+The user heard the HA media test; announcement duck/resume is still unverified because its
+completion acknowledgment timed out. Do not generalize that result to Music Assistant.
+ESPHome 2026.5.2 on this device reports empty available/active models and maximum zero;
+runtime wake-word editing is unavailable despite observed physical Okay Nabu detection.

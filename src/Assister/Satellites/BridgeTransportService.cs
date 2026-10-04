@@ -81,7 +81,9 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     TransportSession = Frame.SessionId;
                     Connection.TransportSession = Frame.SessionId;
                     Connection.StartAudio();
-                    Manager.Update(Connection.SatelliteId, State => State with { VoiceOwnership = VoiceOwnership.OwnedByAssister, WakeWord = Frame.WakeWord });
+                    Manager.Update(Connection.SatelliteId, State => State with { VoiceOwnership = VoiceOwnership.OwnedByAssister,
+                        WakeWord = Frame.WakeWord.Length > 0 ? Frame.WakeWord : State.WakeWord,
+                        Capabilities = State.Capabilities with { WakeWord = State.Capabilities.WakeWord || Frame.WakeWord.Length > 0 } });
                     Manager.Record(Connection.SatelliteId, "Voice session requested", Frame.WakeWord.Length <= 128 ? Frame.WakeWord : null);
                     Session = RunAsync(Frame.ConversationId, SessionCancellation.Token);
                 }
@@ -127,7 +129,8 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                 if (Frame.Configuration is { } Config)
                     return State with { VoiceConfiguration = new(Config.AvailableWakeWords.Take(32).Select(Word => new WakeWord(Word.Id, Word.Name)).ToArray(),
                         Config.ActiveWakeWords.Take(32).ToArray(), Config.MaxActiveWakeWords),
-                        Capabilities = State.Capabilities with { WakeWord = Config.AvailableWakeWords.Count > 0, WakeWordConfiguration = true } };
+                        Capabilities = State.Capabilities with { WakeWord = State.Capabilities.WakeWord || Config.AvailableWakeWords.Count > 0,
+                            WakeWordConfiguration = Config.AvailableWakeWords.Count > 0 && Config.MaxActiveWakeWords > 0 } };
                 if (Frame.Type == "media-state") return State with { CurrentPlaybackState = Frame.Text, CurrentVolume = Frame.Volume, MuteState = Frame.Muted };
                 if (Frame.Type == "device-error") return State with { LastError = "Device operation failed." };
                 if (Frame.Device is { } Device && Frame.Capabilities is { } Cap)
