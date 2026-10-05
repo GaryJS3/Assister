@@ -41,7 +41,7 @@ Responses include `response`, `handledBy`, `outcome`, resolved `entityIds`, conf
 
 Weather requests use Home Assistant's `weather.get_forecasts` service. Set `WEATHER_ENTITY_ID` if several weather providers exist; a sole available provider is selected automatically. Unsupported night/hourly forecasts fail explicitly rather than inventing data.
 
-`GET /api/homeassistant/entities?query=office&limit=10` returns a bounded cache search with names, areas and state values. `/api/status` reports connection status, freshness and received state-event counts. Raw attributes and credentials are excluded. These development APIs are intended for the trusted local network; complex authentication is outside the MVP scope.
+`GET /api/homeassistant/entities?query=office&limit=10` returns a bounded cache search with names, areas and state values. `/api/status` reports connection status, freshness and received state-event counts. Entity, device and area registry events refresh cached metadata, including names, aliases and area assignments. A full state/service/registry snapshot reloads every 15 minutes and on reconnect. The main page's Home Assistant status card includes **Rebuild cache**, backed by `POST /api/homeassistant/cache/rebuild`; it waits for a full reload and reports failure if Home Assistant is unavailable. Incoming state events are preserved during reloads. Raw attributes and credentials are excluded. These development APIs are intended for the trusted local network; complex authentication is outside the MVP scope.
 
 ## Development
 

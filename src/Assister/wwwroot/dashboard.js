@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+let rebuildingCache = false, cacheRebuildMessage = '';
 let runs = [], selected = null, currentRun = null, busy = false, quick = 'All', sending = false, detailSignature = '';
 selected = new URLSearchParams(location.search).get('run');
 const openRounds = new Set();
@@ -80,7 +81,21 @@ function renderDetail(r) {
 }
 async function loadSelected(){if(!selected)return;const id=selected;try{const response=await fetch(`/api/diagnostics/runs/${encodeURIComponent(id)}`,{cache:'no-store'});if(response.status===404){if(selected===id){currentRun=null;detailSignature='';$('detail').replaceChildren(node('div','This run is no longer retained.','empty'));}return;}if(!response.ok)throw Error();const r=await response.json();if(selected===id){currentRun=r;renderDetail(r);}}catch{$('connection').textContent='Run details unavailable · retrying';}}
 async function inspect(id){selected=id;detailSignature='';selectPanel(false);renderList();await loadSelected();}
-async function refresh(){if(busy)return;busy=true;try{const responses=await Promise.all([fetch('/api/diagnostics/runs',{cache:'no-store'}),fetch('/api/diagnostics/health',{cache:'no-store'})]);if(responses.some(r=>!r.ok))throw Error();const [history,health]=await Promise.all(responses.map(r=>r.json()));runs=history;if(!selected&&runs.length)selected=runs[0].runId;$('health').replaceChildren();for(const c of health.components){const e=node('article',null,'component');e.append(node('strong',c.name),badge(c.status),node('p',c.detail));$('health').append(e);}$('connection').textContent=`Live · ${new Date(health.checkedAt).toLocaleTimeString()}`;renderList();if(selected&&(!currentRun||currentRun.runId!==selected||!currentRun.finishedAt))await loadSelected();}catch{$('connection').textContent='Offline · retrying';}finally{busy=false;}}
+async function rebuildHomeAssistantCache(){
+    if(rebuildingCache)return;
+    rebuildingCache=true;cacheRebuildMessage='Reloading Home Assistant cache…';
+    const button=document.querySelector('#health button');
+    if(button){button.disabled=true;button.textContent='Rebuilding…';}
+    try{
+        const response=await fetch('/api/homeassistant/cache/rebuild',{method:'POST'});
+        if(!response.ok)throw Error();
+        const result=await response.json();
+        cacheRebuildMessage=`Cache rebuilt · ${result.entityCount} entities`;
+    }catch{cacheRebuildMessage='Cache rebuild failed. Check Home Assistant connectivity and retry.';}
+    finally{rebuildingCache=false;await refresh();}
+}
+function addCacheRebuildControl(){for(const card of $('health').children){if(card.querySelector('strong')?.textContent!=='Home Assistant')continue;const button=node('button',rebuildingCache?'Rebuilding…':'Rebuild cache');button.disabled=rebuildingCache;button.onclick=rebuildHomeAssistantCache;card.append(button);if(cacheRebuildMessage)card.append(node('p',cacheRebuildMessage));}}
+async function refresh(){if(busy)return;busy=true;try{const responses=await Promise.all([fetch('/api/diagnostics/runs',{cache:'no-store'}),fetch('/api/diagnostics/health',{cache:'no-store'})]);if(responses.some(r=>!r.ok))throw Error();const [history,health]=await Promise.all(responses.map(r=>r.json()));runs=history;if(!selected&&runs.length)selected=runs[0].runId;$('health').replaceChildren();for(const c of health.components){const e=node('article',null,'component');e.append(node('strong',c.name),badge(c.status),node('p',c.detail));$('health').append(e);}$('connection').textContent=`Live · ${new Date(health.checkedAt).toLocaleTimeString()}`;addCacheRebuildControl();renderList();if(selected&&(!currentRun||currentRun.runId!==selected||!currentRun.finishedAt))await loadSelected();}catch{$('connection').textContent='Offline · retrying';}finally{busy=false;}}
 for(const name of ['All','Failures','LLM','Direct','Voice','Debug']){const b=node('button',name,name===quick?'selected':'');b.onclick=()=>{quick=name;for(const child of $('quick-filters').children)child.classList.toggle('selected',child.textContent===name);renderList();};$('quick-filters').append(b);}
 for(const id of ['filter','source','outcome','handled','satellite-filter','conversation-filter','run-filter'])$(id).oninput=renderList;
 function sessionGet(key){try{return sessionStorage.getItem(key);}catch{return null;}}

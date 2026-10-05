@@ -163,6 +163,12 @@ App.MapPost("/api/test/message", async (UserRequest Request, IRequestCoordinator
     Run.Complete(Result.Outcome);
     return Result.Outcome == "invalid-request" ? Results.BadRequest(Result) : Results.Ok(Result);
 });
+App.MapPost("/api/homeassistant/cache/rebuild", async (HomeAssistantClient HomeAssistant, HomeAssistantStateCache Cache, CancellationToken Token) =>
+{
+    return await HomeAssistant.RequestCacheRebuildAsync(Token)
+        ? Results.Ok(Cache.Status())
+        : Results.Conflict(new { Error = "Home Assistant is unavailable or the cache rebuild failed." });
+});
 App.MapGet("/api/homeassistant/entities", (string? Query, int? Limit, HomeAssistantStateCache Cache) =>
 {
     if (string.IsNullOrWhiteSpace(Query) || Query.Length > 128 || Limit is < 1 or > 50)

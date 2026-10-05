@@ -43,7 +43,7 @@ public sealed class HomeAssistantConnection : IHomeAssistantConnection
     }
 }
 
-public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssistantStateCache Cache, Func<IHomeAssistantConnection> ConnectionFactory, ILogger<HomeAssistantClient> Logger) : BackgroundService
+public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssistantStateCache Cache, Func<IHomeAssistantConnection> ConnectionFactory, ILogger<HomeAssistantClient> Logger, TimeProvider? Clock = null) : BackgroundService
 {
     private string ConnectionStatus = "NotConfigured";
     public string Status => Volatile.Read(ref ConnectionStatus);
@@ -71,12 +71,25 @@ public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssist
                 Startup.CancelAfter(TimeSpan.FromSeconds(30));
                 await Connection.ConnectAsync(Endpoint.Uri, Startup.Token);
                 await InitializeAsync(Connection, Secret, Startup.Token);
+                await RefreshRegistriesAsync(Connection, Startup.Token);
                 Cache.SetStale(false);
                 Volatile.Write(ref ConnectionStatus, "Connected");
                 Attempt = 0;
+                var ScheduledRefresh = Task.Delay(TimeSpan.FromMinutes(15), Clock ?? TimeProvider.System, StoppingToken);
                 while (!StoppingToken.IsCancellationRequested)
                 {
-                    ApplyMessage(await Connection.ReceiveAsync(StoppingToken));
+                    PendingReceive ??= Connection.ReceiveAsync(StoppingToken);
+                    await Task.WhenAny(PendingReceive, ScheduledRefresh, RebuildRequested.Task);
+                    var Rebuild = ScheduledRefresh.IsCompleted || RebuildRequested.Task.IsCompleted;
+                    if (!Rebuild) { ApplyMessage(await ReceiveNextAsync(Connection, StoppingToken)); }
+                    using var Refresh = CancellationTokenSource.CreateLinkedTokenSource(StoppingToken);
+                    Refresh.CancelAfter(TimeSpan.FromSeconds(30));
+                    if (Rebuild)
+                    {
+                        await RebuildCacheAsync(Connection, Refresh.Token);
+                        ScheduledRefresh = Task.Delay(TimeSpan.FromMinutes(15), Clock ?? TimeProvider.System, StoppingToken);
+                    }
+                    await RefreshRegistriesAsync(Connection, Refresh.Token);
                 }
             }
             catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { break; }
@@ -87,8 +100,10 @@ public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssist
             }
             finally
             {
-                Cache.SetStale(true);
                 Volatile.Write(ref ConnectionStatus, "Unavailable");
+                PendingReceive = null;
+                FailRebuild();
+                Cache.SetStale(true);
             }
             await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(Attempt++, 5)))) + TimeSpan.FromMilliseconds(Random.Shared.Next(250)), StoppingToken);
         }
@@ -99,38 +114,113 @@ public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssist
         if ((await Connection.ReceiveAsync(Token)).GetProperty("type").GetString() != "auth_required") { throw new InvalidDataException("Unexpected HA greeting."); }
         await Connection.SendAsync(new { type = "auth", access_token = Secret }, Token);
         if ((await Connection.ReceiveAsync(Token)).GetProperty("type").GetString() != "auth_ok") { throw new InvalidDataException("HA authentication rejected."); }
-        var Id = 0;
-        async Task<JsonElement> Command(string Type, string? EventType = null)
-        {
-            var CommandId = ++Id;
-            var Message = new Dictionary<string, object> { ["id"] = CommandId, ["type"] = Type };
-            if (EventType is not null) { Message["event_type"] = EventType; }
-            await Connection.SendAsync(Message, Token);
-            while (true)
-            {
-                var Reply = await Connection.ReceiveAsync(Token);
-                if (Reply.GetProperty("type").GetString() == "event") { ApplyMessage(Reply); continue; }
-                if (Reply.GetProperty("id").GetInt32() != CommandId || !Reply.GetProperty("success").GetBoolean()) { throw new InvalidDataException("HA command failed."); }
-                return Reply.GetProperty("result").Clone();
-            }
-        }
+        CommandId = 0;
+        RegistryRefreshNeeded = false;
         // Subscribe before the snapshot, then replay queued events so updates during loading are retained.
-        await Command("subscribe_events", "state_changed");
+        await CommandAsync(Connection, Token, "subscribe_events", "state_changed");
+        await LoadSnapshotAsync(Connection, Token);
+        foreach (var EventType in RegistryEvents)
+        {
+            await CommandAsync(Connection, Token, "subscribe_events", EventType);
+        }
+        // Capture edits made during the initial snapshot before subscriptions were active.
+        RegistryRefreshNeeded = true;
+    }
+
+    private async Task LoadSnapshotAsync(IHomeAssistantConnection Connection, CancellationToken Token)
+    {
         var Pending = new List<JsonElement>();
         LoadingEvents = Pending;
         try
         {
-            var States = await Command("get_states");
+            var States = await CommandAsync(Connection, Token, "get_states");
             // Events before the snapshot reply are already represented in that snapshot.
             Pending.Clear();
-            var Services = await Command("get_services");
-            var Entities = await Command("config/entity_registry/list");
-            var Devices = await Command("config/device_registry/list");
-            var Areas = await Command("config/area_registry/list");
+            var Services = await CommandAsync(Connection, Token, "get_services");
+            var Entities = await CommandAsync(Connection, Token, "config/entity_registry/list");
+            var Devices = await CommandAsync(Connection, Token, "config/device_registry/list");
+            var Areas = await CommandAsync(Connection, Token, "config/area_registry/list");
             Cache.Load(States, Services, Entities, Devices, Areas);
             foreach (var Data in Pending) { Cache.ApplyEvent(Data); }
         }
         finally { LoadingEvents = null; }
+    }
+
+    private static readonly string[] RegistryEvents = ["entity_registry_updated", "device_registry_updated", "area_registry_updated"];
+    private int CommandId;
+    private bool RegistryRefreshNeeded;
+    private Task<JsonElement>? PendingReceive;
+    private readonly object RebuildGate = new();
+    private TaskCompletionSource RebuildRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource<bool>? RebuildCompleted;
+
+    public async Task<bool> RequestCacheRebuildAsync(CancellationToken Token)
+    {
+        Task<bool> Completion;
+        lock (RebuildGate)
+        {
+            if (Status != "Connected") { return false; }
+            RebuildCompleted ??= new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Completion = RebuildCompleted.Task;
+            RebuildRequested.TrySetResult();
+        }
+        return await Completion.WaitAsync(Token);
+    }
+
+    private void CompleteRebuild(bool Success)
+    {
+        lock (RebuildGate)
+        {
+            RebuildCompleted?.TrySetResult(Success);
+            RebuildCompleted = null;
+            RebuildRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    private void FailRebuild() => CompleteRebuild(false);
+
+    private async Task RebuildCacheAsync(IHomeAssistantConnection Connection, CancellationToken Token)
+    {
+        Cache.SetStale(true);
+        await LoadSnapshotAsync(Connection, Token);
+        await RefreshRegistriesAsync(Connection, Token);
+        Cache.SetStale(false);
+        CompleteRebuild(true);
+    }
+
+    private async Task<JsonElement> ReceiveNextAsync(IHomeAssistantConnection Connection, CancellationToken Token)
+    {
+        PendingReceive ??= Connection.ReceiveAsync(Token);
+        var Message = await PendingReceive.WaitAsync(Token);
+        PendingReceive = null;
+        return Message;
+    }
+
+    private async Task<JsonElement> CommandAsync(IHomeAssistantConnection Connection, CancellationToken Token, string Type, string? EventType = null)
+    {
+        var Id = ++CommandId;
+        var Message = new Dictionary<string, object> { ["id"] = Id, ["type"] = Type };
+        if (EventType is not null) { Message["event_type"] = EventType; }
+        await Connection.SendAsync(Message, Token);
+        while (true)
+        {
+            var Reply = await ReceiveNextAsync(Connection, Token);
+            if (Reply.GetProperty("type").GetString() == "event") { ApplyMessage(Reply); continue; }
+            if (Reply.GetProperty("id").GetInt32() != Id || !Reply.GetProperty("success").GetBoolean()) { throw new InvalidDataException("HA command failed."); }
+            return Reply.GetProperty("result").Clone();
+        }
+    }
+
+    private async Task RefreshRegistriesAsync(IHomeAssistantConnection Connection, CancellationToken Token)
+    {
+        while (RegistryRefreshNeeded)
+        {
+            RegistryRefreshNeeded = false;
+            var Entities = await CommandAsync(Connection, Token, "config/entity_registry/list");
+            var Devices = await CommandAsync(Connection, Token, "config/device_registry/list");
+            var Areas = await CommandAsync(Connection, Token, "config/area_registry/list");
+            Cache.UpdateRegistries(Entities, Devices, Areas);
+        }
     }
 
     private List<JsonElement>? LoadingEvents;
@@ -138,7 +228,13 @@ public sealed class HomeAssistantClient(IConfiguration Configuration, HomeAssist
     {
         if (Message.GetProperty("type").GetString() != "event") { return; }
         var Event = Message.GetProperty("event");
-        if (Event.GetProperty("event_type").GetString() != "state_changed") { return; }
+        var EventType = Event.GetProperty("event_type").GetString();
+        if (RegistryEvents.Contains(EventType))
+        {
+            RegistryRefreshNeeded = true;
+            return;
+        }
+        if (EventType != "state_changed") { return; }
         var Data = Event.GetProperty("data");
         if (LoadingEvents is not null)
         {

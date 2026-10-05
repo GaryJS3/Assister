@@ -41,6 +41,16 @@ public sealed class HomeAssistantStateCache
         }
     }
 
+    public void UpdateRegistries(JsonElement Entities, JsonElement Devices, JsonElement Areas)
+    {
+        lock (Gate)
+        {
+            EntityRegistry = Entities.Clone();
+            DeviceRegistry = Devices.Clone();
+            AreaRegistry = Areas.Clone();
+        }
+    }
+
     public void SetStale(bool Value)
     {
         lock (Gate) { IsStale = Value; }
