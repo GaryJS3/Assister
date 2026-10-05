@@ -355,3 +355,8 @@ spoken control request after this deployment has not yet been physically confirm
 
 Brightness accepts at as well as to; the exact spoken kitchen transcript and LLM authorization path have regression coverage. Native timers accept duration-first wording such as Set a 30 minute timer, including named and hyphenated durations. All 203 tests pass (185 unit/component, 18 integration); git diff --check passes. User confirmed spoken brightness, clarification/follow-ups and cancellation/recovery checks. Production timer creation and restart acceptance await deployment.
 
+
+## October 5 native timer queries
+
+Remaining-time questions, including How much left on the timer, use persisted Assister timers scoped to the requesting satellite. Named queries and bounded duplicate listings are supported; expired pending timers are reported honestly. 207 tests pass (189 unit/component, 18 integration). Live pre-deployment snapshot confirms two active unnamed EchoMuse timers from the interrupted and successful spoken attempts. Controller logs attribute the interrupted confirmation to wake-word barge-in followed by no-speech timeout.
+

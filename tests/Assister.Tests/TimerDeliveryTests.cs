@@ -11,6 +11,30 @@ namespace Assister.Tests;
 public sealed class TimerDeliveryTests
 {
     [Theory]
+    [InlineData("How much left on the timer?")]
+    [InlineData("How much time is left on my timer?")]
+    [InlineData("How long does the timer have left?")]
+    [InlineData("How long left on the tea timer?")]
+    public async Task RemainingTimeReadsPersistedTimersWithoutChangingThem(string Text)
+    {
+        await using var Database = await OpenAsync(":memory:");
+        var Store = new LocalStore(Database);
+        var Handler = new TimerIntentHandler(Store);
+        await Handler.TryHandleAsync(new("set a tea timer for 30 minutes", SatelliteId: "bedroom"), CancellationToken.None);
+        var Before = Assert.Single(await Store.QueryAsync("SELECT Id,DueAt,Status FROM Timers", CancellationToken.None));
+        Assert.True(TimerIntentHandler.Recognizes(Text));
+        Assert.Contains("left", await Handler.TryHandleAsync(new(Text, SatelliteId: "bedroom"), CancellationToken.None));
+        Assert.Equal("There is no matching active timer.", await Handler.TryHandleAsync(new(Text, SatelliteId: "kitchen"), CancellationToken.None));
+        Assert.Equal(Before, Assert.Single(await Store.QueryAsync("SELECT Id,DueAt,Status FROM Timers", CancellationToken.None)));
+        await Handler.TryHandleAsync(new("set a tea timer for 30 minutes", SatelliteId: "bedroom"), CancellationToken.None);
+        var Multiple = await Handler.TryHandleAsync(new(Text, SatelliteId: "bedroom"), CancellationToken.None);
+        Assert.Contains("(1)", Multiple);
+        Assert.Contains("(2)", Multiple);
+        await Store.ExecuteAsync("UPDATE Timers SET DueAt=0,Status='notification-pending'", CancellationToken.None);
+        Assert.Contains("waiting to be announced", await Handler.TryHandleAsync(new(Text, SatelliteId: "bedroom"), CancellationToken.None));
+    }
+
+    [Theory]
     [InlineData(" Set a 30 minute timer.", "timer", 1800)]
     [InlineData("start a 30-minute tea timer", "tea", 1800)]
     [InlineData("set a tea timer for 30 minutes", "tea", 1800)]
