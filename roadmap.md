@@ -8,6 +8,16 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 
 ## Next: satellite realignment acceptance
 
+Current production baseline is `d51ca90`: 196 tests pass; Assister, ESPHome bridge and EchoMuse
+have been redeployed. Device discovery/authorization/structured follow-ups and HA registry-event,
+15-minute and manual cache refresh are implemented. The microphone continuation fix is user-confirmed.
+The earlier implementation notes below describe historical checkpoints, not pending deployment.
+
+Next validate spoken office/kitchen control and clarification on the deployed baseline, truthful
+action receipts/partial completion, real HA registry rename/area updates, scheduled cache reload,
+and satellite cancellation/LED/media coexistence gaps. Manual cache rebuild and read-only discovery
+already pass live. HA Voice remains offline; Kitchen and MBedroom EchoMuse are online.
+
 The MVP/timer/memory/streaming increment is implemented locally and described in [mvp-acceptance.md](docs/mvp-acceptance.md). The final updated-module probe passed actual history/forecast retrieval and native TTS streaming. Deploy it and verify microphone/playback behavior before treating module results as production satellite acceptance.
 
 The manager, provider boundary, runtime UI and core physical request path are deployed.
@@ -33,7 +43,7 @@ See [service-validation.md](docs/service-validation.md) for traces and verificat
 - HA and the initial direct intents are deployed and verified: fresh cache, area metadata, state events, office temperature and authorized light power/brightness/restoration all passed. Continue with milestone 5.
 - The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
 - Continue milestone 5: completion/streaming client and function-call assembly are implemented and fake-HTTP tested. Selected tools, validating broker and bounded loop are now implemented locally and connected to unmatched requests. Complete live validation. Keep direct intents independent of LLM availability.
-- Recheck HA authentication after the user's credential rotation. Registry metadata currently refreshes on reconnect.
+- Recheck HA authentication after the user's credential rotation. Registry metadata now refreshes on registry events, reconnect, full snapshots every 15 minutes and manual rebuild.
 ## Remaining milestones
 
 | Order | Deliverable | Acceptance checkpoint |

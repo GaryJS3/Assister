@@ -1,5 +1,31 @@
 # Live service validation, October 3, 2026
 
+## Latest production checkpoint — October 4, 2026
+
+Assister and ESPHome bridge were built from exact committed revision
+`d51ca906c453490a1f1e6b413f535fedacb13982` and redeployed through Dockhand after Git sync.
+Running revision labels match. App image digest:
+`sha256:647484fe8d14cac99e881560c7f872056e488fba9f870b86393853f5ad4af5d8`.
+Bridge image digest: `sha256:d02a48740527dce721532e4ea9cf4174fd43f9454f56f2fd2ae637946da45341`.
+EchoMuse was redeployed with runtime `d19959628585c20a2fa2bc9b767ae7ca540e9e4d`.
+Assister's 28 environment overrides and EchoMuse stack configuration were unchanged;
+existing data mounts were preserved. All 196 tests and dashboard JavaScript syntax pass.
+
+`/health` returned Healthy. `POST /api/homeassistant/cache/rebuild` completed with `isStale=false`,
+1,967 entities and 623 received state events at readback. This validates a live full reload,
+not a 15-minute elapsed schedule or an actual HA registry edit. Those paths have automated tests.
+Kitchen and MBedroom returned Online with Assister ownership and no last error after restart.
+HA Voice remains Offline, so overall satellite readiness must not be described as complete.
+
+The preceding `fa78a75` live text checks verified office/kitchen discovery and naming without
+controls or failed tools, and explicit on/off clarification for "Both of them?". Independent
+cached readback showed office lights still on and kitchen still off. See
+[device-interactions.md](device-interactions.md) for trace IDs and the actual earlier kitchen
+control audit. The user confirmed microphone reopening after assistant questions with the
+EchoMuse continuation update; new spoken control acceptance for these device fixes is pending.
+
+## Historical validation records
+
 Initial dependency checks ran inside the deployed Assister container on 10.44.0.33, using its configured credentials. Those initial checks did not control devices or play satellite audio. The subsequent authorized control checks are recorded below.
 
 | Service | From Assister container | Additional Windows check |

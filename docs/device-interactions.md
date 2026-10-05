@@ -62,3 +62,19 @@ action replay, wrong actions/targets, batches, partial completion, duplicate att
 search errors, clarification, expiry, satellite isolation, persistence and topic changes.
 Physical voice and HA readback acceptance are separate from fake-client tests; discovery
 validation does not issue device controls.
+
+## Deployment and live verification — October 4, 2026
+
+Device fixes were deployed as `fa78a75`, then included in the cache-refresh deployment `d51ca90`.
+The latest full suite passes 196 tests. Live text runs found Office Yellow Light and Office White
+Light (`1c029abb-28a9-4015-b627-41d3862bb110`) and Kitchen Main Lights
+(`02cf5995-584f-48c9-9c17-ca0551e922f1`). Kitchen naming returned the correct name
+(`1c586a29-daa1-463d-ac50-e7dfb2decfd9`). All three traces contain zero control calls and zero
+failed tools. "Both of them?" explicitly asked on or off
+(`c8125187-1a19-4626-85df-0060ef8a98fd`). Both office lights stayed on; the kitchen light stayed off.
+
+Cache freshness is a separate concern from search semantics. The deployed client subscribes to
+entity/device/area registry changes, reloads complete snapshots every 15 minutes and on reconnect,
+and supports `POST /api/homeassistant/cache/rebuild`. Snapshot loading preserves incoming state
+events. The live manual rebuild returned a current 1,967-entity cache. Actual registry edits and
+elapsed scheduled reload still need production acceptance; both have automated coverage.

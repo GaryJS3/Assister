@@ -949,6 +949,13 @@ Prevent infinite loops.
 
 # 12. Tool selection / context reduction
 
+October 4, 2026 decision: core Home Assistant search/state/history/control and weather tools
+are always offered on the LLM path. Keyword gating prevented ordinary questions and valid device
+discovery. General questions can answer without tools. Entity/history data remains retrieved on
+demand and bounded; memory mutations require explicit requests. Offering a control tool never
+authorizes a change: the broker validates the current action and target in code. This supersedes
+the initial category examples below for these core tools; other modules can retain scoped selection.
+
 Do not send every registered tool to every LLM call.
 
 Implement a `ToolSelector`.

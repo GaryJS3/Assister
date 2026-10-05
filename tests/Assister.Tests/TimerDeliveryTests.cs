@@ -10,6 +10,25 @@ namespace Assister.Tests;
 
 public sealed class TimerDeliveryTests
 {
+    [Theory]
+    [InlineData(" Set a 30 minute timer.", "timer", 1800)]
+    [InlineData("start a 30-minute tea timer", "tea", 1800)]
+    [InlineData("set a tea timer for 30 minutes", "tea", 1800)]
+    [InlineData("set a 2 hour timer", "timer", 7200)]
+    [InlineData("set a 10 second timer", "timer", 10)]
+    public async Task TimerWordOrdersPersistTheRequestedDurationAndSatellite(string Text, string Name, long Seconds)
+    {
+        await using var Database = await OpenAsync(":memory:");
+        var Store = new LocalStore(Database);
+        Assert.True(TimerIntentHandler.Recognizes(Text));
+        var Response = await new TimerIntentHandler(Store).TryHandleAsync(new(Text, SatelliteId: "bedroom"), CancellationToken.None);
+        Assert.StartsWith("Started your", Response);
+        var Row = Assert.Single(await Store.QueryAsync("SELECT Name,SatelliteId,DueAt-CreatedAt FROM Timers", CancellationToken.None));
+        Assert.Equal(Name, Row[0]);
+        Assert.Equal("bedroom", Row[1]);
+        Assert.Equal(Seconds.ToString(), Row[2]);
+    }
+
     [Fact]
     public async Task SlowPlaybackOnOneSatelliteDoesNotDelayAnother()
     {

@@ -8,7 +8,7 @@ namespace Assister.Modules.Timers;
 public sealed partial class TimerIntentHandler(LocalStore Store)
 {
     public static bool Recognizes(string Text) => StartPattern().IsMatch(Text.Trim()) || CancelPattern().IsMatch(Text.Trim());
-    [GeneratedRegex(@"^(?:set|start) (?:a |an )?(?:(?<name>[a-z ]{1,40}) )?timer for (?<amount>\d{1,5}) (?<unit>seconds?|minutes?|hours?)[.!]?$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(?:set|start) (?:a |an )?(?:(?:(?<name>[a-z ]{1,40}) )?timer for (?<amount>\d{1,5}) (?<unit>seconds?|minutes?|hours?)|(?<amount>\d{1,5})[ -](?<unit>seconds?|minutes?|hours?) (?:(?<name>[a-z ]{1,40}) )?timer)[.!]?$", RegexOptions.IgnoreCase)]
     private static partial Regex StartPattern();
     [GeneratedRegex(@"^(?:cancel|stop) (?:the |my |a )?(?:(?<name>[a-z ]{1,40}) )?timer[.!]?$", RegexOptions.IgnoreCase)]
     private static partial Regex CancelPattern();

@@ -63,7 +63,7 @@ public sealed record ControlRequest(string Action, string Target, int? Brightnes
             var Power = Match(Command, @"^(?:switch|put) (?<target>.+?) (?:back )?(?<power>on|off)$");
             if (!Power.Success) { Power = Match(Command, @"^turn (?<target>.+?) back (?<power>on|off)$"); }
             if (Power.Success) { return new("turn_" + Power.Groups["power"].Value, LanguageParser.Noun(Power.Groups["target"].Value)); }
-            var Brightness = Match(Command, @"^(?:dim|brighten|set|make|bring|adjust) (?<target>.+?) (?:to )?(?<percent>\d{1,3})\s*(?:percent|%)?$");
+            var Brightness = Match(Command, @"^(?:dim|brighten|set|make|bring|adjust) (?<target>.+?) (?:(?:to|at) )?(?<percent>\d{1,3})\s*(?:percent|%)?$");
             if (Brightness.Success) { return new("set_brightness", LanguageParser.Noun(Brightness.Groups["target"].Value), int.Parse(Brightness.Groups["percent"].Value)); }
             var Full = Match(Command, @"^(?:make|set|bring) (?<target>.+?) (?:to )?(?:fully bright|full brightness|maximum brightness)$");
             if (Full.Success) { return new("set_brightness", LanguageParser.Noun(Full.Groups["target"].Value), 100); }

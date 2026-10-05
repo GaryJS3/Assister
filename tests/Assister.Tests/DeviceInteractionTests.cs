@@ -18,6 +18,31 @@ namespace Assister.Tests;
 public sealed class DeviceInteractionTests
 {
     [Theory]
+    [InlineData(" Set kitchen lights at 50%.", "direct-intent")]
+    [InlineData("Adjust kitchen lights at 50 percent", "language-model")]
+    public async Task BrightnessAtPercentageResolvesAndAuthorizesTheExactKitchenTarget(string Message, string Handler)
+    {
+        await using var App = await Fixture.Create();
+        var Authorized = ControlRequest.Parse(Message)!;
+        Assert.Equal("kitchen lights", Authorized.Target);
+        Assert.Equal(50, Authorized.Brightness);
+        Assert.Equal("light.kitchen_main_lights", Assert.Single(Authorized.Resolve(App.Cache.Snapshot(), null)).EntityId);
+        if (Handler == "language-model")
+        {
+            App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights","domains":["light"]}""")], "tool_calls"));
+            App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"set_brightness","brightness_pct":50}""")], "tool_calls"));
+            App.Model.Responses.Enqueue(new("Set to 50 percent.", [], "stop"));
+        }
+        var Result = await App.Send(Message);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal(Handler, Result.HandledBy);
+        var Control = Assert.Single(App.Actions.Calls);
+        Assert.Equal(["light.kitchen_main_lights"], Control.EntityIds);
+        Assert.Equal(50, Control.BrightnessPercent);
+        if (Handler == "direct-intent") { Assert.Empty(App.Model.Requests); }
+    }
+
+    [Theory]
     [InlineData("lights", "Office", "light.office_fan,light.office_fan_light_2")]
     [InlineData("light", "office", "light.office_fan,light.office_fan_light_2")]
     [InlineData("office lights", null, "light.office_fan,light.office_fan_light_2")]

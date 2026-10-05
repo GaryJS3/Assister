@@ -4,6 +4,42 @@ Updated: October 4, 2026. This file records completed work and verification; [ro
 
 ## Current state
 
+### Latest deployed baseline — October 4, 2026
+
+Assister and the ESPHome bridge run exact revision `d51ca906c453490a1f1e6b413f535fedacb13982`.
+It includes the device-interaction audit/fixes from `fa78a75` and all preceding MVP increments.
+Both images were built from the committed Git archive after push; Dockhand Git sync and
+stack deployments succeeded. EchoMuse was also redeployed with its existing runtime revision
+`d19959628585c20a2fa2bc9b767ae7ca540e9e4d`. Configuration and persistent mounts were preserved.
+The latest suite passes **196 tests (178 unit/component, 18 integration)**; dashboard JavaScript
+syntax and `git diff --check` pass. Older counts/revisions below are historical checkpoints.
+
+Home Assistant search/state/history/control and weather tools remain available on every LLM
+request, with optional tool use for general questions. Shared entity search handles plurals,
+domain filtering and named devices without area assignments. Null brightness no longer breaks
+search. Current-request action/target authorization is enforced in code; information questions
+cannot replay previous controls. Persisted bounded references, pending clarifications and action
+receipts support follow-ups and honest partial-completion reports. See [device-interactions.md](docs/device-interactions.md).
+
+The kitchen session audit confirmed an actual `turn_off` during a later discovery question;
+this was an old-command replay, not merely misleading prose. Live checks on `fa78a75` found both
+office lights and Kitchen Main Lights, answered the naming question without controls, and asked
+on or off for "Both of them?". Light states were unchanged by these checks. Mutation, batch and
+failure behavior has automated fake-client coverage; fresh physical control acceptance remains open.
+
+HA entity/device/area registry events now refresh metadata. Full state/service/registry snapshots
+reload every 15 minutes, on reconnect and via the dashboard's Rebuild cache button. State events
+are retained during reload. The deployed manual endpoint passed with **1,967 entities**, current
+cache and continuing state events; `/health` is Healthy. Kitchen and MBedroom EchoMuse satellites
+reconnected Online with Assister ownership and no last error. HA Voice remains Offline.
+
+The user confirmed that assistant questions now reopen the EchoMuse microphone after playback.
+Remaining acceptance includes fresh spoken office/kitchen commands, named/pronoun clarifications,
+partial-failure reporting, registry rename/area edits through actual HA events, and observing the
+scheduled 15-minute reload in production. See [service-validation.md](docs/service-validation.md).
+
+### Earlier implementation and deployment checkpoints
+
 Local MVP/timer/memory/streaming increment: 157 C# tests pass (139 unit/component, 18 integration). Semantic temperature search, empty weather configuration, explicit local offsets, exact searched IDs and required source tools improve historical/forecast routing. Memory recall cannot authorize mutation; query stop words are filtered; summaries count toward the context budget. Timer expiry delivers up to four independent satellite notifications concurrently with fair queries and sequential SQLite writes.
 
 Voice now supports safe streamed text, bounded sentence synthesis, negotiated native Wyoming streaming and legacy fallback. Application defaults enable generation/synthesis overlap. Installed transports still receive complete audio objects. Tests cover cancellation/recovery, failed synthesis preserving text and rejection of partial failed model replies. Bridge audio objects are removed after delivery/cancellation.
@@ -314,3 +350,8 @@ backup is /data/live-light-backup-20261004181316.json. Subscriber delivered 1834
 the run, including unrelated HA activity. 92 C# tests pass and git diff --check passes.
 These checks use the shared text/voice coordinator through the test API; a new microphone/
 spoken control request after this deployment has not yet been physically confirmed.
+
+## October 4 parser corrections (local validation)
+
+Brightness accepts at as well as to; the exact spoken kitchen transcript and LLM authorization path have regression coverage. Native timers accept duration-first wording such as Set a 30 minute timer, including named and hyphenated durations. All 203 tests pass (185 unit/component, 18 integration); git diff --check passes. User confirmed spoken brightness, clarification/follow-ups and cancellation/recovery checks. Production timer creation and restart acceptance await deployment.
+

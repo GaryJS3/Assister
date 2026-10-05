@@ -47,7 +47,7 @@ public sealed class IntentClassifier : IIntentEngine
             return Slots(Match.Groups["power"].Value == "on" ? DirectIntentKind.TurnOn : DirectIntentKind.TurnOff, Match.Groups["target"].Value);
         }
 
-        Match = Pattern(Text, @"^(?:set|turn) (?<target>.+) to (?<percent>-?\d{1,9})\s*(?:percent|%)?$");
+        Match = Pattern(Text, @"^(?:set|turn) (?<target>.+) (?:to|at) (?<percent>-?\d{1,9})\s*(?:percent|%)?$");
         if (Match.Success)
         {
             var Target = Match.Groups["target"].Value;

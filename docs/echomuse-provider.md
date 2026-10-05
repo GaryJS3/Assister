@@ -1,5 +1,11 @@
 # EchoMuse external voice provider
 
+October 4 deployment: controller runtime `d19959628585c20a2fa2bc9b767ae7ca540e9e4d`
+includes microphone continuation; the user confirmed that follow-up questions reopen the mic.
+Assister/bridge revision `d51ca90` and the controller were redeployed; Kitchen and MBedroom
+returned Online with Assister ownership and no last error. The preexisting HA Voice device
+remains Offline. Controller runtime/data mounts and stack configuration were preserved.
+
 The deployed controller fork's protocol is distinct from ESPHome Native API. Assister uses
 one authenticated C# WebSocket for the entire controller, with existing native Wyoming and
 the shared request coordinator. No Python is added to the Assister service.

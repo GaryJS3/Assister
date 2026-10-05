@@ -4,6 +4,10 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 ## Current implementation
 
+Latest deployed baseline: `d51ca90` (October 4, 2026), with 196 passing tests. Assister,
+ESPHome bridge and EchoMuse were redeployed; the live manual HA cache rebuild passed.
+See [progress.md](progress.md) for verification boundaries and remaining physical acceptance.
+
 Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup migrations, structured console logs, health/status endpoints, Docker packaging, and persistence/API tests.
 
 Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. The providers are wired into the shared voice pipeline.
