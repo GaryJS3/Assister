@@ -9,7 +9,8 @@ namespace Assister.Tools;
 public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default,
     DeviceConversationContext? Conversation = null)
 {
-    public ControlRequest? Control { get; } = ControlRequest.Parse(Request.Message, Conversation);
+    public ControlRequest? Control { get; set; } = ControlRequest.Parse(Request.Message, Conversation);
+    public bool SemanticControlChecked { get; set; }
     public DeviceConversationContext? ControlConversation { get; } = Conversation is null ? null : new()
     {
         References = Conversation.References.ToArray(), UpdatedAt = Conversation.UpdatedAt
@@ -30,7 +31,7 @@ public sealed class ToolRegistry(IEnumerable<IAssisterTool> Tools)
     public IReadOnlyDictionary<string, IAssisterTool> All { get; } = Tools.ToDictionary(Tool => Tool.Definition.Function.Name);
 }
 
-public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
+public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, ILanguageModel? Model = null)
 {
     public async Task<string> ExecuteAsync(LlmToolCall Call, IReadOnlySet<string> Selected, ToolExecutionContext Context,
         CancellationToken CancellationToken)
@@ -61,6 +62,11 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
             if (Encoding.UTF8.GetByteCount(Call.Function.Arguments) > 8192) { throw new InvalidDataException(); }
             using var Arguments = JsonDocument.Parse(Call.Function.Arguments, new JsonDocumentOptions { MaxDepth = 16 });
             Validate(Arguments.RootElement, Tool.Definition.Function.Parameters);
+            if (Call.Function.Name == "ha_control" && Context.Control is null && !Context.SemanticControlChecked && Model is not null)
+            {
+                Context.SemanticControlChecked = true;
+                Context.Control = await SemanticControlRequest.InterpretAsync(Model, Context.Request.Message, CancellationToken);
+            }
             if (Call.Function.Name == "ha_control" && Context.Control is null)
             {
                 Trace.Complete("rejected");

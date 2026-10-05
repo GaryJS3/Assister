@@ -27,7 +27,15 @@ searches stay failures rather than becoming claims that devices do not exist.
 
 `ControlRequest` derives action, brightness and target from the current utterance.
 Questions, negations and conditional instructions do not authorize immediate changes.
-Unsupported wording requires clarification. The broker checks authorization and the HA
+The deterministic parser is a fast path, not a required grammar for LLM controls. If
+the model proposes a control for unmatched wording, the broker makes a separate,
+bounded semantic interpretation of the current user message. That interpretation
+receives no conversation history, search results or proposed control arguments. It
+extracts action, target, brightness and explicit area; an information question,
+negation or future/conditional request produces no immediate control. Invalid or
+unavailable interpretation cannot execute a command. This fallback adds one model
+call only when a control is proposed and deterministic interpretation failed.
+The broker checks authorization and the HA
 tool verifies action, brightness, target scope, current search observations and fresh
 entity availability. Searching an arbitrary entity does not authorize changing it;
 generic room-less commands cannot select a device arbitrarily.
@@ -62,6 +70,23 @@ action replay, wrong actions/targets, batches, partial completion, duplicate att
 search errors, clarification, expiry, satellite isolation, persistence and topic changes.
 Physical voice and HA readback acceptance are separate from fake-client tests; discovery
 validation does not issue device controls.
+
+## Natural wording fix — October 5, 2026 (local, not deployed)
+
+The 18:39 voice run `56a48abe-051c-47a1-bb1a-af4c2cfd893e` correctly transcribed
+"Hey Jarvis, can you turn the kitchen lights on 100%?", found Kitchen Main Lights,
+and proposed brightness 100. The deterministic authorization parser returned no
+command, so the broker rejected it before HA execution. Wake-word greetings,
+stacked polite prefixes and on-at-percentage phrases now take the direct path.
+Unmatched paraphrases can use the semantic fallback while retaining search,
+target/action/brightness validation, ambiguity checks and completion receipts.
+
+`dotnet test Assister.sln` passes 219 tests. The read-only C# service probe mode
+`--control-language` checks semantic interpretation against the configured model;
+it never sends Home Assistant controls. All eight interpretation cases passed against
+the live Qwen3.6-35B-A3B-UD-Q4_K_XL endpoint, including natural commands,
+information questions, negation and conditional requests. These changes have not been deployed or
+verified through physical voice.
 
 ## Deployment and live verification — October 4, 2026
 

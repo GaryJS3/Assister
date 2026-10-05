@@ -40,7 +40,10 @@ public sealed class IntentClassifier : IIntentEngine
     {
         var Text = Normalize(Message);
 
-        var Match = Pattern(Text, @"^turn (?<target>.+) (?<power>on|off)$");
+        var Match = Pattern(Text, @"^(?:turn|switch) (?:(?<target>.+?) on|on (?<target>.+?)) (?:to |at )?(?<percent>-?\d{1,9})\s*(?:percent|%)?$");
+        if (Match.Success) { return Slots(DirectIntentKind.SetBrightness, Match.Groups["target"].Value, int.Parse(Match.Groups["percent"].Value)); }
+
+        Match = Pattern(Text, @"^turn (?<target>.+) (?<power>on|off)$");
         if (!Match.Success) { Match = Pattern(Text, @"^turn (?<power>on|off) (?<target>.+)$"); }
         if (Match.Success)
         {
@@ -71,11 +74,13 @@ public sealed class IntentClassifier : IIntentEngine
     public static string Normalize(string Message)
     {
         var Text = LanguageParser.Normalize(Message);
-        foreach (var Prefix in new[] { "can you ", "could you ", "would you " })
+        Text = Regex.Replace(Text, @"^(?:(?:hey|okay|ok)\s+)?(?:jarvis|assister)[,\s]+", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        string Previous;
+        do
         {
-            if (Text.StartsWith(Prefix, StringComparison.Ordinal)) { Text = Text[Prefix.Length..]; break; }
-        }
-        if (Text.StartsWith("please ", StringComparison.Ordinal)) { Text = Text[7..]; }
+            Previous = Text;
+            Text = Regex.Replace(Text, @"^(?:can you|could you|would you|will you|please)\s+", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        } while (Text != Previous);
         if (Text.EndsWith(" please", StringComparison.Ordinal)) { Text = Text[..^7]; }
         return Text;
     }

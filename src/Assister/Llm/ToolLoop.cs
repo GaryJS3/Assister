@@ -156,6 +156,11 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                     Result = "{\"error\":\"Repeated control blocked.\"}";
                 }
                 else { Result = await Broker.ExecuteAsync(Call, Selected, Context, Timeout.Token); }
+                if (!Control && Context.Control is not null)
+                {
+                    CurrentControl = Context.Control;
+                    Control = true;
+                }
                 if (Call.Function.Name == "ha_control")
                 {
                     using var ControlResult = JsonDocument.Parse(Result);

@@ -18,6 +18,100 @@ namespace Assister.Tests;
 public sealed class DeviceInteractionTests
 {
     [Theory]
+    [InlineData("Hey Jarvis, can you turn the kitchen lights on 100%?")]
+    [InlineData("Hey Jarvis, can you turn on the kitchen lights to 100% please?")]
+    [InlineData("Please could you turn the kitchen lights on at 100 percent?")]
+    public async Task SpokenBrightnessRequestsUseTheDirectPath(string Message)
+    {
+        await using var App = await Fixture.Create();
+        var Result = await App.Send(Message);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("direct-intent", Result.HandledBy);
+        var Action = Assert.Single(App.Actions.Calls);
+        Assert.Equal(["light.kitchen_main_lights"], Action.EntityIds);
+        Assert.Equal(100, Action.BrightnessPercent);
+        Assert.Empty(App.Model.Requests);
+    }
+
+    [Fact]
+    public async Task UnmatchedNaturalLanguageCanControlThroughIndependentCurrentRequestInterpretation()
+    {
+        await using var App = await Fixture.Create(Semantic: true);
+        const string Message = "Hey Jarvis, I'd like some light in the kitchen, make it as bright as possible.";
+        Assert.Null(ControlRequest.Parse(Message));
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"set_brightness","brightness_pct":100}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("interpret", "interpret_device_request", """{"action":"set_brightness","target":"kitchen lights","brightness_pct":100}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new("Set the kitchen lights to full brightness.", [], "stop"));
+        var Result = await App.Send(Message);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("language-model", Result.HandledBy);
+        var Action = Assert.Single(App.Actions.Calls);
+        Assert.Equal(["light.kitchen_main_lights"], Action.EntityIds);
+        Assert.Equal(100, Action.BrightnessPercent);
+        var Interpretation = App.Model.Requests[2];
+        Assert.Equal(Message, Interpretation.Messages.Single(Item => Item.Role == "user").Content);
+        Assert.Equal(2, Interpretation.Messages.Count);
+        Assert.Equal("interpret_device_request", Assert.Single(Interpretation.Tools!).Function.Name);
+        Assert.DoesNotContain("light.kitchen_main_lights", string.Join(' ', Interpretation.Messages.Select(Item => Item.Content)));
+    }
+
+    [Theory]
+    [InlineData("What lights are in the kitchen?")]
+    [InlineData("Don't turn the kitchen lights on")]
+    [InlineData("Turn on the kitchen lights when I get home")]
+    public async Task SemanticFallbackCannotReplayHistoryOrUseProposedControlAsAuthorization(string Message)
+    {
+        await using var App = await Fixture.Create(Semantic: true);
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"turn_on"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("interpret", "interpret_device_request", """{"action":"none"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new("I have not changed the lights.", [], "stop"));
+        await App.Loop.RespondAsync(new(Message), [new("user", "Turn the office lights off")], CancellationToken.None);
+        Assert.Empty(App.Actions.Calls);
+        Assert.Equal(Message, App.Model.Requests[2].Messages.Single(Item => Item.Role == "user").Content);
+        Assert.DoesNotContain("office", string.Join(' ', App.Model.Requests[2].Messages.Select(Item => Item.Content)));
+        Assert.Contains(App.Model.Requests.Last().Messages, Item => Item.Role == "tool" && Item.Content!.Contains("control_not_authorized"));
+    }
+
+    [Theory]
+    [InlineData("light.office_fan", "set_brightness", 100, "ambiguous_targets")]
+    [InlineData("light.kitchen_main_lights", "turn_off", null, "control_not_authorized")]
+    public async Task SemanticInterpretationStillEnforcesRequestedTargetsAndActions(string Target, string Action, int? Brightness, string Error)
+    {
+        await using var App = await Fixture.Create(Semantic: true);
+        App.Model.Responses.Enqueue(new(null, [Call("interpret", "interpret_device_request", """{"action":"set_brightness","target":"kitchen lights","brightness_pct":100}""")], "tool_calls"));
+        var Registry = new ToolRegistry([App.Tool("ha_control")]);
+        var Broker = new ToolBroker(Registry, Model: App.Model);
+        var Context = new ToolExecutionContext(new("I'd like the kitchen at full brightness"), [Target]);
+        var Arguments = new Dictionary<string, object> { ["entity_id"] = Target, ["action"] = Action };
+        if (Brightness is not null) { Arguments["brightness_pct"] = Brightness; }
+        var Result = await Broker.ExecuteAsync(Call("control", "ha_control", JsonSerializer.Serialize(Arguments)),
+            new HashSet<string> { "ha_control" }, Context, CancellationToken.None);
+        Assert.Contains(Error, Result);
+        Assert.Empty(App.Actions.Calls);
+    }
+
+    [Theory]
+    [InlineData("{\"action\":\"set_brightness\",\"target\":\"kitchen lights\"}")]
+    [InlineData("{\"action\":\"set_brightness\",\"target\":\"kitchen lights\",\"brightness_pct\":200}")]
+    [InlineData("not json")]
+    public async Task IncompleteOrInvalidSemanticInterpretationCannotExecuteControls(string Interpretation)
+    {
+        await using var App = await Fixture.Create(Semantic: true);
+        App.Model.Responses.Enqueue(new(null, [Call("interpret", "interpret_device_request", Interpretation)], "tool_calls"));
+        var Registry = new ToolRegistry([App.Tool("ha_control")]);
+        var Broker = new ToolBroker(Registry, Model: App.Model);
+        var Context = new ToolExecutionContext(new("I'd like the kitchen at full brightness"), ["light.kitchen_main_lights"]);
+        var Proposed = Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"set_brightness","brightness_pct":100}""");
+        var Selected = new HashSet<string> { "ha_control" };
+        Assert.Contains("error", await Broker.ExecuteAsync(Proposed, Selected, Context, CancellationToken.None));
+        Assert.Contains("error", await Broker.ExecuteAsync(Proposed, Selected, Context, CancellationToken.None));
+        Assert.Single(App.Model.Requests);
+        Assert.Empty(App.Actions.Calls);
+    }
+
+    [Theory]
     [InlineData(" Set kitchen lights at 50%.", "direct-intent")]
     [InlineData("Adjust kitchen lights at 50 percent", "language-model")]
     public async Task BrightnessAtPercentageResolvesAndAuthorizesTheExactKitchenTarget(string Message, string Handler)
@@ -302,7 +396,7 @@ public sealed class DeviceInteractionTests
         private readonly HttpClient Http = new();
         private readonly IConfiguration Configuration = new ConfigurationBuilder().Build();
         public HomeAssistantTool Tool(string Name) => new(Name, Cache, Actions, Http, Configuration);
-        public static async Task<Fixture> Create()
+        public static async Task<Fixture> Create(bool Semantic = false)
         {
             var App = new Fixture();
             await App.Connection.OpenAsync();
@@ -322,7 +416,7 @@ public sealed class DeviceInteractionTests
             App.Cache.SetStale(false);
             var Registry = new ToolRegistry(new[] { "ha_search", "ha_get_state", "ha_control", "ha_get_history" }.Select(App.Tool)
                 .Cast<IAssisterTool>().Append(new WeatherTool(App.Cache, App.Http, App.Configuration)));
-            App.Loop = new(App.Model, Registry, new(Registry), App.Configuration);
+            App.Loop = new(App.Model, Registry, new(Registry, Model: Semantic ? App.Model : null), App.Configuration);
             App.RecreateCoordinator();
             return App;
         }
