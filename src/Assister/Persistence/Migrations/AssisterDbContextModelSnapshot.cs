@@ -51,6 +51,7 @@ public sealed class AssisterDbContextModelSnapshot : ModelSnapshot
             Entity.Property(Row => Row.SatelliteId).IsRequired().HasColumnType("TEXT");
             Entity.Property(Row => Row.UpdatedAt).HasColumnType("INTEGER");
             Entity.Property(Row => Row.Summary).IsRequired().HasColumnType("TEXT");
+            Entity.Property(Row => Row.DeviceContextJson).IsRequired().HasColumnType("TEXT");
             Entity.HasKey(Row => Row.Id);
             Entity.HasIndex(Row => Row.SatelliteId);
             Entity.ToTable("Conversations");

@@ -258,7 +258,7 @@ public sealed class ToolLoopTests
         {
             Calls++;
             Context.ObservedEntities.Add("light.living_room_lights");
-            return Task.FromResult("{\"state\":\"74\"}");
+            return Task.FromResult("[{\"entity_id\":\"light.living_room_lights\",\"name\":\"Living Room Lights\",\"state\":\"74\"}]");
         }
     }
     private sealed class FakeModel : ILanguageModel

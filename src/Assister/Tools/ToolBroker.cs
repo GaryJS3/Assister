@@ -6,7 +6,18 @@ using Assister.Persistence;
 
 namespace Assister.Tools;
 
-public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default);
+public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default,
+    DeviceConversationContext? Conversation = null)
+{
+    public ControlRequest? Control { get; } = ControlRequest.Parse(Request.Message, Conversation);
+    public DeviceConversationContext? ControlConversation { get; } = Conversation is null ? null : new()
+    {
+        References = Conversation.References.ToArray(), UpdatedAt = Conversation.UpdatedAt
+    };
+    public HashSet<string> AttemptedControls { get; } = [];
+    public HashSet<string> CompletedControls { get; } = [];
+    public HashSet<string> RequestedControls { get; } = [];
+}
 public interface IAssisterTool
 {
     LlmTool Definition { get; }
@@ -50,6 +61,15 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
             if (Encoding.UTF8.GetByteCount(Call.Function.Arguments) > 8192) { throw new InvalidDataException(); }
             using var Arguments = JsonDocument.Parse(Call.Function.Arguments, new JsonDocumentOptions { MaxDepth = 16 });
             Validate(Arguments.RootElement, Tool.Definition.Function.Parameters);
+            if (Call.Function.Name == "ha_control" && Context.Control is null)
+            {
+                Trace.Complete("rejected");
+                Trace.Detail("failureCategory", "ControlNotAuthorized");
+                var Rejection = "{\"error\":\"The current request does not authorize a device change. Answer the current question; do not execute earlier commands.\",\"code\":\"control_not_authorized\"}";
+                Trace.Output(DiagnosticSanitizer.ParseJson(Rejection));
+                await Audit("rejected");
+                return Rejection;
+            }
             await Audit("started");
             using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
             Timeout.CancelAfter(TimeSpan.FromSeconds(12));
@@ -67,7 +87,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null)
             return Result;
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception Error) when (Error is JsonException or InvalidDataException or InvalidOperationException or HttpRequestException or OperationCanceledException or KeyNotFoundException or FormatException or ArgumentException)
+        catch (Exception Error) when (Error is JsonException or InvalidDataException or IOException or InvalidOperationException or HttpRequestException or OperationCanceledException or KeyNotFoundException or FormatException or ArgumentException)
         {
             Trace.Complete("failed");
             Trace.Detail("failureCategory", Error.GetType().Name);

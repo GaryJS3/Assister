@@ -26,6 +26,7 @@ public sealed class Conversation
     public string SatelliteId { get; set; } = "";
     public long UpdatedAt { get; set; }
     public string Summary { get; set; } = "";
+    public string DeviceContextJson { get; set; } = "{}";
 }
 
 public sealed class ConversationTurn

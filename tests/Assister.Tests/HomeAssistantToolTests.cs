@@ -65,7 +65,7 @@ public sealed class HomeAssistantToolTests
         Context = new(new("Dim the light"), []);
         Result = Json(await Search.ExecuteAsync(Json("""{"query":"light","domains":["light"]}"""), Context, CancellationToken.None));
         Assert.Equal(2, Result.GetArrayLength());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Control.ExecuteAsync(
+        Assert.Contains("ambiguous_targets", await Control.ExecuteAsync(
             Json("""{"entity_id":"light.living_room_lights","action":"set_brightness","brightness_pct":40}"""), Context, CancellationToken.None));
         Assert.Single(Actions.Calls);
         Assert.Empty(Json(await Search.ExecuteAsync(Json("""{"query":"missing"}"""), Context, CancellationToken.None)).EnumerateArray());

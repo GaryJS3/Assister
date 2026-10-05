@@ -5,6 +5,7 @@ using Assister.Intents;
 using Assister.Modules.HomeAssistant;
 using Assister.Llm;
 using Assister.Modules.Timers;
+using Assister.Tools;
 
 namespace Assister.Voice;
 
@@ -15,7 +16,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
     public async Task<RequestResult> ProcessWithHistoryAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken,
-        Func<string, CancellationToken, Task>? OnText = null)
+        Func<string, CancellationToken, Task>? OnText = null, DeviceConversationContext? DeviceContext = null)
     {
         using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
         var TraceId = RunTracing.RunId;
@@ -52,12 +53,56 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         {
             return Result(TimerResponse, "succeeded", "timer");
         }
+        DeviceContext?.Expire();
+        var CurrentControl = ControlRequest.Parse(Request.Message, DeviceContext);
+        var ClassifierText = Request.Message;
+        if (CurrentControl is null && DeviceContext?.LastAttempted is { } LastAttempt
+            && System.Text.RegularExpressions.Regex.IsMatch(LanguageParser.Normalize(Request.Message), @"^(?:did you|have you) (?:turn|switch|set|dim|change)\b.*\b(?:them|it|those|these|both)\b"))
+        {
+            string Names(IEnumerable<string> Ids) => string.Join(" and ", Ids.Select(Id => Cache.Snapshot().Entities.FirstOrDefault(Entity => Entity.EntityId == Id)?.Name ?? Id));
+            var Action = LastAttempt.Action switch { "turn_on" => "turn on", "turn_off" => "turn off", _ => "set the brightness of" };
+            var Amount = LastAttempt.BrightnessPercent is { } Percent ? " to " + Percent + " percent" : "";
+            return Result(LastAttempt.Outcome == "completed" ? "The last confirmed action was to " + Action + " " + Names(LastAttempt.EntityIds) + Amount + "."
+                : "I could not confirm the last command for " + Names(LastAttempt.EntityIds) + ". Please check those devices before trying again.",
+                LastAttempt.Outcome == "completed" ? "succeeded" : "failed", "action-receipt");
+        }
+        if (DeviceContext is { References.Length: > 0 } && CurrentControl is null && ControlRequest.IsSelection(Request.Message))
+        {
+            if (LanguageParser.Noun(Request.Message).StartsWith("both", StringComparison.Ordinal) && DeviceContext.References.Length != 2)
+                return Result("Which two devices do you mean?", "ambiguous", "clarification");
+            if (DeviceContext.References.Length > 1 && LanguageParser.Noun(Request.Message) is "it" or "yes" or "that one")
+                return Result("Which device do you mean: " + string.Join(" or ", DeviceContext.References.Select(Item => Item.Name)) + "?", "ambiguous", "clarification");
+            DeviceContext.AwaitingAction = true;
+            DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
+            return Result("Do you want " + string.Join(" and ", DeviceContext.References.Select(Item => Item.Name)) + " turned on or off?", "ambiguous", "clarification");
+        }
+        if (DeviceContext is { References.Length: > 1 } && CurrentControl is null && LanguageParser.Normalize(Request.Message) is "on" or "off")
+            return Result("Which devices should I change? Please name them or say both.", "ambiguous", "clarification");
+        if (CurrentControl is not null && (ControlRequest.IsReference(CurrentControl.Target)
+            || ControlRequest.Parse(Request.Message) is null))
+        {
+            var Targets = CurrentControl.Resolve(Cache.Snapshot(), DeviceContext);
+            if (Targets.Length == 0) { return Result("Which device do you mean? Please name the devices and the action you want.", "ambiguous", "clarification"); }
+            var Names = string.Join(" and ", Targets.Select(Item => Item.EntityId));
+            ClassifierText = CurrentControl.Action switch
+            {
+                "turn_on" => "turn on " + Names,
+                "turn_off" => "turn off " + Names,
+                _ => "set " + Names + " to " + CurrentControl.Brightness + " percent"
+            };
+        }
+        // An unrelated question consumes a pending clarification, so an older action
+        // cannot be resurrected later. References remain available for explicit commands.
+        if (DeviceContext is not null) { DeviceContext.Pending = null; DeviceContext.AwaitingAction = false; }
         IntentMatch? Intent;
         IntentDecision Decision;
         using (var Step = RunTracing.Start("Intent classification", "Match supported deterministic commands before selecting a device."))
         {
-            Decision = await Classifier.MatchAsync(Request.Message, CancellationToken);
+            Decision = await Classifier.MatchAsync(ClassifierText, CancellationToken);
             Intent = Decision.Match?.Intent;
+            if (CurrentControl is null && Intent is { Kind: DirectIntentKind.TurnOn or DirectIntentKind.TurnOff or DirectIntentKind.SetBrightness })
+                CurrentControl = new(Intent.Kind == DirectIntentKind.TurnOn ? "turn_on" : Intent.Kind == DirectIntentKind.TurnOff ? "turn_off" : "set_brightness",
+                    Intent.Target, Intent.BrightnessPercent, Intent.ExplicitArea);
             Step.Input(new { originalInput = Request.Message, normalizedInput = IntentClassifier.Normalize(Request.Message) }, false);
             Step.Output(new { matched = Decision.Status == "matched", rule = Decision.Match?.Definition.BuiltIn == true && Intent is not null ? Intent.MatchedRule : Decision.Match?.Definition.Id, intent = Intent?.Kind.ToString(),
                 Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Decision.Reason }, false);
@@ -80,12 +125,16 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             if (LanguageModel is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
             try
             {
-                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText), "succeeded", "language-model");
+                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText, DeviceContext), "succeeded", "language-model");
             }
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
-            catch (ControlNotConfirmedException)
+            catch (ControlNotConfirmedException Error)
             {
-                return Result("I could not confirm the command completed. Please check the device or use its full name.", "failed", "language-model");
+                return Result(Error.Response ?? "I could not confirm the command completed. Please check the device or use its full name.", "failed", "language-model");
+            }
+            catch (DeviceSearchFailedException)
+            {
+                return Result("I couldn't complete the device search. That does not mean the devices are missing. Please try again.", "unavailable", "language-model");
             }
             catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.IO.IOException or System.Text.Json.JsonException)
             {
@@ -116,7 +165,14 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Resolution.Entities.Count == 0)
         {
-            return Result(Resolution.Alternatives.Count > 0 ? "Which device do you mean? Please use its full name or a more specific area." : "I could not find that device in the requested area.",
+            if (DeviceContext is not null && Resolution.Alternatives.Count > 0)
+            {
+                DeviceContext.References = Resolution.Alternatives.Where(Entity => Entity.Domain is "light" or "switch")
+                    .Take(10).Select(Entity => new DeviceReference(Entity.EntityId, Entity.Name)).ToArray();
+                DeviceContext.Pending = CurrentControl;
+                DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            return Result(Resolution.Alternatives.Count > 0 ? "Which device do you mean: " + string.Join(" or ", Resolution.Alternatives.Select(Entity => Entity.Name)) + "?" : "I could not find that device in the requested area.",
                 Resolution.Alternatives.Count > 0 ? "ambiguous" : "not-found");
         }
 
@@ -126,10 +182,21 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             using (var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state."))
             {
                 Step.Input(new { action = Intent.Kind.ToString(), entities = Resolution.Entities.Select(Entity => Entity.EntityId), Intent.BrightnessPercent });
+                if (DeviceContext is not null && CurrentControl is not null)
+                    DeviceContext.LastAttempted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), "unconfirmed", DateTimeOffset.UtcNow, Intent.BrightnessPercent);
                 Response = Actions is null ? await Handler.ExecuteAsync(Intent, Resolution, CancellationToken)
                     : await Actions.ExecuteAsync(Decision.Match!, Resolution, CancellationToken);
                 Step.Output(new { Response.Response, Response.Outcome });
                 Step.Complete(Response.Outcome);
+            }
+            if (DeviceContext is not null && Resolution.Entities.All(Entity => Entity.Domain is "light" or "switch"))
+            {
+                DeviceContext.References = Resolution.Entities.Take(10).Select(Entity => new DeviceReference(Entity.EntityId, Entity.Name)).ToArray();
+                DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
+                if (Response.Outcome == "succeeded" && CurrentControl is not null)
+                    DeviceContext.LastCompleted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), DateTimeOffset.UtcNow, Intent.BrightnessPercent);
+                if (CurrentControl is not null && DeviceContext.LastAttempted is { } Attempt)
+                    DeviceContext.LastAttempted = Attempt with { Outcome = Response.Outcome == "succeeded" ? "completed" : Response.Outcome };
             }
             return Result(Response.Outcome == "succeeded" && Decision.Match is { } Matched
                 ? IntentResponses.Render(Matched, Response.Response, Configuration ?? new ConfigurationBuilder().Build()) : Response.Response, Response.Outcome);

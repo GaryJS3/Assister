@@ -15,7 +15,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     public EntityResolutionResult Resolve(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
     {
         var Target = LanguageParser.Noun(Intent.Target);
-        if (Intent.Kind == DirectIntentKind.SetBrightness
+        if (Intent.Kind is DirectIntentKind.SetBrightness or DirectIntentKind.TurnOn or DirectIntentKind.TurnOff
             && Target.Contains(" and ", StringComparison.Ordinal))
         {
             // Preserve real names containing "and" before interpreting a target list.
@@ -23,6 +23,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
             if (Whole.Entities.Count > 0) { return Whole; }
             var Parts = Target.Split(" and ", StringSplitOptions.None);
             if (Parts.Length > 8 || Parts.Any(string.IsNullOrWhiteSpace)) { return new([], 0, []); }
+            if (Parts.Any(Part => System.Text.RegularExpressions.Regex.IsMatch(Part, @"\b(?:on|off)\b"))) { return new([], 0, []); }
             var Resolved = Parts.Select(Part => ResolveSingle(Intent with { Target = LanguageParser.Noun(Part) }, SatelliteArea, Snapshot)).ToArray();
             if (Resolved.Any(Result => Result.Entities.Count == 0))
                 return new([], 0, Resolved.Where(Result => Result.Entities.Count == 0).SelectMany(Result => Result.Alternatives)
@@ -82,7 +83,9 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
 
         if (Area is not null)
         {
-            Candidates = InArea(Candidates, Area);
+            var Assigned = InArea(Candidates, Area);
+            Candidates = Assigned.Length > 0 ? Assigned : HomeAssistantEntitySearch.Find(Candidates.Where(Entity => string.IsNullOrWhiteSpace(Entity.AreaId)),
+                Area + " " + Target, Domains: Domain is null ? null : [Domain]);
         }
 
         var Generic = Target is "light" or "lights" or "switch" or "switches" || (Intent.Kind == DirectIntentKind.QueryTemperature && Target == "temperature");
@@ -90,7 +93,9 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         {
             Area ??= SatelliteArea;
             if (Area is null) { return Result([], 0, Candidates.Take(5).ToArray()); }
-            Candidates = InArea(Candidates, Area);
+            var Assigned = InArea(Candidates, Area);
+            Candidates = Assigned.Length > 0 ? Assigned : HomeAssistantEntitySearch.Find(Candidates.Where(Entity => string.IsNullOrWhiteSpace(Entity.AreaId)),
+                Area + " " + Target, Domains: Domain is null ? null : [Domain]);
             if (Plural && Candidates.Length is > 0 and <= 64 && Intent.Kind != DirectIntentKind.QueryState)
             {
                 return Result(Candidates, 1, []);
@@ -110,6 +115,11 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         var Equivalent = Candidates.Where(Entity => Names(Entity).Any(Name => StripDomain(LanguageParser.Noun(Name), Domain) == ShortTarget)).ToArray();
         if (Equivalent.Length > 1 && Area is null && SatelliteArea is not null) { Equivalent = InArea(Equivalent, SatelliteArea); }
         if (Equivalent.Length > 0) { return Unique(Equivalent, 0.95); }
+        if (Domain is not null && Target.Contains(' '))
+        {
+            var Semantic = HomeAssistantEntitySearch.Find(Candidates, Target, Area, [Domain]);
+            if (Semantic.Length > 0) { return Unique(Semantic, 0.9); }
+        }
         var Alternatives = Candidates.Where(Entity => Names(Entity).Any(Name => LanguageParser.Normalize(Name).Contains(Target, StringComparison.Ordinal)))
             .Take(5).ToArray();
         return Result([], 0, Alternatives);

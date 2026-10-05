@@ -67,7 +67,7 @@ public sealed class DiagnosticsTests
         var Tool = Assert.Single(Trace.Steps, Step => Step.Kind == "ToolCall");
         Assert.Equal(Rounds[0].Id, Tool.ParentId);
         Assert.Equal("office", Tool.Input!.Value.GetProperty("query").GetString());
-        Assert.Equal(74, Tool.Output!.Value.GetProperty("temperature").GetInt32());
+        Assert.Equal(74, Tool.Output!.Value[0].GetProperty("temperature").GetInt32());
         Assert.False(Tool.OutputTruncated);
     }
 
@@ -170,6 +170,6 @@ public sealed class DiagnosticsTests
     {
         public bool StateChanging => false;
         public LlmTool Definition => new(new("ha_search", "Search", JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""")));
-        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token) => Task.FromResult("{\"temperature\":74}");
+        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token) => Task.FromResult("[{\"temperature\":74}]");
     }
 }

@@ -3,6 +3,8 @@ using Assister.Persistence;
 using Assister.Voice;
 using Assister.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Assister.Tools;
+using System.Text.Json;
 
 namespace Assister.Conversations;
 
@@ -67,15 +69,20 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 History.Insert(Conversation.Summary.Length > 0 ? 1 : 0, new("user", Turn.UserText));
             }
             var Emitted = false;
+            DeviceConversationContext DeviceContext;
+            try { DeviceContext = JsonSerializer.Deserialize<DeviceConversationContext>(Conversation.DeviceContextJson) ?? new(); }
+            catch (JsonException) { DeviceContext = new(); }
+            DeviceContext.Expire();
             async Task Deliver(string Text, CancellationToken Token)
             {
                 Emitted = true;
                 await OnText!(Text, Token);
             }
             var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken,
-                OnText is null ? null : Deliver);
+                OnText is null ? null : Deliver, DeviceContext);
             if (OnText is not null && !Emitted) { await OnText(Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
             Conversation.UpdatedAt = Now;
+            Conversation.DeviceContextJson = JsonSerializer.Serialize(DeviceContext);
             Database.ConversationTurns.Add(new() { ConversationId = Conversation.Id, UserText = Request.Message,
                 AssistantText = Result.Response[..Math.Min(Result.Response.Length, 4000)], Outcome = Result.Outcome, TraceId = Result.TraceId });
             // Deterministic, bounded topic notes. Never store raw tool messages as conversational turns.

@@ -9,9 +9,10 @@ public sealed record HomeAssistantEntity(string EntityId, string Name, string? A
     public string? DeviceName { get; init; }
     public bool IsUnavailable => State.GetProperty("state").GetString() is "unavailable" or "unknown";
     public bool IsTemperature => Domain == "sensor" && State.GetProperty("attributes").TryGetProperty("device_class", out var Class)
-        && Class.GetString() == "temperature";
+        && Class.ValueKind == JsonValueKind.String && Class.GetString() == "temperature";
     public bool SupportsBrightness => Domain == "light" && State.GetProperty("attributes").TryGetProperty("supported_color_modes", out var Modes)
-        && Modes.ValueKind == JsonValueKind.Array && Modes.EnumerateArray().Any(Mode => Mode.GetString() is "brightness" or "color_temp" or "hs" or "xy" or "rgb" or "rgbw" or "rgbww" or "white");
+        && Modes.ValueKind == JsonValueKind.Array && Modes.EnumerateArray().Any(Mode => Mode.ValueKind == JsonValueKind.String
+            && Mode.GetString() is "brightness" or "color_temp" or "hs" or "xy" or "rgb" or "rgbw" or "rgbww" or "white");
 }
 public sealed record HomeAssistantSnapshot(bool IsStale, IReadOnlyList<HomeAssistantEntity> Entities, JsonElement Services);
 public sealed record HomeAssistantCacheStatus(bool IsStale, int EntityCount, long StateEventCount, DateTimeOffset? LastStateEventAt);
