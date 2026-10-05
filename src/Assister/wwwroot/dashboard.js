@@ -7,7 +7,7 @@ function node(tag, text, cls) { const e = document.createElement(tag); if (text 
 function pretty(value) { return JSON.stringify(value, null, 2); }
 function time(n) { return n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${Math.max(0, n || 0).toFixed(1)} ms`; }
 function label(value) { return value.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' '); }
-function badge(status) { return node('span', label(status || 'unknown'), 'badge' + (['succeeded','Healthy','Connected','matched','resolved'].includes(status) ? ' good' : ['failed','unavailable','rejected','stt-failed','playback-failed','interrupted-or-failed','stage-failure'].includes(status) ? ' bad' : '')); }
+function badge(status) { return node('span', status === 'unmatched' ? 'unknown intent' : label(status || 'unknown'), 'badge' + (['succeeded','Healthy','Connected','matched','resolved'].includes(status) ? ' good' : ['failed','unavailable','rejected','stt-failed','playback-failed','interrupted-or-failed','stage-failure'].includes(status) ? ' bad' : '')); }
 function copyButton(value, description) {
     const b = node('button', 'Copy', 'copy'); b.type = 'button'; b.setAttribute('aria-label', `Copy ${description}`);
     b.onclick = async () => { try { const text = typeof value === 'string' ? value : pretty(value); if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text); else { const area = node('textarea'); area.value = text; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.append(area); area.select(); const ok = document.execCommand('copy'); area.remove(); if (!ok) throw Error(); } b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1200); } catch { b.textContent = 'Copy failed'; } }; return b;
@@ -31,7 +31,7 @@ function filteredRuns() {
 }
 function renderList() {
     $('runs').replaceChildren(); const filtered = filteredRuns(); $('run-count').textContent = `${filtered.length} of ${runs.length} interactions`;
-    for (const r of filtered) { const b = node('button', null, 'run' + (r.runId === selected ? ' selected' : '')); b.append(node('strong', r.userText || 'Waiting for transcript…'), node('small', `${r.source.toUpperCase()} · ${new Date(r.startedAt).toLocaleString()} · ${time(r.durationMilliseconds)}`), badge(r.outcome)); if(r.hasFailures)b.append(badge('stage-failure')); b.onclick = () => inspect(r.runId); $('runs').append(b); }
+    for (const r of filtered) { const b = node('button', null, 'run' + (r.runId === selected ? ' selected' : '')); b.append(node('strong', r.userText || 'Waiting for transcript…'), node('small', `${r.source.toUpperCase()} · ${new Date(r.startedAt).toLocaleString()} · ${time(r.durationMilliseconds)}`), badge(r.outcome)); if(r.hasFailures)b.append(badge(r.outcome==='cancelled'?'stage-interrupted':'stage-failure')); b.onclick = () => inspect(r.runId); $('runs').append(b); }
     if (!filtered.length) $('runs').append(node('p', runs.length ? 'No matching interactions.' : 'No runs yet. Use Debug Chat to begin.', 'muted'));
 }
 function stepTitle(s) { const title = node('div', null, 'stage-title'); title.append(node('strong', s.name), badge(s.status), node('span', time(s.durationMilliseconds), 'duration')); return title; }
@@ -52,11 +52,14 @@ function renderStep(s, all) {
 }
 function renderDetail(r) {
     const signature = JSON.stringify(r); if(signature === detailSignature) return; detailSignature = signature;
-    const d=$('detail');d.replaceChildren();const card=node('div',null,'summary-card'),top=node('div',null,'summary-top');top.append(node('span',`${r.source.toUpperCase()} / ${new Date(r.startedAt).toLocaleString()}`,'mono'),badge(r.outcome));if(r.hasFailures)top.append(badge('stage-failure'));card.append(top,node('h2',r.userText || 'Waiting for transcript…'));
+    const d=$('detail');d.replaceChildren();const card=node('div',null,'summary-card'),top=node('div',null,'summary-top');top.append(node('span',`${r.source.toUpperCase()} / ${new Date(r.startedAt).toLocaleString()}`,'mono'),badge(r.outcome));if(r.hasFailures)top.append(badge(r.outcome==='cancelled'?'stage-interrupted':'stage-failure'));card.append(top,node('h2',r.userText || 'Waiting for transcript…'));
     const inputCopy=node('div',null,'mono');inputCopy.append(copyButton(r.userText || '','user input'));card.append(inputCopy);
     const responseGrid=node('div',null,'response-grid');for(const [name,value,cls]of [['Raw response',r.rawResponse,'response'],['Spoken / TTS-ready response',r.spokenResponse,'response spoken']]){const section=node('div');section.append(node('span',name,'mono'),node('div',value ?? '(Not produced yet)',cls));responseGrid.append(section);}card.append(responseGrid);
     const info=node('div',null,'facts');for(const [name,value]of [['RunId',r.runId],['Handled by',r.handledBy],['Satellite',r.satelliteId],['Area',r.area],['Conversation ID',r.conversationId],['Voice session ID',r.voiceSessionId],['Total duration',time(r.durationMilliseconds)],['Infrastructure trace',r.activityTraceId]]){const f=node('div',null,'fact');f.append(node('span',name),node('strong',value || '—'));if(name==='RunId')f.append(copyButton(r.runId,'RunId'));info.append(f);}card.append(info);d.append(card);
-    const timings=node('section',null,'timings');timings.append(node('h3','Where the time went'),node('p','Audio capture and STT finalization are shown separately. Nested timings can overlap.','muted'));
+    const timings=node('section',null,'timings');
+    const timingHeading=node('h3','Where the time went');
+    timingHeading.append(node('span',`Total ${time(r.durationMilliseconds)}`,'timing-total'));
+    timings.append(timingHeading,node('p','Audio capture and STT finalization are shown separately. Nested timings can overlap.','muted'));
     const audio=r.steps.find(s=>s.name==='Microphone audio'); const stt=r.steps.find(s=>s.kind==='SpeechToText');
     const lanes=[];
     if(audio){
@@ -70,8 +73,23 @@ function renderDetail(r) {
     }
     if(audio)lanes.push({name:'Audio (PCM)',duration:audio.output?.audioDurationMilliseconds || 0,offset:0,cls:''});
     if(stt&&stt.metadata?.postAudioLatencyMilliseconds!=null)lanes.push({name:'STT finalize',duration:stt.metadata.postAudioLatencyMilliseconds,offset:Date.parse(stt.metadata.audioInputCompletedAt)-Date.parse(r.startedAt),cls:'stt'});
-    for(const s of r.steps){if(['IntentClassification','EntityResolution','ToolSelection','LanguageModel','ToolCall','TextToSpeech'].includes(s.kind)||s.kind==='Playback'&&s.name!=='Playback delivery')lanes.push({name:s.name,duration:s.durationMilliseconds,offset:Date.parse(s.startedAt)-Date.parse(r.startedAt),cls:s.kind==='ToolCall'?'tools':s.kind==='LanguageModel'?'stt':''});}
-    for(const lane of lanes){const row=node('div',null,'timing-row '+lane.cls),track=node('div',null,'track'),bar=node('i');if(lane.title)row.title=lane.title;bar.style.marginLeft=`${Math.max(0,Math.min(99,100*lane.offset/Math.max(1,r.durationMilliseconds)))}%`;bar.style.width=`${Math.max(.2,Math.min(100,100*lane.duration/Math.max(1,r.durationMilliseconds)))}%`;track.append(bar);row.append(node('span',lane.name),track,node('span',(lane.estimated?'≈ ':'')+time(lane.duration)));timings.append(row);}d.append(timings);
+    // Streaming spans include waiting for model output and playback, rather than isolated work.
+    // Keep their trace details below, but omit these enclosing spans from the timing chart.
+    for(const s of r.steps){
+        if(s.kind==='Playback'&&s.name==='Streaming delivery'||s.kind==='TextToSpeech'&&s.name==='Streaming speech synthesis')continue;
+        if(['IntentClassification','EntityResolution','ToolSelection','LanguageModel','ToolCall','TextToSpeech'].includes(s.kind)||s.kind==='Playback'&&s.name!=='Playback delivery')lanes.push({name:s.name,duration:s.durationMilliseconds,offset:Date.parse(s.startedAt)-Date.parse(r.startedAt),cls:s.kind==='ToolCall'?'tools':s.kind==='LanguageModel'?'stt':''});
+    }
+    for(const lane of lanes){
+        const row=node('div',null,'timing-row '+lane.cls),track=node('div',null,'track'),bar=node('i');
+        const percentage=100*lane.duration/Math.max(1,r.durationMilliseconds);
+        const share=percentage<1?'<1%':`${Math.round(percentage)}%`;
+        if(lane.title)row.title=lane.title;
+        bar.style.marginLeft=`${Math.max(0,Math.min(99,100*lane.offset/Math.max(1,r.durationMilliseconds)))}%`;
+        bar.style.width=`${Math.max(.2,Math.min(100,percentage))}%`;
+        track.append(bar);
+        row.append(node('span',lane.name),track,node('span',`${lane.estimated?'≈ ':''}${time(lane.duration)} (${share})`));
+        timings.append(row);
+    }d.append(timings);
     const groups=[['Input',['Input','SpeechToText']],['Routing',['IntentClassification','EntityResolution','ToolSelection','IntentExecution']],['LLM / Tools',['LanguageModel','ToolCall']],['Output',['ResponseFormatting','TextToSpeech','Playback','Error']]];
     let sectionNumber=0;for(const [name,kinds]of groups){const entries=r.steps.filter(s=>kinds.includes(s.kind));if(!entries.length)continue;
         // A cross-section parent is rendered at its own location with children, avoiding duplicate stages.
