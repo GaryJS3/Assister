@@ -28,7 +28,12 @@ the matching operation. Device ID plus session ID guards audio and voice playbac
 ID plus request ID guards announcements. Old events cannot complete a new turn.
 
 Voice replies use `turn_response` with an opaque HTTP WAV URL. C# resamples speech to
-48 kHz mono PCM. Explicit `play_finished` acknowledgment is required; `play_failed` preserves
+48 kHz mono PCM. Responses containing a question mark request `continueConversation`;
+the controller reopens its microphone through its existing continuation loop after
+successful playback. Each follow-up has a new transport session and uses the same
+satellite conversation. This requires the corresponding EchoMuse external-backend
+update; older controllers ignore the flag. Failed or cancelled playback never continues.
+Explicit `play_finished` acknowledgment is required; `play_failed` preserves
 the completed textual response and failed trace. Audio is removed after playback/cleanup,
 with the existing two-minute TTL as a safety net. Announcements use `play`/`stop` and are
 routed by SatelliteManager, including existing timer notifications. No music controller,

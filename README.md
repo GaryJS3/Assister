@@ -1,6 +1,6 @@
 # Assister
 
-Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM routing; context and tools are selected per request.
+Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM routing; Home Assistant tools are always available on the LLM path, with entity data retrieved on demand.
 
 ## Current implementation
 
@@ -8,7 +8,7 @@ Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup mi
 
 Milestone 2 includes native C# Wyoming framing, bounded message parsing, describe/info capability checks, STT and streaming audio TTS providers, and fake TCP-server tests. The providers are wired into the shared voice pipeline.
 
-Home Assistant has a persistent authenticated connection, state subscriptions, registry/area joins, and reconnecting cache. Direct intents support light/switch on/off, light brightness and cached temperature/state queries through a shared request coordinator. Ambiguous targets require clarification; stale HA connectivity blocks actions. Unmatched requests use selected tools and a bounded LLM loop. Conversations, timers, FTS memory and compact tool audit records persist in SQLite. See PROJECT.md for the acceptance criteria.
+Home Assistant has a persistent authenticated connection, state subscriptions, registry/area joins, and reconnecting cache. Direct intents support light/switch on/off, light brightness and cached temperature/state queries through a shared request coordinator. Ambiguous targets require clarification; stale HA connectivity blocks actions. Unmatched requests use a bounded LLM loop with Home Assistant search, state, history, control and weather tools always offered. General knowledge questions can be answered without tools; memory writes and deletion still require explicit authorization. Conversations, timers, FTS memory and compact tool audit records persist in SQLite. See PROJECT.md for the acceptance criteria.
 
 An injectable native C# `ILanguageModel` client supports OpenAI-compatible completions, SSE text streaming and function-call assembly. The broker validates fixed schemas, selected tools, timeouts and result sizes. HA tools provide compact search/state, conservative light/switch control and filtered numeric history summaries. History is limited to seven days and a 1 MiB upstream response; summaries identify sample means rather than time-weighted means. The loop permits at most eight iterations and four calls per iteration; repeated model controls are blocked. Direct intents do not call the model. Wire-format behavior follows the [official function-calling documentation](https://developers.openai.com/api/docs/guides/function-calling).
 

@@ -77,11 +77,13 @@ public sealed class EchoMuseTests
     private static IConfiguration Config => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     { ["Assister:PublicUrl"] = "http://assister:8080", ["SatelliteBridge:UseEnergyVad"] = "true" }).Build();
     private static JsonElement Message(object Value) => JsonSerializer.SerializeToElement(Value);
-    [Fact]
-    public async Task VoiceUsesSharedPipelineExactIdsAndAcknowledged48kWav()
+    [Theory]
+    [InlineData("Test reply", false)]
+    [InlineData("Which device do you mean? Please use its full name.", true)]
+    public async Task VoiceUsesSharedPipelineExactIdsAndAcknowledged48kWav(string Reply, bool Continue)
     {
         using var Audio = new VoiceAudioStore(); var Manager = new SatelliteManager();
-        var Messages = new List<JsonElement>(); var Coordinator = new Coordinator(); var Store = new RunStore();
+        var Messages = new List<JsonElement>(); var Coordinator = new Coordinator(Reply); var Store = new RunStore();
         EchoMuseConnection? Device = null;
         Guid AudioId = default;
         Device = new("native-device", "logical", "Bedroom", "bedroom", (Value, _) =>
@@ -91,6 +93,7 @@ public sealed class EchoMuseTests
             {
                 Assert.Equal("session", EchoMuseConnection.Text(Json, "sessionId"));
                 Assert.Equal("native-device", EchoMuseConnection.Text(Json, "deviceId"));
+                Assert.Equal(Continue, Json.GetProperty("continueConversation").GetBoolean());
                 AudioId = Guid.Parse(Path.GetFileNameWithoutExtension(new Uri(Json.GetProperty("audioUrl").GetString()!).AbsolutePath));
                 var Wave = Audio.Get(AudioId)!;
                 Assert.Equal(48000, BinaryPrimitives.ReadInt32LittleEndian(Wave.AsSpan(24)));
@@ -200,10 +203,10 @@ public sealed class EchoMuseTests
         public async Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio, SpeechToTextOptions Options, CancellationToken Token)
         { await foreach (var _ in Audio.WithCancellation(Token)) { } Token.ThrowIfCancellationRequested(); return new("what time is it", "en"); }
     }
-    private sealed class Coordinator : IRequestCoordinator
+    private sealed class Coordinator(string Reply = "Test reply") : IRequestCoordinator
     {
         public int Calls;
         public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken Token)
-        { Calls++; return Task.FromResult(new RequestResult("Test reply", Guid.NewGuid(), "direct-intent", Guid.NewGuid(), "succeeded", [], null, 1)); }
+        { Calls++; return Task.FromResult(new RequestResult(Reply, Guid.NewGuid(), "direct-intent", Guid.NewGuid(), "succeeded", [], null, 1)); }
     }
 }

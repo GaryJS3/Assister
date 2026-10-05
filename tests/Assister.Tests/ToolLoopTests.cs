@@ -8,6 +8,38 @@ namespace Assister.Tests;
 
 public sealed class ToolLoopTests
 {
+    [Theory]
+    [InlineData("How much solar power did I get yesterday?")]
+    [InlineData("What's the wind speed right now?")]
+    [InlineData("Can you explain why the sky is blue?")]
+    public async Task GeneralQuestionsAlwaysOfferHomeToolsWithoutRequiringToolUse(string Message)
+    {
+        var Names = new[] { "ha_search", "ha_get_state", "ha_get_history", "ha_control", "weather_forecast" };
+        var Registry = new ToolRegistry(Names.Select(Name => new NamedTool(Name)));
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("An answer.", [], "stop"));
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new(Message), [], CancellationToken.None);
+        Assert.Equal("An answer.", Answer);
+        Assert.Equal(Names.Order(), Model.Requests[0].Tools!.Select(Tool => Tool.Function.Name).Order());
+        Assert.Equal("auto", Model.Requests[0].ToolChoice);
+    }
+
+    [Fact]
+    public async Task ControlOutsideKeywordGateCanSearchAndExecute()
+    {
+        var Search = new FakeTool();
+        var Control = new FakeControlTool();
+        var Registry = new ToolRegistry([Search, Control]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("search", new("ha_search", "{\"query\":\"desk\"}"))], "tool_calls"));
+        Model.Responses.Enqueue(new(null, [new("control", new("ha_control", "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("Done.", [], "stop"));
+        Assert.Equal("Done.", await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new("Could you turn it off?"), [], CancellationToken.None));
+        Assert.Equal(1, Control.Calls);
+    }
+
     [Fact]
     public async Task ForecastQuestionCannotSkipTheSourceAndInventWeather()
     {
@@ -101,7 +133,7 @@ public sealed class ToolLoopTests
         Assert.Contains(Model.Requests[1].Messages, Message => Message.Role == "tool" && Message.ToolCallId == "call1");
         Model.Responses.Enqueue(new("Hello", [], "stop"));
         await Loop.RespondAsync(new("Hello"), [], CancellationToken.None);
-        Assert.Empty(Model.Requests[2].Tools!);
+        Assert.Equal("ha_search", Assert.Single(Model.Requests[2].Tools!).Function.Name);
         Assert.DoesNotContain(Model.Requests[2].Messages, Message => Message.Role == "tool");
     }
 
@@ -171,14 +203,15 @@ public sealed class ToolLoopTests
     }
 
     [Fact]
-    public async Task ReadOnlyBrightnessQuestionDoesNotOfferControl()
+    public async Task ReadOnlyBrightnessQuestionOffersOptionalControl()
     {
         var Registry = new ToolRegistry([new FakeControlTool()]);
         var Model = new FakeModel();
         Model.Responses.Enqueue(new("The brightness is 50 percent.", [], "stop"));
         await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
             .RespondAsync(new("What is the living room light brightness?"), [], CancellationToken.None);
-        Assert.Empty(Model.Requests[0].Tools!);
+        Assert.Equal("ha_control", Assert.Single(Model.Requests[0].Tools!).Function.Name);
+        Assert.Equal("auto", Model.Requests[0].ToolChoice);
     }
 
     [Fact]

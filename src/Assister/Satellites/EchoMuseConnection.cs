@@ -230,7 +230,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             {
                 using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Serve opaque WAV audio and wait for the matching controller playback acknowledgment.");
                 Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow, transportSessionId = SessionId, controllerDeviceId = Owner.Device });
-                await Owner.WriteAsync(new { type = "turn_response", sessionId = SessionId, deviceId = Owner.Device, audioUrl = Owner.Url(AudioId), text = Response }, Token);
+                await Owner.WriteAsync(new { type = "turn_response", sessionId = SessionId, deviceId = Owner.Device, audioUrl = Owner.Url(AudioId), text = Response,
+                    continueConversation = Response.Contains('?') }, Token);
                 if (!await Playback.Task.WaitAsync(Token)) { throw new IOException("Satellite playback failed."); }
                 Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow });
                 Delivery.Complete();
