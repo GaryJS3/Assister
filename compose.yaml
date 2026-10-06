@@ -10,6 +10,7 @@ services:
       - assister-data:/data
     environment:
       Assister__DataPath: /data
+      ClientUpdates__UploadToken: ${CLIENT_UPDATES_UPLOAD_TOKEN:-}
       HomeAssistant__Url: ${HOME_ASSISTANT_URL:-}
       HomeAssistant__Token: ${HOME_ASSISTANT_TOKEN:-}
       LanguageModel__BaseUrl: ${LLM_BASE_URL:-}

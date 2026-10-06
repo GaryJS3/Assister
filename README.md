@@ -1,5 +1,8 @@
 # Assister
 
+Client APK/EXE releases are hosted at `/releases.html`, with authenticated uploads,
+public downloads and C# update helpers. See [client update host](docs/client-updates.md).
+
 Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM routing; Home Assistant tools are always available on the LLM path, with entity data retrieved on demand.
 
 ## Current implementation

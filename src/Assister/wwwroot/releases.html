@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Releases</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/app-shell.css"><link rel="stylesheet" href="/releases.css"></head>
+<body><header data-app-shell></header><main>
+<div class="heading"><div><p class="eyebrow">CLIENT DISTRIBUTION / RELEASE ARCHIVE</p><h1>Ready to install.</h1><p>Publish a client. Keep every device up to date.</p></div><button id="refresh" type="button">Refresh releases</button></div>
+<p id="notice" role="status" aria-live="polite"></p>
+<div class="release-layout"><section aria-labelledby="archive-title"><h2 id="archive-title">Available releases</h2><div id="releases"></div></section>
+<section class="publish" aria-labelledby="publish-title"><p class="eyebrow">DEVELOPER ACCESS</p><h2 id="publish-title">Publish a release</h2>
+<form id="upload"><label>App ID<input name="appId" required pattern="[a-z0-9][a-z0-9-]{0,63}" placeholder="assister" maxlength="64"></label>
+<label>Platform<input name="platform" required pattern="[a-z0-9][a-z0-9-]{0,63}" placeholder="android-arm64" maxlength="64"></label>
+<label>Version<input name="version" required pattern="[0-9]+\.[0-9]+(\.[0-9]+){0,2}" placeholder="1.0.0" maxlength="40"></label>
+<label>Package (.apk or .exe)<input name="package" type="file" accept=".apk,.exe" required></label>
+<label>Release notes<textarea name="notes" rows="3" maxlength="4000" placeholder="What changed?"></textarea></label>
+<label>Upload token<input name="token" type="password" required autocomplete="off" placeholder="Bearer token"></label>
+<button type="submit">Publish release</button><p class="hint">Up to 512 MiB. Published versions cannot be replaced. Tokens stay in this form and are never saved.</p></form></section></div>
+</main><script src="/app-shell.js"></script><script src="/releases.js"></script></body></html>

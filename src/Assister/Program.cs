@@ -12,8 +12,10 @@ using Assister.Modules.Timers;
 using Assister.Speech.Wyoming;
 using Assister.Satellites;
 using Microsoft.EntityFrameworkCore;
+using Assister.Updates;
 
 var Builder = WebApplication.CreateBuilder(args);
+Builder.Services.AddSingleton<ClientUpdateHost>();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
 {
     Builder.WebHost.ConfigureKestrel(Options =>
@@ -102,6 +104,7 @@ Builder.Services.AddHttpClient("diagnostics").ConfigurePrimaryHttpMessageHandler
 Builder.Services.AddSingleton<ComponentHealth>();
 Builder.Services.AddHostedService(Services => Services.GetRequiredService<ComponentHealth>());
 var App = Builder.Build();
+App.MapClientUpdates();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }
 App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore Audio) => Audio.Get(Id) is { } Data
     ? Results.File(Data, Data.AsSpan().StartsWith("fLaC"u8) ? "audio/flac" : "audio/wav", enableRangeProcessing: true) : Results.NotFound());
