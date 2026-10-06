@@ -3,7 +3,7 @@ using Assister.Contracts;
 
 namespace Assister.Diagnostics;
 
-public sealed class ReasoningScope(RunTracing.TraceStep Step, DiagnosticSanitizer Sanitizer, int ModelRound, CancellationToken Token = default) : IDisposable
+public sealed class ModelTextScope(RunTracing.TraceStep Step, DiagnosticSanitizer Sanitizer, int ModelRound, CancellationToken Token = default, string EventPrefix = "reasoning") : IDisposable
 {
     private readonly System.Text.StringBuilder Pending = new();
     private int Remaining = 32768;
@@ -15,7 +15,7 @@ public sealed class ReasoningScope(RunTracing.TraceStep Step, DiagnosticSanitize
         if (!Started)
         {
             Started = true;
-            InteractionFeedback.Emit("reasoning.started", new
+            InteractionFeedback.Emit(EventPrefix + ".started", new
             {
                 stepId = Step.Id,
                 modelRound = ModelRound
@@ -40,11 +40,11 @@ public sealed class ReasoningScope(RunTracing.TraceStep Step, DiagnosticSanitize
     }
     private void Publish(string Text)
     {
-        var Payload = Step.ReasoningPayload(Text);
+        var Payload = Step.ModelTextPayload(Text);
         var Value = Payload.Value is { ValueKind: JsonValueKind.String } Safe ? Safe.GetString() : "";
         Truncated |= Payload.Truncated;
         if (!string.IsNullOrEmpty(Value))
-            InteractionFeedback.Emit("reasoning.delta", new
+            InteractionFeedback.Emit(EventPrefix + ".delta", new
             {
                 stepId = Step.Id,
                 modelRound = ModelRound,
@@ -60,7 +60,7 @@ public sealed class ReasoningScope(RunTracing.TraceStep Step, DiagnosticSanitize
         if (!Started)
             return;
         Publish(Pending.ToString());
-        InteractionFeedback.Emit("reasoning.completed", new
+        InteractionFeedback.Emit(EventPrefix + ".completed", new
         {
             stepId = Step.Id,
             modelRound = ModelRound,

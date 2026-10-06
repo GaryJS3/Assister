@@ -167,27 +167,27 @@ public sealed class InteractionStore : IDisposable
     }
     private void AppendCore(Guid Id, string Type, object Data, SqliteTransaction Transaction, string? Status = null, string? Response = null, Guid? RunId = null)
     {
-        // Close unfinished thinking on terminal paths, including recovery after a server restart.
+        // Close unfinished model text streams on terminal paths, including recovery after a server restart.
         if (Type is "interaction.failed" or "interaction.cancelled" or "interaction.completed")
         {
             using var History = Command("SELECT Payload FROM InteractionEvents WHERE InteractionId=$id ORDER BY Sequence", ("$id", Id.ToString()));
             History.Transaction = Transaction;
-            var Open = new Dictionary<Guid, JsonElement>();
+            var Open = new Dictionary<(Guid StepId, string Prefix), JsonElement>();
             using (var Reader = History.ExecuteReader())
             {
                 while (Reader.Read())
                 {
                     var Item = JsonSerializer.Deserialize<InteractionEvent>(Reader.GetString(0), Json)!;
-                    if (Item.Type == "reasoning.started")
-                        Open[Item.Data.GetProperty("stepId").GetGuid()] = Item.Data;
-                    if (Item.Type == "reasoning.completed")
-                        Open.Remove(Item.Data.GetProperty("stepId").GetGuid());
+                    if (Item.Type is "reasoning.started" or "model.output.started")
+                        Open[(Item.Data.GetProperty("stepId").GetGuid(), Item.Type[..^8])] = Item.Data;
+                    if (Item.Type is "reasoning.completed" or "model.output.completed")
+                        Open.Remove((Item.Data.GetProperty("stepId").GetGuid(), Item.Type[..^10]));
                 }
             }
             foreach (var Item in Open)
-                AppendCore(Id, "reasoning.completed", new
+                AppendCore(Id, Item.Key.Prefix + ".completed", new
                 {
-                    stepId = Item.Key,
+                    stepId = Item.Key.StepId,
                     modelRound = Item.Value.GetProperty("modelRound").GetInt32(),
                     status = Type == "interaction.cancelled" ? "cancelled" : "failed",
                     truncated = false

@@ -35,7 +35,7 @@ public static class InteractionEndpoints
         Group.MapGet("/protocol", () => new { protocolVersion = 1, eventDelivery = "at_least_once", maxMessageCharacters = 1000, heartbeatSeconds = 15,
             maxAttachmentBytes = 1048576, maxAttachments = 8, maxAttachmentContextCharacters = 12000,
             inputAudioFormat = "pcm_s16le_16000_mono", outputAudioFormat = "wav", voiceInputMode = "buffered_upload",
-            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "client.capabilities", "device.requests" } });
+            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "client.capabilities", "device.requests" } });
         Group.MapPost("/attachments", AttachmentUpload.ReceiveAsync);
         Group.MapPost("/clients/register", (ClientRegistration Request, ClientSignals Signals, HttpContext Http) =>
             Signals.Register((string)Http.Items["ClientId"]!, Owner(Http), Request) ? Results.Ok() : Results.BadRequest(new ProtocolError("invalid_capabilities", "Supply a device name and at most 32 canonical capability names.")));

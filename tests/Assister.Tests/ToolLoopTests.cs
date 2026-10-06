@@ -100,16 +100,29 @@ public sealed class ToolLoopTests
         var Tool = new FakeTool();
         var Registry = new ToolRegistry([Tool]);
         var Model = new FakeModel();
-        Model.Responses.Enqueue(new("I will look that up.", [new("search", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls", Reasoning: "Choose the search tool."));
+        Model.Responses.Enqueue(new("I will look that up using the available search tool and inspect its results before answering your question about the office.", [new("search", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls", Reasoning: "Choose the search tool."));
         Model.Responses.Enqueue(new("The office is warm.", [], "stop", Reasoning: "Read the result."));
         var Events = new List<(string Type, JsonElement Data)>();
         using var Observer = InteractionFeedback.Observe((Type, Data) => Events.Add((Type, JsonSerializer.SerializeToElement(Data, new JsonSerializerOptions(JsonSerializerDefaults.Web)))));
+        Model.BeforeCompletion = () =>
+        {
+            if (Model.Requests.Count != 1) return;
+            Assert.Contains(Events, Item => Item.Type == "model.output.delta" && Item.Data.GetProperty("modelRound").GetInt32() == 1);
+            Assert.DoesNotContain(Events, Item => Item.Type == "model.output.completed");
+            Assert.Equal(0, Tool.Calls);
+        };
         var Spoken = new List<string>();
         var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
             .RespondAsync(new("Was the office hot?"), [], CancellationToken.None, OnText: (Text, _) => { Spoken.Add(Text); return Task.CompletedTask; });
         Assert.Equal("The office is warm.", Answer);
         Assert.Equal([Answer], Spoken);
         Assert.Equal(1, Tool.Calls);
+        Assert.Equal(new[] { 1, 2 }, Events.Where(Item => Item.Type == "model.output.started").Select(Item => Item.Data.GetProperty("modelRound").GetInt32()));
+        Assert.Equal(2, Events.Count(Item => Item.Type == "model.output.completed"));
+        Assert.All(Events.Where(Item => Item.Type == "model.output.started"), Item =>
+            Assert.Contains(Events, Reasoning => Reasoning.Type == "reasoning.started" && Reasoning.Data.GetProperty("stepId").GetGuid() == Item.Data.GetProperty("stepId").GetGuid()));
+        Assert.Equal("I will look that up using the available search tool and inspect its results before answering your question about the office.",
+            string.Concat(Events.Where(Item => Item.Type == "model.output.delta" && Item.Data.GetProperty("modelRound").GetInt32() == 1).Select(Item => Item.Data.GetProperty("text").GetString())));
         Assert.Equal(new[] { 1, 2 }, Events.Where(Item => Item.Type == "reasoning.started").Select(Item => Item.Data.GetProperty("modelRound").GetInt32()));
         Assert.Equal(2, Events.Count(Item => Item.Type == "reasoning.completed"));
         Assert.Equal(2, Events.Where(Item => Item.Type == "reasoning.started").Select(Item => Item.Data.GetProperty("stepId").GetGuid()).Distinct().Count());
@@ -287,6 +300,7 @@ public sealed class ToolLoopTests
     }
     private sealed class FakeModel : ILanguageModel
     {
+        public Action? BeforeCompletion { get; set; }
         public Queue<LlmResponse> Responses { get; } = new();
         public List<LlmRequest> Requests { get; } = [];
         public Task<LlmResponse> CompleteAsync(LlmRequest Request, CancellationToken CancellationToken)
@@ -298,7 +312,10 @@ public sealed class ToolLoopTests
         {
             var Response = await CompleteAsync(Request, CancellationToken);
             if (Response.Reasoning is { } Thinking) { yield return new(ReasoningDelta: Thinking); }
-            if (Response.Content is { } Text) { yield return new(TextDelta: Text); }
+            if (Response.Content is { } Text)
+                for (var Offset = 0; Offset < Text.Length; Offset += 12)
+                    yield return new(TextDelta: Text.Substring(Offset, Math.Min(12, Text.Length - Offset)));
+            BeforeCompletion?.Invoke();
             yield return new(Completed: Response);
         }
     }

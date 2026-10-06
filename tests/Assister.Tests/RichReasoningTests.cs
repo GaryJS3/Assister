@@ -9,10 +9,13 @@ namespace Assister.Tests;
 public sealed class RichReasoningTests
 {
     [Theory]
-    [InlineData("completed")]
-    [InlineData("failed")]
-    [InlineData("cancelled")]
-    public void OrderedRoundsAndDetailsPersistForReplay(string Outcome)
+    [InlineData("completed", "reasoning")]
+    [InlineData("completed", "model.output")]
+    [InlineData("failed", "reasoning")]
+    [InlineData("failed", "model.output")]
+    [InlineData("cancelled", "reasoning")]
+    [InlineData("cancelled", "model.output")]
+    public void OrderedRoundsAndDetailsPersistForReplay(string Outcome, string Prefix)
     {
         var Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString());
         var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -33,7 +36,7 @@ public sealed class RichReasoningTests
             for (var Round = 1; Round <= 2; Round++)
             {
                 using var Step = RunTracing.Start("LanguageModel", "Round", "test");
-                using var Thinking = Step.Thinking(Round);
+                using var Thinking = Prefix == "reasoning" ? Step.Thinking(Round) : Step.ModelOutput(Round);
                 Thinking.Delta("api_key=private-");
                 Thinking.Delta("value\n");
                 Thinking.Delta("Remaining thought");
@@ -54,13 +57,13 @@ public sealed class RichReasoningTests
             }, Outcome);
             Original = Store.Events(Id, 0).ToArray();
             Assert.Equal(Enumerable.Range(1, Original.Length).Select(Value => (long)Value), Original.Select(Item => Item.Sequence));
-            Assert.Equal(2, Original.Count(Item => Item.Type == "reasoning.started"));
-            Assert.Equal(new[] { 1, 2 }, Original.Where(Item => Item.Type == "reasoning.completed").Select(Item => Item.Data.GetProperty("modelRound").GetInt32()));
-            Assert.Equal(Outcome, Original.Last(Item => Item.Type == "reasoning.completed").Data.GetProperty("status").GetString());
+            Assert.Equal(2, Original.Count(Item => Item.Type == Prefix + ".started"));
+            Assert.Equal(new[] { 1, 2 }, Original.Where(Item => Item.Type == Prefix + ".completed").Select(Item => Item.Data.GetProperty("modelRound").GetInt32()));
+            Assert.Equal(Outcome, Original.Last(Item => Item.Type == Prefix + ".completed").Data.GetProperty("status").GetString());
             Assert.DoesNotContain("private-value", JsonSerializer.Serialize(Original));
             Assert.DoesNotContain(Original, Item => Item.Type == "response.delta");
             Assert.Contains(Original, Item => Item.Type == "step.updated" && Item.Data.GetProperty("outputTruncated").GetBoolean());
-            foreach (var Started in Original.Where(Item => Item.Type == "reasoning.started"))
+            foreach (var Started in Original.Where(Item => Item.Type == Prefix + ".started"))
             {
                 var StepId = Started.Data.GetProperty("stepId").GetGuid();
                 Assert.Contains(Original, Item => Item.Type == "step.updated" && Item.Data.GetProperty("stepId").GetGuid() == StepId);
@@ -106,8 +109,10 @@ public sealed class RichReasoningTests
         using (var Omitted = DisabledStep.Thinking(1)) { Omitted.Delta("private reasoning"); Omitted.Complete("completed"); }
         Assert.DoesNotContain(Events, Event => Event.Type == "reasoning.delta");
     }
-    [Fact]
-    public void CancellationAndRestartCloseUnfinishedThinking()
+    [Theory]
+    [InlineData("reasoning")]
+    [InlineData("model.output")]
+    public void CancellationAndRestartCloseUnfinishedThinking(string Prefix)
     {
         var Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString());
         var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = Path }).Build();
@@ -120,20 +125,20 @@ public sealed class RichReasoningTests
             using var Feedback = InteractionFeedback.Observe((Type, Data) => Store.Append(Item.Id, Type, Data));
             using var Step = RunTracing.Start("LanguageModel", "Round", "test");
             using var Cancel = new CancellationTokenSource();
-            using (var Thinking = Step.Thinking(1, Cancel.Token))
+            using (var Thinking = Prefix == "reasoning" ? Step.Thinking(1, Cancel.Token) : Step.ModelOutput(1, Cancel.Token))
             {
                 Thinking.Delta("partial thought");
                 Cancel.Cancel();
             }
             Assert.Equal("cancelled", Store.Events(Item.Id, 0).Last().Data.GetProperty("status").GetString());
-            Store.Append(Item.Id, "reasoning.started", new
+            Store.Append(Item.Id, Prefix + ".started", new
             {
                 stepId = Guid.NewGuid(),
                 modelRound = 2
             });
             Store.Recover();
             var Events = Store.Events(Item.Id, 0);
-            Assert.Equal("reasoning.completed", Events[^2].Type);
+            Assert.Equal(Prefix + ".completed", Events[^2].Type);
             Assert.Equal("failed", Events[^2].Data.GetProperty("status").GetString());
             Assert.Equal("interaction.failed", Events[^1].Type);
         }

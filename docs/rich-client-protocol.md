@@ -122,6 +122,20 @@ Redaction and diagnostic capture settings apply before persistence and delivery.
 
 Tests cover provider fragments and disabled thinking, ordered multiple rounds, redaction and truncation, persisted reopen and cursor replay, repeated delivery, cancellation, and restart recovery.
 
+### Correlated ordinary model output
+
+The additive feature `model.output.stream` advertises `model.output.started`, `model.output.delta`, and `model.output.completed`. These carry ordinary provider `content` for every model round, including tool-capable rounds whose prose is withheld from the answer. They use the same stable `stepId` and one-based `modelRound` as reasoning events, but their text is separate from reasoning and from the user-facing answer. Render it as provisional step detail; it does not confirm an action or authorize tool execution. Keep rendering the answer from `response.delta` and authoritative `response.completed`.
+
+```json
+{"type":"model.output.started","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1}}
+{"type":"model.output.delta","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1,"text":"I will check the office sensor. ","truncated":false}}
+{"type":"model.output.completed","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1,"status":"completed","truncated":false}}
+```
+
+The stream consumes provider text fragments as they arrive, before the completed model response or tool execution. It shares reasoning's redaction buffer, capture settings, per-round source limit, and detailed run budget. Safe prefixes stream incrementally; short text and trailing credential context flush when the round finishes. This buffering means events need not match provider token boundaries. Non-streaming model calls emit available output after completion. Rounds without ordinary text emit no model-output segment. Completion statuses are `completed`, `failed`, or `cancelled`; restart recovery closes open segments. Events persist after completion and use existing replay cursors and duplicate suppression.
+
+Tests assert ordinary tool-round output arrives before model completion and tool execution, remains separate from answer and reasoning, and correlates across rounds. Persistence, duplicate replay, cancellation, failure, and restart tests apply to both streams.
+
 Cancellation is best effort and cannot undo commands already accepted by a device. Pending work reaches cancelled; completed work is immutable. Restart marks all unfinished interactions failed with `server_restarted`, including unclaimed submissions, rather than silently repeating controls. Automatic retry/regenerate is not implemented.
 
 ## Native client use

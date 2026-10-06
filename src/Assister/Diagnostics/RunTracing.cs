@@ -254,13 +254,15 @@ public static class RunTracing
             stepId = Step.Id, parentStepId = Step.ParentId, kind = Step.Kind,
             input = Step.Input, output = Step.Output, inputTruncated = Step.InputTruncated, outputTruncated = Step.OutputTruncated
         });
-        internal (JsonElement? Value, bool Truncated) ReasoningPayload(string Text)
+        internal (JsonElement? Value, bool Truncated) ModelTextPayload(string Text)
         {
             if (Scope is null) return new DiagnosticSanitizer().Payload(Text);
             lock (Scope.Store.Gate) return Bound(Text, true);
         }
-        public ReasoningScope Thinking(int ModelRound, CancellationToken Token = default)
+        public ModelTextScope Thinking(int ModelRound, CancellationToken Token = default)
             => new(this, Scope?.Store.Sanitizer ?? new DiagnosticSanitizer(), ModelRound, Token);
+        public ModelTextScope ModelOutput(int ModelRound, CancellationToken Token = default)
+            => new(this, Scope?.Store.Sanitizer ?? new DiagnosticSanitizer(), ModelRound, Token, "model.output");
         public void Metadata(object? Value) => Change(() => { Step = Step with { Metadata = Bound(Value, false).Value }; });
         public void Detail(string Key, object? Value) => Change(() =>
         {
