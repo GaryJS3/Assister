@@ -36,7 +36,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         var Envelope = Parse(Buffer.ToArray());
         var Choice = SingleChoice(Envelope);
         if (Choice.Message is null) { throw InvalidResponse(); }
-        var Result = BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason);
+        var Result = BuildResponse(Choice.Message.Content, Choice.Message.ToolCalls ?? [], Choice.FinishReason) with { Reasoning = ThinkingEnabled ? Choice.Message.ReasoningContent ?? Choice.Message.Reasoning : null };
         if (Trace is not null) { LlmDiagnostics.Output(Trace, Result); }
         return Result;
     }
@@ -51,6 +51,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         CheckStatus(Response);
         await using var Stream = await Response.Content.ReadAsStreamAsync(Timeout.Token);
         var Text = new StringBuilder();
+        var Reasoning = new StringBuilder();
         var Calls = new SortedDictionary<int, CallBuilder>();
         string? Finish = null;
         var EventData = new StringBuilder();
@@ -71,7 +72,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             if (Data == "[DONE]")
             {
                 var Result = BuildResponse(Text.Length == 0 ? null : Text.ToString(),
-                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish);
+                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish) with { Reasoning = Reasoning.Length == 0 ? null : Reasoning.ToString() };
                 if (Trace is not null) { LlmDiagnostics.Output(Trace, Result); }
                 yield return new(Completed: Result);
                 yield break;
@@ -82,6 +83,11 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             var Choice = SingleChoice(Envelope);
             if (Finish is not null) { throw InvalidResponse(); }
             if (Choice.Delta is not { } Delta) { throw InvalidResponse(); }
+            if (ThinkingEnabled && (Delta.ReasoningContent ?? Delta.Reasoning) is { Length: > 0 } Thinking)
+            {
+                Reasoning.Append(Thinking);
+                yield return new(ReasoningDelta: Thinking);
+            }
             if (Delta.Content is { } Content)
             {
                 Text.Append(Content);
@@ -101,6 +107,8 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         }
         throw InvalidResponse(); // EOF without [DONE] must not authorize partially generated tool calls.
     }
+
+    private bool ThinkingEnabled => Configuration.GetValue<bool?>("LanguageModel:EnableThinking") != false;
 
     private HttpRequestMessage CreateRequest(LlmRequest Request, bool Stream)
     {
@@ -237,7 +245,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
 
     private sealed record Envelope(Choice[]? Choices, JsonElement? Error);
     private sealed record Choice(int Index, LlmMessage? Message, Delta? Delta, string? FinishReason);
-    private sealed record Delta(string? Content, ToolDelta[]? ToolCalls);
+    private sealed record Delta(string? Content, ToolDelta[]? ToolCalls, string? ReasoningContent, string? Reasoning);
     private sealed record ToolDelta(int? Index, string? Id, string? Type, FunctionDelta? Function);
     private sealed record FunctionDelta(string? Name, string? Arguments);
 }

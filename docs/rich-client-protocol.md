@@ -98,7 +98,29 @@ On WebSocket connection, `subscription.ready` announces protocol version, reques
 
 Clients render `response.delta` immediately, replace their answer with `response.completed.data.text`, and distinguish that from terminal `interaction.completed/failed/cancelled`. Rendering state and its cursor must be saved together; the browser instead reconstructs them from persisted history after refresh. Persisted cursors outside the current stream return an error.
 
-`interaction.started` supplies a separate diagnostic `runId`; the interaction ID is allocated before execution. `step.started/completed/failed` include stable step IDs and parent relationships. This is observable execution feedback, not model reasoning. Existing tool-capable rounds still hold prose until validated; permitted final answer rounds stream immediately.
+`interaction.started` supplies a separate diagnostic `runId`; the interaction ID is allocated before execution. `step.started/completed/failed` include stable step IDs and parent relationships. Provider reasoning uses its own correlated events. Existing tool-capable rounds still hold prose until validated; permitted final answer rounds stream immediately.
+
+### Thinking and step details
+
+The capability response advertises additive features `reasoning.stream` and `execution.details`. Clients feature-detect these names and ignore unknown event types. The adapter accepts explicit provider `reasoning_content` or `reasoning` fields (preferring `reasoning_content`) separately from answer `content`. It never infers reasoning from answer text. `LanguageModel:EnableThinking=false` disables capture; true enables the provider extension. With the setting absent, provider defaults apply and explicitly returned reasoning is accepted. Unsupported providers emit no reasoning events.
+
+Each segment uses the stable LanguageModel `stepId` and one-based `modelRound`. Started precedes deltas; completed occurs once before the model step ends, with status `completed`, `failed`, or `cancelled`. Provider timeout is failed; interaction cancellation is cancelled. Restart recovery closes persisted open segments as failed before the terminal interaction event.
+
+Canonical event examples, inside the existing sequence/eventId envelope:
+
+```json
+{"type":"reasoning.started","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1}}
+{"type":"reasoning.delta","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1,"text":"Checking available tools. ","truncated":false}}
+{"type":"reasoning.completed","data":{"stepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","modelRound":1,"status":"completed","truncated":false}}
+{"type":"step.updated","data":{"stepId":"ee0a1cbc-2962-48cb-9183-a4bfa30e17e","parentStepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","kind":"ToolCall","input":{"query":"office"},"output":null,"inputTruncated":false,"outputTruncated":false}}
+{"type":"step.updated","data":{"stepId":"ee0a1cbc-2962-48cb-9183-a4bfa30e17e","parentStepId":"842c1fa1-620d-4798-9f6e-942581f0bd13","kind":"ToolCall","input":{"query":"office"},"output":{"entities":[]},"inputTruncated":false,"outputTruncated":false}}
+```
+
+Append reasoning deltas only to the thinking segment. Collapse thinking when `response.completed` arrives if desired, but retain it for reopening. Reasoning never enters answer deltas, speech, or conversation history. Replay reasoning and step updates with the existing cursor and duplicate suppression rules; replay returns original event IDs. Step updates replace the input/output state for their step, arrive when payloads are captured before the terminal step event, and use the same sanitized values as authenticated trace inspection.
+
+Redaction and diagnostic capture settings apply before persistence and delivery. Reasoning retains at most 32,768 source characters per round, with the existing 4,096 character string limit per emitted payload and shared 131,072 byte detailed run budget. Streaming retains trailing credential context (at least 32 characters, or the longest configured secret) across provider fragments and emits safe word boundaries. Short thoughts and trailing fragments flush on completion, failure, or cancellation. Truncation flags indicate lost content; disabled payload capture omits reasoning text.
+
+Tests cover provider fragments and disabled thinking, ordered multiple rounds, redaction and truncation, persisted reopen and cursor replay, repeated delivery, cancellation, and restart recovery.
 
 Cancellation is best effort and cannot undo commands already accepted by a device. Pending work reaches cancelled; completed work is immutable. Restart marks all unfinished interactions failed with `server_restarted`, including unclaimed submissions, rather than silently repeating controls. Automatic retry/regenerate is not implemented.
 

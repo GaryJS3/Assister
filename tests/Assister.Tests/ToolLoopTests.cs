@@ -100,14 +100,20 @@ public sealed class ToolLoopTests
         var Tool = new FakeTool();
         var Registry = new ToolRegistry([Tool]);
         var Model = new FakeModel();
-        Model.Responses.Enqueue(new("I will look that up.", [new("search", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls"));
-        Model.Responses.Enqueue(new("The office is warm.", [], "stop"));
+        Model.Responses.Enqueue(new("I will look that up.", [new("search", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls", Reasoning: "Choose the search tool."));
+        Model.Responses.Enqueue(new("The office is warm.", [], "stop", Reasoning: "Read the result."));
+        var Events = new List<(string Type, JsonElement Data)>();
+        using var Observer = InteractionFeedback.Observe((Type, Data) => Events.Add((Type, JsonSerializer.SerializeToElement(Data, new JsonSerializerOptions(JsonSerializerDefaults.Web)))));
         var Spoken = new List<string>();
         var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
             .RespondAsync(new("Was the office hot?"), [], CancellationToken.None, OnText: (Text, _) => { Spoken.Add(Text); return Task.CompletedTask; });
         Assert.Equal("The office is warm.", Answer);
         Assert.Equal([Answer], Spoken);
         Assert.Equal(1, Tool.Calls);
+        Assert.Equal(new[] { 1, 2 }, Events.Where(Item => Item.Type == "reasoning.started").Select(Item => Item.Data.GetProperty("modelRound").GetInt32()));
+        Assert.Equal(2, Events.Count(Item => Item.Type == "reasoning.completed"));
+        Assert.Equal(2, Events.Where(Item => Item.Type == "reasoning.started").Select(Item => Item.Data.GetProperty("stepId").GetGuid()).Distinct().Count());
+        Assert.All(Events.Where(Item => Item.Type == "reasoning.completed"), Item => Assert.Equal("completed", Item.Data.GetProperty("status").GetString()));
     }
 
     [Fact]
@@ -144,7 +150,7 @@ public sealed class ToolLoopTests
         var Registry = new ToolRegistry([Tool]);
         var Model = new FakeModel();
         Model.Responses.Enqueue(new(null, [new("call1", new("ha_search", "{\"query\":\"office\"}"))], "tool_calls"));
-        Model.Responses.Enqueue(new("The office is warm.", [], "stop"));
+        Model.Responses.Enqueue(new("The office is warm.", [], "stop", Reasoning: "Read the result."));
         var Loop = new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build());
         Assert.Equal("The office is warm.", await Loop.RespondAsync(new("Was the office hot?"), [], CancellationToken.None));
         Assert.Equal(1, Tool.Calls);
@@ -291,6 +297,7 @@ public sealed class ToolLoopTests
         public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken CancellationToken)
         {
             var Response = await CompleteAsync(Request, CancellationToken);
+            if (Response.Reasoning is { } Thinking) { yield return new(ReasoningDelta: Thinking); }
             if (Response.Content is { } Text) { yield return new(TextDelta: Text); }
             yield return new(Completed: Response);
         }

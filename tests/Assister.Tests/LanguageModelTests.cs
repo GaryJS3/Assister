@@ -129,6 +129,27 @@ public sealed class LanguageModelTests
             .CompleteAsync(new([new("user", "test")]), Cancellation.Token));
     }
 
+    [Fact]
+    public async Task ProviderReasoningStaysSeparateFromAnswerAndCanBeDisabled()
+    {
+        var Data = "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Thinking\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Answer\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        var Events = new List<LlmStreamEvent>();
+        await foreach (var Event in Create(new(Data, Fragmented: true)).StreamAsync(new([new("user", "test")]), default))
+            Events.Add(Event);
+        Assert.Equal("Thinking", Events[0].ReasoningDelta);
+        Assert.Null(Events[0].TextDelta);
+        Assert.Equal("Answer", Events[^1].Completed!.Content);
+        Assert.Equal("Thinking", Events[^1].Completed!.Reasoning);
+        var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["LanguageModel:BaseUrl"] = "http://localhost/v1",
+            ["LanguageModel:Model"] = "test",
+            ["LanguageModel:EnableThinking"] = "false"
+        }).Build();
+        await foreach (var Event in new OpenAiCompatibleLanguageModel(new HttpClient(new FakeHandler(Data)), Config).StreamAsync(new([new("user", "test")]), default))
+            Assert.Null(Event.ReasoningDelta);
+    }
+
     private static OpenAiCompatibleLanguageModel Create(FakeHandler Handler) => new(new HttpClient(Handler),
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {

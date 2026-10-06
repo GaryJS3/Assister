@@ -33,6 +33,32 @@ public sealed class DiagnosticSanitizer(IConfiguration? Configuration = null)
         Text = Regex.Replace(Text, @"(?i)\b(?:api[_-]?key|password|access[_-]?token|authorization)\s*[:=]\s*[^\s,;]+", "[redacted credential]");
         return Text.Length > Limit ? Text[..Limit] + " [truncated]" : Text;
     }
+    // Keep credential context and possible configured-secret suffixes until a later fragment confirms the boundary.
+    public int StreamPrefixLength(string Value)
+    {
+        var Hold = Math.Max(32, Secrets.Select(Secret => Secret.Length).DefaultIfEmpty(0).Max());
+        var Cut = Math.Min(4096, Value.Length - Hold);
+        if (Cut <= 0)
+            return 0;
+        Cut = Value.LastIndexOfAny([' ', '\t', '\r', '\n'], Cut - 1) + 1;
+        foreach (Match Match in Regex.Matches(Value, @"(?i)\bBearer\s+[^\s""<>]+|\b(?:api[_-]?key|password|access[_-]?token|authorization)\s*[:=]\s*[^\s,;]+"))
+            if (Match.Index < Cut && Match.Index + Match.Length >= Cut)
+                Cut = Match.Index;
+        foreach (var Secret in Secrets)
+        {
+            var Start = Value.IndexOf(Secret, StringComparison.Ordinal);
+            while (Start >= 0 && Start < Cut)
+            {
+                if (Start + Secret.Length > Cut)
+                {
+                    Cut = Start;
+                    break;
+                }
+                Start = Value.IndexOf(Secret, Start + Secret.Length, StringComparison.Ordinal);
+            }
+        }
+        return Cut;
+    }
     public (JsonElement? Value, bool Truncated) Payload(object? Value, bool Detailed = true, int Budget = 32768)
     {
         if (Value is null) { return (null, false); }
@@ -221,8 +247,20 @@ public static class RunTracing
             if (Detailed) { Scope.PayloadBytes += Bytes; } else { Scope.SemanticBytes += Bytes; }
             return Result;
         }
-        public void Input(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Input = Data.Value, InputTruncated = Data.Truncated }; });
-        public void Output(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Output = Data.Value, OutputTruncated = Data.Truncated }; });
+        public void Input(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Input = Data.Value, InputTruncated = Data.Truncated }; PublishUpdated(); });
+        public void Output(object? Value, bool Detailed = true) => Change(() => { var Data = Bound(Value, Detailed); Step = Step with { Output = Data.Value, OutputTruncated = Data.Truncated }; PublishUpdated(); });
+        private void PublishUpdated() => InteractionFeedback.Emit("step.updated", new
+        {
+            stepId = Step.Id, parentStepId = Step.ParentId, kind = Step.Kind,
+            input = Step.Input, output = Step.Output, inputTruncated = Step.InputTruncated, outputTruncated = Step.OutputTruncated
+        });
+        internal (JsonElement? Value, bool Truncated) ReasoningPayload(string Text)
+        {
+            if (Scope is null) return new DiagnosticSanitizer().Payload(Text);
+            lock (Scope.Store.Gate) return Bound(Text, true);
+        }
+        public ReasoningScope Thinking(int ModelRound, CancellationToken Token = default)
+            => new(this, Scope?.Store.Sanitizer ?? new DiagnosticSanitizer(), ModelRound, Token);
         public void Metadata(object? Value) => Change(() => { Step = Step with { Metadata = Bound(Value, false).Value }; });
         public void Detail(string Key, object? Value) => Change(() =>
         {

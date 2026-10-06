@@ -113,6 +113,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                         attachmentId = Document?.AttachmentId, suppliedByClientId = Document?.ClientId, conversationId = Request.ConversationId }, Index + 1));
             }
             using var Round = LlmDiagnostics.Start(ModelRequest, Configuration, $"LLM Round {Index + 1}");
+            using var Thinking = Round.Thinking(Index + 1, CancellationToken);
             LlmResponse Response;
             var CanSpeak = OnText is not null && (RoundTools.Length == 0 || Choice == "none") && (!Control || ControlConfirmed);
             if (OnText is null) { Response = await Model.CompleteAsync(ModelRequest, Timeout.Token); }
@@ -122,12 +123,15 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                 await foreach (var Event in Model.StreamAsync(ModelRequest, Timeout.Token).WithCancellation(Timeout.Token))
                 {
                     if (Completed is not null) { throw new InvalidOperationException("Model emitted data after completion."); }
+                    if (Event.ReasoningDelta is { } ReasoningDelta) Thinking.Delta(ReasoningDelta);
                     if (CanSpeak && Event.TextDelta is { Length: > 0 } Delta) { await OnText(Delta, Timeout.Token); }
                     Completed = Event.Completed;
                 }
                 Response = Completed ?? throw new InvalidOperationException("Model stream did not complete.");
                 if (CanSpeak && Response.ToolCalls.Count > 0) { throw new InvalidOperationException("Unexpected tool call in a speech-only round."); }
             }
+            if (OnText is null && Response.Reasoning is { } Reasoning) Thinking.Delta(Reasoning);
+            Thinking.Complete("completed");
             LlmDiagnostics.Output(Round, Response);
             if (Response.ToolCalls.Count == 0)
             {

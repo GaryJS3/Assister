@@ -167,6 +167,32 @@ public sealed class InteractionStore : IDisposable
     }
     private void AppendCore(Guid Id, string Type, object Data, SqliteTransaction Transaction, string? Status = null, string? Response = null, Guid? RunId = null)
     {
+        // Close unfinished thinking on terminal paths, including recovery after a server restart.
+        if (Type is "interaction.failed" or "interaction.cancelled" or "interaction.completed")
+        {
+            using var History = Command("SELECT Payload FROM InteractionEvents WHERE InteractionId=$id ORDER BY Sequence", ("$id", Id.ToString()));
+            History.Transaction = Transaction;
+            var Open = new Dictionary<Guid, JsonElement>();
+            using (var Reader = History.ExecuteReader())
+            {
+                while (Reader.Read())
+                {
+                    var Item = JsonSerializer.Deserialize<InteractionEvent>(Reader.GetString(0), Json)!;
+                    if (Item.Type == "reasoning.started")
+                        Open[Item.Data.GetProperty("stepId").GetGuid()] = Item.Data;
+                    if (Item.Type == "reasoning.completed")
+                        Open.Remove(Item.Data.GetProperty("stepId").GetGuid());
+                }
+            }
+            foreach (var Item in Open)
+                AppendCore(Id, "reasoning.completed", new
+                {
+                    stepId = Item.Key,
+                    modelRound = Item.Value.GetProperty("modelRound").GetInt32(),
+                    status = Type == "interaction.cancelled" ? "cancelled" : "failed",
+                    truncated = false
+                }, Transaction);
+        }
         using var Query = Command("SELECT ConversationId,LastSequence FROM Interactions WHERE Id=$id", ("$id", Id.ToString()));
         Query.Transaction = Transaction;
         Guid ConversationId;
