@@ -11,6 +11,8 @@ services:
     environment:
       Assister__DataPath: /data
       ClientUpdates__UploadToken: ${CLIENT_UPDATES_UPLOAD_TOKEN:-}
+      RichClients__Clients__web__Token: ${ASSISTER_DEV_CLIENT_TOKEN:-}
+      RichClients__Clients__web__Owner: ${ASSISTER_DEV_CLIENT_OWNER:-gary}
       HomeAssistant__Url: ${HOME_ASSISTANT_URL:-}
       HomeAssistant__Token: ${HOME_ASSISTANT_TOKEN:-}
       LanguageModel__BaseUrl: ${LLM_BASE_URL:-}
