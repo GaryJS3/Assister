@@ -8,6 +8,60 @@ namespace Assister.Tests;
 
 public sealed class HomeAssistantToolTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HistoryStatisticsAndPagesCoverFullRange(bool Timestamps)
+    {
+        var Body = """[[{"entity_id":"sensor.temp","state":"unavailable","last_changed":"2026-01-01T01:00:00Z"},{"state":"10","last_changed":"2026-01-01T02:00:00Z"},{"state":"30","last_changed":"2026-01-01T03:00:00Z"},{"state":"30","last_changed":"2026-01-01T04:00:00Z"},{"state":"20","last_changed":"2026-01-01T05:00:00Z"}]]""";
+        var Result = await History(Body, new { entity_ids = new[] { "sensor.temp" }, start = "2026-01-01T00:00:00Z", end = "2026-01-02T00:00:00Z",
+            include_timestamps = Timestamps, top_count = 2, bottom_count = 1, include_samples = true, sample_offset = 1, sample_limit = 2 });
+        var Stats = Result[0];
+        Assert.Equal(4, Stats.GetProperty("numeric_samples").GetInt32());
+        Assert.Equal(90, Stats.GetProperty("sum").GetDouble());
+        Assert.Equal(22.5, Stats.GetProperty("sample_mean").GetDouble());
+        Assert.Equal(25, Stats.GetProperty("median").GetDouble());
+        Assert.Equal(10, Stats.GetProperty("minimum").GetDouble());
+        Assert.Equal(30, Stats.GetProperty("maximum").GetDouble());
+        Assert.Equal(3, Stats.GetProperty("next_sample_offset").GetInt32());
+        Assert.Equal(2, Stats.GetProperty("samples").GetArrayLength());
+        Assert.Equal(Timestamps, Stats.TryGetProperty("maximum_at", out var Peak));
+        if (Timestamps) { Assert.Equal(DateTimeOffset.Parse("2026-01-01T03:00:00Z"), Peak.GetDateTimeOffset()); }
+        else { Assert.Equal(30, Stats.GetProperty("top")[0].GetDouble()); }
+    }
+
+    [Fact]
+    public async Task HistoryAcceptsMoreThanOneMiBAndReportsConfiguredLimit()
+    {
+        var Body = "[[{\"entity_id\":\"sensor.temp\",\"state\":\"10\",\"padding\":\"" + new string('x', 1100000) + "\"}]]";
+        var Arguments = new { entity_ids = new[] { "sensor.temp" }, start = "2026-01-01T00:00:00Z", end = "2026-01-02T00:00:00Z" };
+        Assert.Equal(1, (await History(Body, Arguments))[0].GetProperty("numeric_samples").GetInt32());
+        Assert.Equal("history_response_too_large", (await History(Body, Arguments, 1)).GetProperty("code").GetString());
+        var Empty = (await History("[]", Arguments))[0];
+        Assert.Equal(0, Empty.GetProperty("numeric_samples").GetInt32());
+        Assert.Equal(JsonValueKind.Null, Empty.GetProperty("maximum").ValueKind);
+    }
+
+    private static async Task<JsonElement> History(string Body, object Arguments, int MiB = 16)
+    {
+        var Cache = new HomeAssistantStateCache();
+        Cache.Load(Json("""[{"entity_id":"sensor.temp","state":"74","attributes":{"unit_of_measurement":"°F"}}]"""), Json("{}"), Json("[]"), Json("[]"), Json("[]"));
+        Cache.SetStale(false);
+        using var Http = new HttpClient(new HistoryHandler(Body));
+        var Configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            { ["HomeAssistant:Url"] = "http://ha/", ["HomeAssistant:HistoryMaxResponseMiB"] = MiB.ToString() }).Build();
+        var Tool = new HomeAssistantTool("ha_get_history", Cache, new RecordingActions(), Http, Configuration);
+        var Registry = new ToolRegistry([Tool]);
+        return Json(await new ToolBroker(Registry).ExecuteAsync(new("history", new("ha_get_history", JsonSerializer.Serialize(Arguments))),
+            Registry.All.Keys.ToHashSet(), new(new("office history"), ["sensor.temp"]), CancellationToken.None));
+    }
+
+    private sealed class HistoryHandler(string Body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
+            => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(Body) });
+    }
+
     [Fact]
     public async Task FutureHistoryRangeReturnsCorrectableErrorWithoutContactingHa()
     {

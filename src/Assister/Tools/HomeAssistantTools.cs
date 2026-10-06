@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using Assister.Contracts;
 using Assister.Modules.HomeAssistant;
@@ -16,13 +15,13 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         "ha_search" => "Find Home Assistant entities by name, device name, alias or area. Device nouns infer domains; use domains for light/switch lists. Unassigned devices can match a room in their names. An empty array is no match; an error is a failed search, not proof devices do not exist.",
         "ha_get_state" => "Read current compact state for entities found by search.",
         "ha_control" => "Control searched lights or switches for the current authorized action. Use entity_ids to control multiple targets together, or entity_id for one. Search in this turn before controlling. Never replay earlier commands during questions. Targets and action are checked against the current request by the server.",
-        _ => "Get bounded numeric history summaries for searched entities. Times must include the correct UTC offset; end cannot be in the future. Maximum range is seven days."
+        _ => "Get numeric range statistics (count, min, max, sample mean, sum, median) for searched entities. Optional top_count/bottom_count return ranked readings; include_samples returns a chronological page using sample_offset/sample_limit. include_timestamps defaults true; extrema ties use the earliest timestamp. Statistics cover the full range, never just the page. At most 50 detailed readings across all entities per call. Times need UTC offsets; end cannot be future; maximum range seven days."
     }, Schema(Name switch
     {
         "ha_search" => """{"type":"object","properties":{"query":{"type":"string"},"area":{"type":"string"},"domains":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["query"],"additionalProperties":false}""",
         "ha_get_state" => """{"type":"object","properties":{"entity_ids":{"type":"array","items":{"type":"string"}}},"required":["entity_ids"],"additionalProperties":false}""",
         "ha_control" => """{"type":"object","properties":{"entity_id":{"type":"string"},"entity_ids":{"type":"array","items":{"type":"string"}},"action":{"type":"string","enum":["turn_on","turn_off","set_brightness"]},"brightness_pct":{"type":"integer","minimum":0,"maximum":100}},"required":["action"],"additionalProperties":false}""",
-        _ => """{"type":"object","properties":{"entity_ids":{"type":"array","items":{"type":"string"}},"start":{"type":"string"},"end":{"type":"string"}},"required":["entity_ids","start","end"],"additionalProperties":false}"""
+        _ => """{"type":"object","properties":{"entity_ids":{"type":"array","items":{"type":"string"}},"start":{"type":"string"},"end":{"type":"string"},"include_timestamps":{"type":"boolean"},"top_count":{"type":"integer","minimum":0,"maximum":50},"bottom_count":{"type":"integer","minimum":0,"maximum":50},"include_samples":{"type":"boolean"},"sample_offset":{"type":"integer","minimum":0},"sample_limit":{"type":"integer","minimum":1,"maximum":50}},"required":["entity_ids","start","end"],"additionalProperties":false}"""
     })));
 
     public async Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken CancellationToken)
@@ -97,39 +96,8 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         {
             return JsonSerializer.Serialize(new { error = "History timestamps must include a UTC offset, start must precede end, range must not exceed seven days, and end cannot be in the future. Correct the range using the supplied local clock.", current_utc = DateTimeOffset.UtcNow });
         }
-        var Path = $"api/history/period/{Uri.EscapeDataString(Start.ToString("O"))}?filter_entity_id={Uri.EscapeDataString(string.Join(',', Ids))}&end_time={Uri.EscapeDataString(End.ToString("O"))}&minimal_response&no_attributes&significant_changes_only";
-        using var Request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(Configuration["HomeAssistant:Url"]!), Path));
-        Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Configuration["HomeAssistant:Token"]);
-        using var Response = await Http.SendAsync(Request, HttpCompletionOption.ResponseHeadersRead, CancellationToken);
-        Response.EnsureSuccessStatusCode();
-        await using var Stream = await Response.Content.ReadAsStreamAsync(CancellationToken);
-        using var Buffer = new MemoryStream();
-        var Block = new byte[8192];
-        int Count;
-        while ((Count = await Stream.ReadAsync(Block, CancellationToken)) > 0)
-        {
-            if (Buffer.Length + Count > 1024 * 1024) { throw new InvalidDataException(); }
-            Buffer.Write(Block, 0, Count);
-        }
-        using var Document = JsonDocument.Parse(Buffer.ToArray());
-        var Results = new List<object>();
-        foreach (var Series in Document.RootElement.EnumerateArray())
-        {
-            if (Series.GetArrayLength() == 0) { continue; }
-            var Id = Series[0].GetProperty("entity_id").GetString()!;
-            if (!Ids.Contains(Id)) { continue; }
-            var Values = Series.EnumerateArray().Select(Point => double.TryParse(Point.GetProperty("state").GetString(), CultureInfo.InvariantCulture, out var Number) && double.IsFinite(Number) ? (double?)Number : null)
-                .Where(Number => Number.HasValue).Select(Number => Number!.Value).ToArray();
-            Results.Add(new { entity_id = Id, start = Start, end = End, numeric_samples = Values.Length,
-                unit = Entities.Single(Entity => Entity.EntityId == Id).State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var Unit)
-                    && Unit.ValueKind == JsonValueKind.String ? Unit.GetString() : null,
-                minimum = Values.Length > 0 ? (double?)Values.Min() : null, maximum = Values.Length > 0 ? (double?)Values.Max() : null,
-                sample_mean = Values.Length > 0 ? (double?)Values.Average() : null,
-                note = "Mean is across numeric state-change samples, not time-weighted. Missing/unavailable samples are excluded." });
-        }
-        return JsonSerializer.Serialize(Results);
+        return await NumericHistory.ReadAsync(Arguments, Entities, Start, End, Http, Configuration, CancellationToken);
     }
-
     private static bool HasOffset(string Text) => Text.EndsWith('Z') || Text.Length >= 6 && Text[^3] == ':' && Text[^6] is '+' or '-';
     private static object Compact(HomeAssistantEntity Entity) => new
     {

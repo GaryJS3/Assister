@@ -115,6 +115,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, 
             "object" => Value.ValueKind == JsonValueKind.Object,
             "string" => Value.ValueKind == JsonValueKind.String,
             "integer" => Value.ValueKind == JsonValueKind.Number && Value.TryGetInt32(out _),
+            "boolean" => Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
             "array" => Value.ValueKind == JsonValueKind.Array,
             _ => false
         };
