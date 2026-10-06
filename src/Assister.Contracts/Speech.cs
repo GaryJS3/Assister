@@ -22,3 +22,9 @@ public interface IStreamingTextToSpeechProvider : ITextToSpeechProvider
     IAsyncEnumerable<AudioChunk> SynthesizeStreamAsync(IAsyncEnumerable<string> Text,
         TextToSpeechOptions Options, CancellationToken CancellationToken);
 }
+
+public interface IStreamingSpeechToTextProvider : ISpeechToTextProvider
+{
+    Task<TranscriptionResult> TranscribeStreamingAsync(IAsyncEnumerable<AudioChunk> Audio, SpeechToTextOptions Options,
+        Func<string, CancellationToken, Task> OnPartial, CancellationToken CancellationToken);
+}

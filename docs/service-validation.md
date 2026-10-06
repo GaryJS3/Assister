@@ -1,6 +1,23 @@
 # Live service validation, October 3, 2026
 
-## Latest production checkpoint — October 4, 2026
+## Latest production checkpoint — October 5, 2026
+
+Assister image revision `c48745f41f025bb6c33d6b1762b7f743ed783d4b` is deployed through
+Dockhand Git sync and one-container update. Running image digest is
+`sha256:bf56ef8dc2a0787bacb619276bb577e30d6f29a89181910fc2a8dc47ba99515e`.
+Environment and mounts match the pre-deployment inspection; bridge and EchoMuse were unchanged.
+207 tests pass. Health/database are Healthy, HA is Connected with a fresh 1,967-entity cache,
+and two satellites reconnected. The container retained an older revision label; exact deployed
+revision was established from its running image digest and the built image's revision label.
+
+Two active timers survived this redeployment with identical IDs and deadlines. Native remaining-time
+queries pass through the API and the microphone. User confirmed spoken brightness,
+clarification/follow-ups and cancellation/recovery. Controller logs establish that the interrupted
+timer confirmation was playback wake-word barge-in, followed by a no-speech timeout. Expiry
+announcements remain pending. See [runtime review](runtime-review-2026-10-05.md) for traces,
+latency breakdown and the playback threshold investigation.
+
+## Earlier production checkpoint — October 4, 2026
 
 Assister and ESPHome bridge were built from exact committed revision
 `d51ca906c453490a1f1e6b413f535fedacb13982` and redeployed through Dockhand after Git sync.

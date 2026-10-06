@@ -1,4 +1,5 @@
 using Assister.Diagnostics;
+using Assister.Interactions;
 using Assister.Persistence;
 using Assister.Modules.HomeAssistant;
 using Assister.Contracts;
@@ -90,6 +91,13 @@ foreach (var Name in new[] { "ha_search", "ha_get_state", "ha_control", "ha_get_
 Builder.Services.AddHttpClient<ILanguageModel, OpenAiCompatibleLanguageModel>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 Builder.Services.AddSingleton<RunStore>();
+Builder.Services.AddDataProtection();
+Builder.Services.AddSingleton<ClientAuthentication>();
+Builder.Services.AddSingleton<ClientSignals>();
+Builder.Services.AddSingleton<InteractionStore>();
+Builder.Services.AddSingleton<InteractionRunner>();
+Builder.Services.AddScoped<RichSpeech>();
+Builder.Services.AddHostedService(Services => Services.GetRequiredService<InteractionRunner>());
 Builder.Services.AddHttpClient("diagnostics").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 Builder.Services.AddSingleton<ComponentHealth>();
 Builder.Services.AddHostedService(Services => Services.GetRequiredService<ComponentHealth>());
@@ -99,6 +107,8 @@ App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore A
     ? Results.File(Data, Data.AsSpan().StartsWith("fLaC"u8) ? "audio/flac" : "audio/wav", enableRangeProcessing: true) : Results.NotFound());
 App.UseDefaultFiles();
 App.UseStaticFiles();
+App.UseWebSockets();
+App.MapRichClients();
 App.MapDashboard();
 App.MapSatellites();
 App.MapIntents();

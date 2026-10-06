@@ -8,6 +8,28 @@ namespace Assister.IntegrationTests;
 public sealed class WyomingProviderTests
 {
     [Fact]
+    public async Task ChunkedTranscriptsPublishGenuinePartialUpdates()
+    {
+        using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var Listener = new TcpListener(IPAddress.Loopback, 0); Listener.Start();
+        var Server = ServeAsync();
+        var Provider = new WyomingSpeechToTextProvider(new("127.0.0.1", ((IPEndPoint)Listener.LocalEndpoint).Port));
+        var Partials = new List<string>();
+        var Final = await Provider.TranscribeStreamingAsync(Audio(), new(), (Text, Token) => { Partials.Add(Text); return Task.CompletedTask; }, Timeout.Token);
+        Assert.Equal(new[] { "turn", "turn off" }, Partials); Assert.Equal("turn off", Final.Text); await Server;
+        async Task ServeAsync()
+        {
+            using var Client = await Listener.AcceptTcpClientAsync(Timeout.Token); await using var Stream = Client.GetStream();
+            var Reader = new WyomingEventReader(Stream); var Writer = new WyomingEventWriter(Stream);
+            Assert.Equal("describe", (await Reader.ReadAsync(Timeout.Token))!.Type);
+            await Writer.WriteAsync(WyomingEvent.Create("info", new { asr = new[] { new { name = "fake" } } }), Timeout.Token);
+            while ((await Reader.ReadAsync(Timeout.Token))!.Type != "audio-stop") { }
+            await Writer.WriteAsync(WyomingEvent.Create("transcript-chunk", new { text = "turn" }), Timeout.Token);
+            await Writer.WriteAsync(WyomingEvent.Create("transcript-chunk", new { text = " off" }), Timeout.Token);
+            await Writer.WriteAsync(WyomingEvent.Create("transcript-stop"), Timeout.Token);
+        }
+    }
+    [Fact]
     public async Task SttSendsOrderedPcmAndReceivesTranscript()
     {
         using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));

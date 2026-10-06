@@ -8,6 +8,24 @@ namespace Assister.Tests;
 
 public sealed class ToolLoopTests
 {
+    [Fact]
+    public async Task ContextTracksMessagesActuallySentIncludingToolProvenanceAndRounds()
+    {
+        var Registry = new ToolRegistry([new FakeTool()]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("call-search", new("ha_search", "{\"query\":\"desk\"}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("A selected result.", [], "stop"));
+        var Captured = new List<ContextSelection>();
+        using var Observer = InteractionFeedback.Observe((Type, Data) => { if (Data is ContextSelection Context) Captured.Add(Context); });
+        await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build()).RespondAsync(new("Find the desk"), [new("user", "Earlier topic")], CancellationToken.None);
+        Assert.Equal(Model.Requests.Sum(Request => Request.Messages.Count), Captured.Count);
+        Assert.Contains(Captured, Item => Item.Type == "conversation_message" && Item.ModelRound == 1 && Item.Content == "Earlier topic");
+        var Result = Assert.Single(Captured, Item => Item.Type == "tool_result");
+        Assert.Equal(2, Result.ModelRound);
+        var Provenance = JsonSerializer.SerializeToElement(Result.Provenance);
+        Assert.Equal("call-search", Provenance.GetProperty("toolCallId").GetString());
+        Assert.Equal("ha_search", Provenance.GetProperty("tool").GetString());
+    }
     [Theory]
     [InlineData("How much solar power did I get yesterday?")]
     [InlineData("What's the wind speed right now?")]

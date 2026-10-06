@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conversation · Assister</title><link rel="stylesheet" href="/app-shell.css"><link rel="stylesheet" href="/chat.css"><script defer src="/app-shell.js"></script><script defer src="/chat.js"></script></head>
+<body>
+<header data-app-shell></header>
+<main>
+  <div class="heading"><div><p class="eyebrow">ASSISTER / CONVERSATION</p><h1>Ask. Watch it happen.</h1></div><span id="connection" role="status">Connecting</span></div>
+  <form id="login" hidden><label>Client credential <input id="credential" type="password" autocomplete="off" required minlength="24"></label><button>Connect</button><p>Use a configured rich-client credential. Your session lasts eight hours.</p></form>
+  <section id="client" hidden>
+    <div class="toolbar"><label>Conversation <select id="conversations" aria-label="Conversation"></select></label><button id="new" type="button">New conversation</button><button id="logout" type="button">Sign out</button></div>
+    <div class="workspace"><div><div id="messages" aria-live="polite" aria-relevant="additions text"></div>
+      <form id="composer"><label for="message">Ask Assister</label><textarea id="message" maxlength="1000" rows="3" required placeholder="How warm is the office?"></textarea>
+        <label>Attach text or an image <input id="files" type="file" multiple accept=".txt,.md,.json,image/png,image/jpeg"></label><ul id="attachments"></ul><p class="hint">Drop files here or paste an image. Text can be processed now; images are stored for future vision support.</p>
+        <label><input id="speak" type="checkbox"> Speak answers</label>
+        <div class="controls"><span>Requests can execute device commands.</span><button id="mic" type="button">Record voice</button><button id="cancel" type="button" hidden>Cancel</button><button id="send">Send</button></div></form>
+    </div><aside><p class="eyebrow">LIVE ACTIVITY</p><ol id="activity"></ol><p class="hint">Execution steps appear as they happen. Answer text streams independently of speech.</p></aside></div>
+  </section>
+  <p id="error" role="alert"></p>
+</main></body></html>

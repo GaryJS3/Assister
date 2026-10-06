@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Assister\Assister.csproj" />
+    <ProjectReference Include="..\..\src\Assister.Client\Assister.Client.csproj" />
   </ItemGroup>
 
 </Project>

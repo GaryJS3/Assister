@@ -1,6 +1,6 @@
 # MVP acceptance, timers/memory and streaming
 
-Updated: October 4, 2026. This increment is included in deployed revision `d51ca90`. The latest complete suite passes 196 tests (178 unit/component, 18 integration). The original 157-test module checks below remain historical evidence; they do not independently establish physical satellite acceptance. See [progress.md](../progress.md) and [service-validation.md](service-validation.md) for the current deployment and remaining checks.
+Updated: October 5, 2026. This increment is included in deployed revision `c48745f`. The latest complete suite passes 207 tests (189 unit/component, 18 integration). Native timer remaining-time queries pass through the microphone; two timers survived redeployment with unchanged deadlines. Spoken brightness, clarification/follow-ups and cancellation/recovery are user-confirmed. Timer expiry acceptance remains pending. The original 157-test module checks below remain historical evidence; they do not independently establish physical satellite acceptance. See [progress.md](../progress.md) and [service-validation.md](service-validation.md) for the current deployment and remaining checks.
 
 ## Changes
 

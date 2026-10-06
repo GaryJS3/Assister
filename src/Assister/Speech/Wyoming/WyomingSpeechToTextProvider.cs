@@ -4,10 +4,14 @@ using System.Text;
 
 namespace Assister.Speech.Wyoming;
 
-public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : ISpeechToTextProvider
+public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : IStreamingSpeechToTextProvider
 {
-    public async Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio,
+    public Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio,
         SpeechToTextOptions Options, CancellationToken CancellationToken)
+        => TranscribeStreamingAsync(Audio, Options, (_, _) => Task.CompletedTask, CancellationToken);
+
+    public async Task<TranscriptionResult> TranscribeStreamingAsync(IAsyncEnumerable<AudioChunk> Audio,
+        SpeechToTextOptions Options, Func<string, CancellationToken, Task> OnPartial, CancellationToken CancellationToken)
     {
         using var Trace = RunTracing.CurrentKind == "SpeechToText" ? null : RunTracing.Start("SpeechToText", "Speech to text", "Invoke the Wyoming speech recognition provider.");
         Trace?.Input(new { languageRequested = Options.Language });
@@ -60,6 +64,7 @@ public sealed class WyomingSpeechToTextProvider(WyomingEndpoint Endpoint) : ISpe
             if (Event.Type == "transcript-chunk")
             {
                 Partial.Append(Event.Data.GetProperty("text").GetString());
+                await OnPartial(Partial.ToString(), Token);
             }
             if (Event.Type == "transcript-stop")
             {

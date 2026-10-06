@@ -39,7 +39,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
 
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
-            || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128)
+            || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128 || !RequestInputLimits.ValidDocuments(Request))
         {
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }

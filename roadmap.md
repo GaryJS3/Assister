@@ -1,42 +1,39 @@
 # Assister roadmap
 
-Updated: October 4, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
+Updated: October 5, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
 
 ## Architectural rules
 
 Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use native C# for Wyoming and SQLite/EF Core for persistence. Prefer deterministic intents over LLM calls. Retrieve only relevant context and expose only relevant tools. Home Assistant remains an external automation/data platform. Separate voice sessions, conversations and trace IDs.
 
-## Next: satellite realignment acceptance
+## Next: reliability and latency acceptance
 
-Current production baseline is `d51ca90`: 196 tests pass; Assister, ESPHome bridge and EchoMuse
-have been redeployed. Device discovery/authorization/structured follow-ups and HA registry-event,
-15-minute and manual cache refresh are implemented. The microphone continuation fix is user-confirmed.
-The earlier implementation notes below describe historical checkpoints, not pending deployment.
+Current production baseline is `c48745f` (October 5): 207 tests pass. Assister was
+redeployed with environment and data mounts preserved; EchoMuse and the bridge were unchanged.
+Spoken office/kitchen/living-room power controls have trace evidence. The user confirmed
+brightness, clarification/follow-ups and cancellation/recovery checks. Updated HA areas appear
+in the live cache. Native timer creation and remaining-time queries work through the microphone.
+Two active timers survived redeployment with their IDs and deadlines unchanged.
 
-Next validate spoken office/kitchen control and clarification on the deployed baseline, truthful
-action receipts/partial completion, real HA registry rename/area updates, scheduled cache reload,
-and satellite cancellation/LED/media coexistence gaps. Manual cache rebuild and read-only discovery
-already pass live. HA Voice remains offline; Kitchen and MBedroom EchoMuse are online.
+Next verify expiry announcements for those timers. Remaining checks include truthful partial
+failure, scheduled cache refresh, controlled HA rename/area-event acceptance, media coexistence,
+ownership recovery and device reboot. HA Voice remains offline.
 
-The MVP/timer/memory/streaming increment is implemented locally and described in [mvp-acceptance.md](docs/mvp-acceptance.md). The final updated-module probe passed actual history/forecast retrieval and native TTS streaming. Deploy it and verify microphone/playback behavior before treating module results as production satellite acceptance.
+Investigate playback wake interruption separately: the controller cancelled the timer confirmation
+at threshold 0.10 on scores 0.277/0.118, then opened a no-speech turn. The installed default is
+0.25; testing that value would reject this particular pair, but deliberate interruption still
+needs physical acceptance. Keep services/settings unchanged during timer expiry observation.
 
-The manager, provider boundary, runtime UI and core physical request path are deployed.
-Integrate the forked EchoMuse external voice v1 controller through a native C# provider,
-using its authenticated inventory and one multiplexed WebSocket. Validate independent
-device/session correlation, no-speech/cancellation, opaque WAV playback and reconnects.
-An accurate audible reply and correct LED completion are user-confirmed. Before further
-physical checks, finish trace correlation and automated disconnect/reconnect/backoff tests.
-Remaining hardware checks: cancellation LEDs, deterministic spoken brightness, standalone
-announcement/media duck/resume, ownership conflict/recovery and satellite reboot. Runtime
-wake-word editing is unavailable on the installed device firmware; do not invent model IDs.
+Latency priorities are model round count, final-answer streaming and STT finalization. HA tool
+execution is already fast in the inspected traces. Do not remove current-request authorization,
+source requirements or tool-prose buffering to reduce latency. Office temperature routing changes
+are deferred at the user's request. See [runtime review](docs/runtime-review-2026-10-05.md).
 
-Revision `0fbc4a7` is deployed: multi-target brightness and stop/cancel pass production API
-checks. Both light groups reached 40%/100% and were restored; a missing target prevented partial
-control. MBedroom announcement cancellation and next-announcement recovery pass. Next verify
-the full-name two-light phrase through the microphone and confirm audible/LED stop behavior.
-Use "Kitchen Main Lights" until a short-name alias is configured. Wake-word interruption during
-speech is unavailable on the current device path and deferred; do not treat it as accepted.
-See [service-validation.md](docs/service-validation.md) for traces and verification boundaries.
+## Historical implementation checkpoints
+
+The sections below preserve original milestone planning. Core milestones 5–8 and generation/TTS
+overlap are deployed; references to local implementation or pending deployment below are historical,
+not current next steps. Physical early playback and consolidated MVP acceptance remain incomplete.
 
 ### Earlier LLM and tool checkpoints
 
@@ -44,7 +41,7 @@ See [service-validation.md](docs/service-validation.md) for traces and verificat
 - The shared text coordinator, parser, resolver and action handlers are deployed and tested. Carry this coordinator forward into the voice path; add other controls only through intentional mappings and tests.
 - Continue milestone 5: completion/streaming client and function-call assembly are implemented and fake-HTTP tested. Selected tools, validating broker and bounded loop are now implemented locally and connected to unmatched requests. Complete live validation. Keep direct intents independent of LLM availability.
 - Recheck HA authentication after the user's credential rotation. Registry metadata now refreshes on registry events, reconnect, full snapshots every 15 minutes and manual rebuild.
-## Remaining milestones
+## Original milestone deliverables (historical)
 
 | Order | Deliverable | Acceptance checkpoint |
 | --- | --- | --- |
@@ -69,7 +66,7 @@ See [service-validation.md](docs/service-validation.md) for traces and verificat
 8. Test duplicate/late events, disconnect cleanup, changing capabilities, ownership conflict/recovery and redaction.
 9. Verify the installed HA entity-disable procedure before claiming coexistence; keep the ESPHome integration.
 
-The current local increment and remaining acceptance gaps are recorded in progress.md and
+The deployed satellite increment and remaining acceptance gaps are recorded in progress.md and
 [satellite-architecture.md](docs/satellite-architecture.md). Streaming is tracked as a separate
 increment. Firmware management, discovery and whole-home grouping remain outside this realignment.
 

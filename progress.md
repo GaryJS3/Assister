@@ -1,10 +1,32 @@
 # Assister progress
 
-Updated: October 4, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) contains durable architectural decisions.
+Updated: October 5, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) contains durable architectural decisions.
 
 ## Current state
 
-### Latest deployed baseline — October 4, 2026
+### Latest deployed baseline — October 5, 2026
+
+Assister runs image revision `c48745f41f025bb6c33d6b1762b7f743ed783d4b`; Dockhand Git sync
+and one-container deployment succeeded. Running image digest matches the exact-revision build.
+Environment and mounts were preserved. EchoMuse and ESPHome bridge were unchanged. 207 tests
+pass (189 unit/component, 18 integration). Health/database are Healthy; HA is Connected with
+1,967 fresh cached entities and two connected satellites.
+
+Spoken office, kitchen and living-room power requests resolve correct targets and confirm HA
+state and playback. User acceptance covers brightness, clarification/follow-ups and
+cancellation/recovery. HA area fixes are visible in the cache; this does not establish which
+refresh mechanism imported them. Timer creation and remaining-time queries have real microphone
+and playback evidence. Two active timers survived redeployment with unchanged IDs and deadlines;
+expiry announcements remain pending as of this review. Interrupted confirmation did not undo
+creation, so the retry created a second timer.
+
+The interrupted confirmation was controller wake-word barge-in at playback threshold 0.10;
+its following microphone turn timed out without speech. Installed controller default is 0.25.
+No controller settings or running services were changed during this read-only review.
+Latency analysis and the next bounded experiments are in
+[runtime-review-2026-10-05.md](docs/runtime-review-2026-10-05.md).
+
+### Earlier deployed baseline — October 4, 2026
 
 Assister and the ESPHome bridge run exact revision `d51ca906c453490a1f1e6b413f535fedacb13982`.
 It includes the device-interaction audit/fixes from `fa78a75` and all preceding MVP increments.
@@ -359,4 +381,3 @@ Brightness accepts at as well as to; the exact spoken kitchen transcript and LLM
 ## October 5 native timer queries
 
 Remaining-time questions, including How much left on the timer, use persisted Assister timers scoped to the requesting satellite. Named queries and bounded duplicate listings are supported; expired pending timers are reported honestly. 207 tests pass (189 unit/component, 18 integration). Live pre-deployment snapshot confirms two active unnamed EchoMuse timers from the interrupted and successful spoken attempts. Controller logs attribute the interrupted confirmation to wake-word barge-in followed by no-speech timeout.
-

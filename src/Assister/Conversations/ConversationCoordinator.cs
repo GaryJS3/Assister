@@ -24,11 +24,14 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
     public Task<RequestResult> ProcessStreamingAsync(UserRequest Request, Func<string, CancellationToken, Task> OnText, CancellationToken CancellationToken)
         => ProcessCoreAsync(Request, OnText, CancellationToken);
 
-    private async Task<RequestResult> ProcessCoreAsync(UserRequest Request, Func<string, CancellationToken, Task>? OnText, CancellationToken CancellationToken)
+    public Task<RequestResult> ProcessClientStreamingAsync(UserRequest Request, Func<string, CancellationToken, Task> OnText, CancellationToken CancellationToken)
+        => ProcessCoreAsync(Request, OnText, CancellationToken, AuthoritativeText: true);
+
+    private async Task<RequestResult> ProcessCoreAsync(UserRequest Request, Func<string, CancellationToken, Task>? OnText, CancellationToken CancellationToken, bool AuthoritativeText = false)
     {
         using var Run = RunTracing.EnsureRun(Diagnostics, "text", Request.SatelliteId, Request.Area, Request.ConversationId, Request.Message);
         if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.SatelliteId)
-            || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128)
+            || Request.SatelliteId.Length > 128 || Request.Area?.Length > 128 || !RequestInputLimits.ValidDocuments(Request))
         { return await Coordinator.ProcessAsync(Request, CancellationToken); }
         // Stop must reach the active operation rather than wait behind its conversation lock.
         if (StopCommands.IsStop(Request.Message)) { return await Coordinator.ProcessAsync(Request, CancellationToken); }
@@ -80,7 +83,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
             }
             var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken,
                 OnText is null ? null : Deliver, DeviceContext);
-            if (OnText is not null && !Emitted) { await OnText(Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
+            if (OnText is not null && !Emitted) { await OnText(AuthoritativeText ? Result.Response : Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
             Conversation.UpdatedAt = Now;
             Conversation.DeviceContextJson = JsonSerializer.Serialize(DeviceContext);
             Database.ConversationTurns.Add(new() { ConversationId = Conversation.Id, UserText = Request.Message,

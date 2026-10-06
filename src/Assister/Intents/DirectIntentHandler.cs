@@ -1,4 +1,5 @@
 using Assister.Modules.HomeAssistant;
+using Assister.Contracts;
 
 namespace Assister.Intents;
 
@@ -15,6 +16,8 @@ public sealed class DirectIntentHandler(IHomeAssistantClient HomeAssistant)
             var Entity = Entities.Single();
             var Value = Entity.State.GetProperty("state").GetString();
             var Unit = Entity.State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var UnitValue) ? UnitValue.GetString() : null;
+            InteractionFeedback.Emit("context.selected", new ContextSelection("entity-" + Entity.EntityId, "entity_state", "home_assistant", Entity.Name,
+                System.Text.Json.JsonSerializer.Serialize(new { state = Value, unit = Unit }), new { entityId = Entity.EntityId }, 0));
             Unit = Unit switch { "°F" => "degrees Fahrenheit", "°C" => "degrees Celsius", _ => Unit };
             return new($"{Entity.Name} is {Value}{(Unit is null ? "" : " " + Unit)}.", "succeeded");
         }

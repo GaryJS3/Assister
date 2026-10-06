@@ -4,8 +4,8 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 ## Current implementation
 
-Latest deployed baseline: `d51ca90` (October 4, 2026), with 196 passing tests. Assister,
-ESPHome bridge and EchoMuse were redeployed; the live manual HA cache rebuild passed.
+Latest deployed baseline: `c48745f` (October 5, 2026), with 207 passing tests. Assister,
+ESPHome bridge and EchoMuse have prior deployment evidence; the latest update changed only Assister. Native timer remaining-time queries and timer persistence across redeployment pass live.
 See [progress.md](progress.md) for verification boundaries and remaining physical acceptance.
 
 Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup migrations, structured console logs, health/status endpoints, Docker packaging, and persistence/API tests.

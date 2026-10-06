@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using Assister.Contracts;
 
 namespace Assister.Diagnostics;
 
@@ -195,6 +196,7 @@ public static class RunTracing
         private readonly Activity? Activity;
         private DiagnosticStep Step;
         private DateTimeOffset? Finished;
+        private bool FeedbackFinished;
         public string Kind => Step.Kind;
         public Guid Id => Step.Id;
         internal TraceStep(RunScope? Scope, TraceStep? Previous, string Kind, string Name, string Summary)
@@ -206,6 +208,7 @@ public static class RunTracing
             Step = new(Guid.NewGuid(), Previous?.Id, 0, Clean.Text(Kind, 64), Clean.Text(Name, 128), "running", DateTimeOffset.UtcNow, 0,
                 Clean.Text(Summary, 1024), null, null, null, false, false);
             if (Scope is not null) { lock (Scope.Store.Gate) { Step = Step with { Sequence = Scope.Steps.Count + 1 }; if (Scope.Steps.Count < 128) { Scope.Steps.Add(this); } } }
+            InteractionFeedback.Emit("step.started", new { stepId = Step.Id, parentStepId = Step.ParentId, kind = Step.Kind, label = Step.Name, summary = Step.Summary });
         }
         private void Change(Action Action) { if (Scope is not null) { lock (Scope.Store.Gate) { Action(); } } }
         private (JsonElement? Value, bool Truncated) Bound(object? Value, bool Detailed)
@@ -230,11 +233,19 @@ public static class RunTracing
         });
         public void Complete(string Status = "succeeded") => Change(() => Step = Step with { Status = Scope!.Store.Sanitizer.Text(Status, 128) });
         // Finish model timing before child tools while keeping this round as their semantic parent.
-        public void Finish(string Status = "succeeded") { Complete(Status); Change(() => Finished ??= DateTimeOffset.UtcNow); }
+        public void Finish(string Status = "succeeded") { Complete(Status); Change(() => Finished ??= DateTimeOffset.UtcNow); PublishFinished(); }
+        private void PublishFinished()
+        {
+            if (FeedbackFinished) return;
+            FeedbackFinished = true;
+            InteractionFeedback.Emit(Step.Status is "failed" or "rejected" or "unavailable" or "interrupted-or-failed" ? "step.failed" : "step.completed",
+                new { stepId = Step.Id, parentStepId = Step.ParentId, kind = Step.Kind, label = Step.Name, status = Step.Status, durationMs = Snapshot().DurationMilliseconds });
+        }
         internal DiagnosticStep Snapshot() => Step with { DurationMilliseconds = ((Finished ?? DateTimeOffset.UtcNow) - Step.StartedAt).TotalMilliseconds };
         public void Dispose()
         {
             Change(() => { Finished ??= DateTimeOffset.UtcNow; if (Step.Status == "running") { Step = Step with { Status = "interrupted-or-failed" }; } });
+            PublishFinished();
             Activity?.Dispose(); Parent.Value = Previous;
         }
     }
