@@ -68,7 +68,17 @@ public sealed class IntentClassifier : IIntentEngine
 
         Match = Pattern(Text, @"^(?:what is|what's) the (?:state|status) of (?<target>.+)$");
         if (!Match.Success) { Match = Pattern(Text, @"^is (?<target>.+) (?:on|off)$"); }
-        return Match.Success ? Slots(DirectIntentKind.QueryState, Match.Groups["target"].Value) : null;
+        if (!Match.Success) { return null; }
+        var StateTarget = Match.Groups["target"].Value;
+        // The native state handler reads exactly one entity. Group questions need
+        // search/list reasoning; do not turn their scope into a device name or HA area.
+        // Explicit IDs remain single-entity references even when their names are plural.
+        if (!Pattern(StateTarget, @"^[a-z_]+\.[a-z0-9_]+$").Success
+            && Pattern(StateTarget, @"\b(?:all|both|every|each|lights|lamps|switches|devices|sensors)\b|\band\b|\b(?:in|throughout|across) (?:the |my |our )?(?:(?:whole|entire) )?(?:house|home)\b").Success)
+        {
+            return null;
+        }
+        return Slots(DirectIntentKind.QueryState, StateTarget);
     }
 
     public static string Normalize(string Message)

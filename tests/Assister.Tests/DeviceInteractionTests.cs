@@ -17,6 +17,23 @@ namespace Assister.Tests;
 
 public sealed class DeviceInteractionTests
 {
+    [Fact]
+    public async Task WholeHouseStatusUsesModelSearchWithoutDeviceChanges()
+    {
+        await using var App = await Fixture.Create();
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"lights","domains":["light"],"limit":10}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new("All four lights are off.", [], "stop"));
+        var Result = await App.Send("What's the status of all the current lights in the house?");
+        Assert.Equal("language-model", Result.HandledBy);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("All four lights are off.", Result.Response);
+        Assert.Equal(2, App.Model.Requests.Count);
+        var SearchResult = App.Model.Requests[1].Messages.Single(Message => Message.ToolCallId == "search").Content!;
+        Assert.Equal(4, Json(SearchResult).GetArrayLength());
+        Assert.DoesNotContain("device_tracker.office_lights", SearchResult);
+        Assert.Empty(App.Actions.Calls);
+    }
+
     [Theory]
     [InlineData("Hey Jarvis, can you turn the kitchen lights on 100%?")]
     [InlineData("Hey Jarvis, can you turn on the kitchen lights to 100% please?")]

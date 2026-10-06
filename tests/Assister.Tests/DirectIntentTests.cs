@@ -9,6 +9,37 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Theory]
+    [InlineData("What's the status of all the current lights in the house?")]
+    [InlineData("What is the state of all lights?")]
+    [InlineData("What's the status of both office lights?")]
+    [InlineData("What is the state of the lights in the office?")]
+    [InlineData("Is every switch off?")]
+    [InlineData("What is the status of the desk light and the kitchen light?")]
+    [InlineData("What's the status of the light in the whole house?")]
+    public async Task GroupStateQuestionsStayOutOfSingleDeviceIntent(string Message)
+    {
+        var (Coordinator, Fake, _) = Create();
+        var Result = await Coordinator.ProcessAsync(new(Message), CancellationToken.None);
+        Assert.Equal("unmatched", Result.Outcome);
+        Assert.Empty(Fake.Calls);
+        var Decision = await new IntentClassifier().MatchAsync(Message, CancellationToken.None);
+        Assert.Equal("unmatched", Decision.Status);
+    }
+
+    [Theory]
+    [InlineData("What's the status of light.living_room_lights?", "light.living_room_lights", null)]
+    [InlineData("What is the state of the desk light?", "desk light", null)]
+    [InlineData("Is the light in the office on?", "light", "office")]
+    public void SingleDeviceStateQuestionsRemainDeterministic(string Message, string Target, string? Area)
+    {
+        var Intent = new IntentClassifier().Classify(Message);
+        Assert.NotNull(Intent);
+        Assert.Equal(DirectIntentKind.QueryState, Intent.Kind);
+        Assert.Equal(Target, Intent.Target);
+        Assert.Equal(Area, Intent.ExplicitArea);
+    }
+
     [Fact]
     public async Task ExactLiveTranscriptControlsTwoNamedLightsWithoutAreaAssignments()
     {
