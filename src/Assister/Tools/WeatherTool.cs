@@ -9,7 +9,7 @@ namespace Assister.Tools;
 public sealed class WeatherTool(HomeAssistantStateCache Cache, HttpClient Http, IConfiguration Configuration) : IAssisterTool
 {
     public bool StateChanging => false;
-    public LlmTool Definition => new(new("weather_forecast", "Retrieve a real forecast from the configured Home Assistant weather provider. Daily cannot answer night-specific questions; request twice_daily or hourly for those. If unsupported, explain the limitation.",
+    public LlmTool Definition => new(new("weather_forecast", "Retrieve future weather predictions only. Never use for current conditions, today's observed highs/lows, or past weather; use local weather station sensors and history instead. Daily cannot answer night-specific questions; request twice_daily or hourly for those. If unsupported, explain the limitation.",
         JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{"type":{"type":"string","enum":["daily","twice_daily","hourly"]}},"required":["type"],"additionalProperties":false}""")));
     public async Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken CancellationToken)
     {

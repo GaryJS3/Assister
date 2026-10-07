@@ -28,11 +28,10 @@ public sealed class ToolLoopTests
     }
     [Theory]
     [InlineData("How much solar power did I get yesterday?")]
-    [InlineData("What's the wind speed right now?")]
     [InlineData("Can you explain why the sky is blue?")]
     public async Task GeneralQuestionsAlwaysOfferHomeToolsWithoutRequiringToolUse(string Message)
     {
-        var Names = new[] { "ha_search", "ha_get_state", "ha_get_history", "ha_control", "weather_forecast" };
+        var Names = new[] { "ha_search", "ha_get_state", "ha_get_history", "ha_control" };
         var Registry = new ToolRegistry(Names.Select(Name => new NamedTool(Name)));
         var Model = new FakeModel();
         Model.Responses.Enqueue(new("An answer.", [], "stop"));
@@ -42,6 +41,51 @@ public sealed class ToolLoopTests
         Assert.Equal(Names.Order(), Model.Requests[0].Tools!.Select(Tool => Tool.Function.Name).Order());
         Assert.Equal("auto", Model.Requests[0].ToolChoice);
     }
+
+    [Theory]
+    [InlineData("What's the highest wind speed today?", "ha_get_history")]
+    [InlineData("What has the highest wind speed been according to the weather station today?", "ha_get_history")]
+    [InlineData("What was the weather yesterday?", "ha_get_history")]
+    [InlineData("What's the wind speed right now?", "ha_get_state")]
+    [InlineData("Is it raining?", "ha_get_state")]
+    [InlineData("What's the weather like today?", "ha_get_state")]
+    public async Task ObservedWeatherRequiresLocalDataEvenAfterForecast(string Message, string Source)
+    {
+        var Registry = new ToolRegistry([new SourceTool("ha_search", "[{\"entity_id\":\"sensor.wind_speed\"}]"),
+            new SourceTool(Source, "{\"value\":12}"), new SourceTool("weather_forecast", "{}")]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("search", new("ha_search", "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new(null, [new("data", new(Source, "{}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("The station reports 12.", [], "stop"));
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build())
+            .RespondAsync(new(Message), [new("user", "Weather tomorrow?"), new("assistant", "Rain.")], CancellationToken.None);
+        Assert.Equal("The station reports 12.", Answer);
+        Assert.All(Model.Requests, Request => Assert.DoesNotContain(Request.Tools!, Tool => Tool.Function.Name == "weather_forecast"));
+        Assert.Equal("required", Model.Requests[0].ToolChoice);
+        Assert.Contains(Model.Requests[1].Tools!, Tool => Tool.Function.Name == Source);
+        Assert.Equal("none", Model.Requests[2].ToolChoice);
+    }
+
+    [Fact]
+    public async Task BrokerBlocksForecastForObservationsEvenIfSelected()
+    {
+        var Registry = new ToolRegistry([new SourceTool("weather_forecast", "{\"forecast\":[]}")]);
+        var Result = await new ToolBroker(Registry).ExecuteAsync(new("forecast", new("weather_forecast", "{}")),
+            new HashSet<string> { "weather_forecast" }, new(new("Weather now?"), []), CancellationToken.None);
+        Assert.Contains("only permitted for future weather", Result);
+    }
+
+    [Theory]
+    [InlineData("Will it rain today?", WeatherRequestKind.Forecast)]
+    [InlineData("Weather tomorrow?", WeatherRequestKind.Forecast)]
+    [InlineData("What is the weather this weekend?", WeatherRequestKind.Forecast)]
+    [InlineData("And Sunday night?", WeatherRequestKind.Forecast)]
+    [InlineData("What about yesterday?", WeatherRequestKind.History)]
+    [InlineData("What about right now?", WeatherRequestKind.Current)]
+    [InlineData("Was yesterday's forecast accurate?", WeatherRequestKind.History)]
+    [InlineData("Explain why the sky is blue", WeatherRequestKind.None)]
+    public void WeatherPolicyUsesCurrentRequestRatherThanEarlierForecast(string Message, WeatherRequestKind Expected)
+        => Assert.Equal(Expected, WeatherRequestPolicy.Classify(Message, [new("user", "Weather tomorrow?")]));
 
     [Fact]
     public async Task ControlOutsideKeywordGateCanSearchAndExecute()
@@ -87,7 +131,11 @@ public sealed class ToolLoopTests
     {
         public bool StateChanging => false;
         public LlmTool Definition => new(new(Name, Name, JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{}}""")));
-        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token) => Task.FromResult(Result);
+        public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token)
+        {
+            if (Name == "ha_search") Context.ObservedEntities.Add("sensor.wind_speed");
+            return Task.FromResult(Result);
+        }
     }
     [Theory]
     [InlineData("2026-10-04T23:00:00Z", "2026-10-04T19:00:00-04:00")]

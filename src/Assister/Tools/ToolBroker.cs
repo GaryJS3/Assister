@@ -9,6 +9,7 @@ namespace Assister.Tools;
 public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default,
     DeviceConversationContext? Conversation = null)
 {
+    public bool ForecastAllowed { get; init; }
     public ControlRequest? Control { get; set; } = ControlRequest.Parse(Request.Message, Conversation);
     public bool SemanticControlChecked { get; set; }
     public DeviceConversationContext? ControlConversation { get; } = Conversation is null ? null : new()
@@ -59,6 +60,14 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, 
         }
         try
         {
+            if (Call.Function.Name == "weather_forecast" && !Context.ForecastAllowed)
+            {
+                Trace.Complete("rejected");
+                var Rejection = "{\"error\":\"Forecasts are only permitted for future weather. Use local weather station sensor state or history for current and past weather.\"}";
+                Trace.Output(DiagnosticSanitizer.ParseJson(Rejection));
+                await Audit("rejected");
+                return Rejection;
+            }
             if (Encoding.UTF8.GetByteCount(Call.Function.Arguments) > 8192) { throw new InvalidDataException(); }
             using var Arguments = JsonDocument.Parse(Call.Function.Arguments, new JsonDocumentOptions { MaxDepth = 16 });
             Validate(Arguments.RootElement, Tool.Definition.Function.Parameters);
