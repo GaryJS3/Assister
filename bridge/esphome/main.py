@@ -202,7 +202,7 @@ async def connect_once(inspect_only=False):
             try:
                 if player_key is None:
                     raise RuntimeError("Announcement playback unsupported")
-                if voice_owned and info.voice_assistant_feature_flags & 16:
+                if frame.type != "tone-ready" and voice_owned and info.voice_assistant_feature_flags & 16:
                     # Preserve the opaque HTTP URL and device announcement pipeline. Native
                     # completion also works when ordinary media resumes rather than going idle.
                     result = await client.send_voice_assistant_announcement_await_response(
@@ -298,7 +298,7 @@ async def connect_once(inspect_only=False):
                         event(Event.VOICE_ASSISTANT_TTS_START, {"text": frame.text})
                     elif frame.type in ("announcement", "timer-expired"):
                         announcement_text = frame.text
-                    elif frame.type == "audio-ready":
+                    elif frame.type in ("audio-ready", "tone-ready"):
                         task = asyncio.create_task(play_response(frame))
                         task_set.add(task)
                         task.add_done_callback(task_set.discard)
