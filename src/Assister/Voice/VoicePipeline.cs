@@ -262,6 +262,10 @@ public static partial class VoiceFormatter
 {
     [GeneratedRegex(@"(?<value>-?\d+(?:\.\d+)?)\s*°(?<unit>[FC])\b")]
     private static partial Regex Temperature();
-    public static string Format(string Text) => Temperature().Replace(Text.Replace("**", "").Replace("`", ""),
-        Match => $"{Match.Groups["value"].Value} degrees {(Match.Groups["unit"].Value == "F" ? "Fahrenheit" : "Celsius")}");
+    [GeneratedRegex(@"\bmph\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MilesPerHour();
+    public static string Format(string Text) => MilesPerHour().Replace(
+        Temperature().Replace(Text.Replace("**", "").Replace("`", ""),
+            Match => $"{Match.Groups["value"].Value} degrees {(Match.Groups["unit"].Value == "F" ? "Fahrenheit" : "Celsius")}"),
+        "miles per hour");
 }
