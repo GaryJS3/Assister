@@ -230,7 +230,44 @@ public sealed class SatelliteTransportTests
         await Call.RequestStream.CompleteAsync();
         Assert.False(await Call.ResponseStream.MoveNext(Timeout.Token));
     }
-    private sealed class Application : WebApplicationFactory<Program>
+    [Fact]
+    public async Task TonesUseCorrelatedPlaybackAndPreviewEndpointServesWave()
+    {
+        await using var Factory = new Application(Tones: true);
+        using var Http = Factory.CreateDefaultClient();
+        var Preview = await Http.GetAsync("/api/voice/tones/awake.wav");
+        Assert.Equal("audio/wav", Preview.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString((await Preview.Content.ReadAsByteArrayAsync())[..4]));
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await Http.GetAsync("/api/voice/tones/unknown.wav")).StatusCode);
+        using var Channel = GrpcChannel.ForAddress(Http.BaseAddress!, new() { HttpClient = Http });
+        using var Call = new SatelliteTransport.SatelliteTransportClient(Channel).Connect(new Metadata { { "authorization", "Bearer test-bridge-secret" } });
+        using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await Call.RequestStream.WriteAsync(new() { Type = "register", SatelliteId = "voice" });
+        Assert.True(await Call.ResponseStream.MoveNext(Timeout.Token));
+        await Call.RequestStream.WriteAsync(new() { Type = "start", SessionId = "tone-session" });
+        await Call.RequestStream.WriteAsync(new() { Type = "audio", SessionId = "tone-session", Pcm = Google.Protobuf.ByteString.CopyFrom(new byte[2]), SampleRate = 16000, SampleWidth = 2, Channels = 1 });
+        await Call.RequestStream.WriteAsync(new() { Type = "stop", SessionId = "tone-session" });
+        var Order = new List<string>();
+        while (await Call.ResponseStream.MoveNext(Timeout.Token))
+        {
+            var Frame = Call.ResponseStream.Current;
+            Order.Add(Frame.Type);
+            if (Frame.Type is "tone-ready" or "audio-ready")
+            {
+                Assert.Equal("tone-session", Frame.SessionId);
+                Assert.False(string.IsNullOrEmpty(Frame.PlaybackId));
+                var Data = await Http.GetByteArrayAsync(Frame.Url);
+                Assert.True(Data.Length > 44);
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", SessionId = Frame.SessionId, PlaybackId = "wrong", Text = "succeeded" });
+                await Call.RequestStream.WriteAsync(new() { Type = "playback-finished", SessionId = Frame.SessionId, PlaybackId = Frame.PlaybackId, Text = "succeeded" });
+            }
+            if (Frame.Type == "session-result") { Assert.Equal("succeeded", Frame.Text); break; }
+        }
+        Assert.Equal(new[] { "tone-ready", "transcribing", "tone-ready", "transcribed", "processing", "response", "tone-ready", "audio-ready", "tone-ready", "finished", "session-result" }, Order);
+        await Call.RequestStream.CompleteAsync();
+    }
+
+    private sealed class Application(bool Tones = false) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder Builder)
         {
@@ -238,7 +275,7 @@ public sealed class SatelliteTransportTests
             {
                 ["Assister:DataPath"] = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()),
                 ["SatelliteBridge:Enabled"] = "true", ["SatelliteBridge:Token"] = "test-bridge-secret",
-                ["SatelliteBridge:UseFlac"] = "false",
+                ["SatelliteBridge:UseFlac"] = "false", ["Voice:Tones:Enabled"] = Tones.ToString(),
                 ["EspHome:SatelliteId"] = "voice", ["Assister:PublicUrl"] = "http://localhost"
             }));
             Builder.ConfigureServices(Services =>

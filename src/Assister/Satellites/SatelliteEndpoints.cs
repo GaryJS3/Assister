@@ -48,6 +48,19 @@ public static class SatelliteEndpoints
             await Database.Satellites.AsNoTracking().SingleOrDefaultAsync(Row => Row.Id == Id, Token) is { } Device
                 ? Results.Ok(new { Device, Runtime = Manager.State(Id) }) : Results.NotFound());
         App.MapGet("/api/satellites/{id}/events", (string Id, SatelliteManager Manager) => Results.Ok(Manager.Events(Id)));
+        App.MapPost("/api/satellites/{id}/tones/{name}", async (string Id, string Name, SatelliteManager Manager,
+            Assister.Voice.ToneCatalog Tones, CancellationToken Token) =>
+        {
+            if (!Assister.Voice.ToneCatalog.Names.Contains(Name, StringComparer.Ordinal)) { return Results.BadRequest(new { Error = "Unknown tone." }); }
+            try
+            {
+                return await Manager.AnnounceAsync(Id, "Tone: " + Name, new Assister.Voice.TonePreviewSpeech(Tones, Name), Token)
+                    ? Results.Ok(new { Outcome = "played", Tone = Name }) : Results.Conflict(new { Error = "Satellite is unavailable, busy, or does not support announcements." });
+            }
+            catch (Exception Error) when (Error is IOException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException
+                or UnauthorizedAccessException or System.Net.WebSockets.WebSocketException or OperationCanceledException && !Token.IsCancellationRequested)
+            { return Results.Problem("Tone playback failed.", statusCode: 502); }
+        });
         App.MapGet("/api/satellites/{id}/traces", (string Id, RunStore Store) => Results.Ok(Store.Snapshot().Where(Run => Run.SatelliteId == Id)));
         App.MapPut("/api/satellites/{id}/wake-words", async (string Id, string[] Words, AssisterDbContext Database,
             SatelliteManager Manager, SatelliteConfiguration Configuration, CancellationToken Token) =>

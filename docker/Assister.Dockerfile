@@ -5,6 +5,7 @@ COPY src/Assister.Contracts/Assister.Contracts.csproj src/Assister.Contracts/
 RUN dotnet restore src/Assister/Assister.csproj
 COPY src/ src/
 COPY bridge/satellite.proto bridge/
+COPY tones/ tones/
 RUN dotnet publish src/Assister/Assister.csproj -c Release -o /app --no-restore
 COPY tools/Assister.ServiceProbe/ tools/Assister.ServiceProbe/
 RUN dotnet publish tools/Assister.ServiceProbe/Assister.ServiceProbe.csproj -c Release -o /probe

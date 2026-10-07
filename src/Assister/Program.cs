@@ -63,6 +63,7 @@ Builder.Services.AddScoped<LocalStore>();
 Builder.Services.AddScoped<TimerIntentHandler>();
 Builder.Services.AddSingleton<SatelliteManager>();
 Builder.Services.AddScoped<SatelliteConfiguration>();
+Builder.Services.AddSingleton<Assister.Voice.ToneCatalog>();
 Builder.Services.AddScoped<VoicePipeline>();
 Builder.Services.AddHttpClient("echomuse").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 Builder.Services.AddHostedService<EchoMuseProvider>();
@@ -114,6 +115,14 @@ App.UseWebSockets();
 App.MapRichClients();
 App.MapDashboard();
 App.MapSatellites();
+App.MapGet("/api/voice/tones", () => Assister.Voice.ToneCatalog.Names);
+App.MapGet("/api/voice/tones/{name}.wav", async (string Name, Assister.Voice.ToneCatalog Tones, CancellationToken Token) =>
+{
+    if (!Assister.Voice.ToneCatalog.Names.Contains(Name, StringComparer.Ordinal)) { return Results.NotFound(); }
+    try { return Results.File(await VoiceAudioStore.WaveAsync(Tones.Audio(Name), Token), "audio/wav"); }
+    catch (Exception Error) when (Error is IOException or ArgumentException or System.Text.Json.JsonException)
+    { return Results.Problem("Tone definition is unavailable or invalid."); }
+});
 App.MapIntents();
 await using (var Scope = App.Services.CreateAsyncScope())
 {

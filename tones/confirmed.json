@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "Confirmed",
+  "masterVolume": 0.68,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Confirm Tick",
+      "frequencyHz": 1047,
+      "durationMs": 65,
+      "gapAfterMs": 35,
+      "waveform": "sine",
+      "volume": 0.85,
+      "attackMs": 2,
+      "releaseMs": 8
+    },
+    {
+      "name": "Confirm Settle",
+      "frequencyHz": 784,
+      "durationMs": 100,
+      "gapAfterMs": 0,
+      "waveform": "sine",
+      "volume": 0.9,
+      "attackMs": 2,
+      "releaseMs": 15
+    }
+  ]
+}

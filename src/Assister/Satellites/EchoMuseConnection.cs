@@ -23,6 +23,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public string Name => Label;
     public string? Area => Room;
     public string ControllerDeviceId => DeviceId;
+    public bool FeedbackPlaybackSupported { get; set; }
     public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token)
     {
         lock (Gate)
@@ -39,9 +40,10 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         if (Text(Message, "deviceId") != DeviceId) { return false; }
         lock (Gate)
         {
-            if (Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
+            if (Text(Message, "requestId") is null && Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
             if (Text(Message, "requestId") is { } Request && Announcement?.Id == Request && !Announcement.StopRequested)
             {
+                if (Announcement.SessionId is { } Expected && Text(Message, "sessionId") != Expected) { return false; }
                 var Kind = Text(Message, "type");
                 if (Kind == "play_started")
                 { Manager.Update(Id, State => State with { CurrentPlaybackState = "Playing announcement" }); Manager.Record(Id, "Announcement playback started", TraceId: Announcement.Trace); return true; }
@@ -59,19 +61,21 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         lock (Gate) { Voice?.Cancel(); Announcement?.Done.TrySetException(new IOException("Controller disconnected.")); }
     }
     public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new InvalidOperationException("An activation is required.");
-    public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
+    public Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token) => PlayAsync(Chunks, false, Token);
+    private async Task PlayAsync(IAsyncEnumerable<AudioChunk> Chunks, bool IsTone, CancellationToken Token, string? SessionId = null)
     {
         var Wave = await VoiceAudioStore.Wave48kAsync(Chunks, Token);
         var AudioId = Audio.Add(Wave);
-        var Operation = new Playback(Guid.NewGuid().ToString(), RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId);
+        var Operation = new Playback(Guid.NewGuid().ToString(), RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId, SessionId);
         lock (Gate)
         {
-            if (Announcement is not null || Voice is not null) { Audio.Remove(AudioId); throw new IOException("Satellite is busy."); }
+            if (Announcement is not null || (!IsTone && Voice is not null)) { Audio.Remove(AudioId); throw new IOException("Satellite is busy."); }
             Announcement = Operation;
         }
         try
         {
-            await Send(new { type = "play", requestId = Operation.Id, deviceId = DeviceId, audioUrl = Url(AudioId), kind = "announcement" }, Token);
+            if (IsTone) { await Send(new { type = "tone", requestId = Operation.Id, sessionId = SessionId, deviceId = DeviceId, audioUrl = Url(AudioId) }, Token); }
+            else { await Send(new { type = "play", requestId = Operation.Id, deviceId = DeviceId, audioUrl = Url(AudioId), kind = "announcement" }, Token); }
             if (!await Operation.Done.Task.WaitAsync(TimeSpan.FromSeconds(110), Token)) { throw new IOException("Announcement playback failed."); }
         }
         catch
@@ -90,18 +94,22 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         lock (Gate)
         {
             Command = null;
-            if (Announcement is { StopRequested: false } Current)
+            if (Voice is { ControllerEnded: false } Active)
+            {
+                Active.MarkStopped();
+                CancelledTurn = Active;
+                Command = new { type = "turn_cancel", sessionId = Active.SessionId, deviceId = DeviceId };
+                if (Announcement is { StopRequested: false } Tone)
+                {
+                    Tone.StopRequested = true;
+                    CancelledPlayback = Tone;
+                }
+            }
+            else if (Announcement is { StopRequested: false } Current)
             {
                 Current.StopRequested = true;
                 CancelledPlayback = Current;
                 Command = new { type = "stop", requestId = Current.Id, deviceId = DeviceId };
-            }
-            if (Command is null && Voice is { } Active)
-            {
-                if (Active.ControllerEnded) { return; }
-                Active.MarkStopped();
-                CancelledTurn = Active;
-                Command = new { type = "turn_cancel", sessionId = Active.SessionId, deviceId = DeviceId };
             }
         }
         try { if (Command is not null) { await Send(Command, Token); } }
@@ -126,13 +134,13 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         return Base!.TrimEnd('/') + "/api/voice/audio/" + AudioId + ".wav";
     }
     public static string? Text(JsonElement Message, string Key) => Message.TryGetProperty(Key, out var Value) && Value.ValueKind == JsonValueKind.String ? Value.GetString() : null;
-    private sealed record Playback(string Id, Guid? Trace)
+    private sealed record Playback(string Id, Guid? Trace, string? SessionId = null)
     {
         public bool StopRequested { get; set; }
         public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, IDisposable
+    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, Assister.Voice.ITonePlayback, IDisposable
     {
         private readonly EchoMuseConnection Owner;
         private readonly Channel<AudioChunk> Input = Channel.CreateBounded<AudioChunk>(64);
@@ -220,6 +228,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         }
         public void MarkStopped() { ControllerEnded = true; }
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => Input.Reader.ReadAllAsync(Token);
+        public bool SupportsTonePlayback => Owner.FeedbackPlaybackSupported;
+        public Task PlayToneAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token) => Owner.PlayAsync(Chunks, true, Token, SessionId);
         public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
         {
             if (await End.Task.WaitAsync(Token) != "speech_end") { throw new OperationCanceledException(Token); }

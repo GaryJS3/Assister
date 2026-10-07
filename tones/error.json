@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "Error",
+  "masterVolume": 0.82,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Error High",
+      "frequencyHz": 392,
+      "durationMs": 130,
+      "gapAfterMs": 45,
+      "waveform": "square",
+      "volume": 0.8,
+      "attackMs": 2,
+      "releaseMs": 8
+    },
+    {
+      "name": "Error Low",
+      "frequencyHz": 196,
+      "durationMs": 220,
+      "gapAfterMs": 0,
+      "waveform": "square",
+      "volume": 0.9,
+      "attackMs": 2,
+      "releaseMs": 18
+    }
+  ]
+}

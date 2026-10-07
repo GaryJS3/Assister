@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "Awake - Rounded",
+  "masterVolume": 0.66,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Round Low",
+      "frequencyHz": 554.37,
+      "durationMs": 95,
+      "gapAfterMs": 20,
+      "waveform": "sine",
+      "volume": 0.82,
+      "attackMs": 8,
+      "releaseMs": 18
+    },
+    {
+      "name": "Round High",
+      "frequencyHz": 830.61,
+      "durationMs": 155,
+      "gapAfterMs": 0,
+      "waveform": "sine",
+      "volume": 0.92,
+      "attackMs": 8,
+      "releaseMs": 28
+    }
+  ]
+}

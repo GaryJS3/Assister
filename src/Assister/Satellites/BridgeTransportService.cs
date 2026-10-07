@@ -105,7 +105,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                 if (Frame.Type == "playback-started" && Connection.PlaybackStarted(Frame.PlaybackId, Frame.SessionId))
                 {
                     var Current = Manager.State(Connection.SatelliteId).CurrentVoiceSessionId;
-                    if (Current is { } Id) { Manager.Stage(Connection.SatelliteId, Id, VoiceSessionState.PlayingResponse); }
+                    if (Current is { } Id && !Connection.PlayingTone) { Manager.Stage(Connection.SatelliteId, Id, VoiceSessionState.PlayingResponse); }
                     Manager.Record(Connection.SatelliteId, "Playback started", SessionId: Current, TraceId: Connection.PlaybackRunId);
                 }
                 if (Frame.Type == "playback-finished")
@@ -188,11 +188,12 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
     }
 
     private sealed class BridgeConnection(BridgeFrame Registration, ChannelWriter<BridgeFrame> Outgoing, VoiceAudioStore Audio,
-        IConfiguration Configuration) : ISatelliteConnection, IVoiceActivationContext
+        IConfiguration Configuration) : ISatelliteConnection, IVoiceActivationContext, Assister.Voice.ITonePlayback
     {
         private Channel<AudioChunk>? Incoming;
         private bool Receiving;
         private bool Announcement;
+        public bool PlayingTone { get; private set; }
         private TaskCompletionSource<bool>? Playback;
         private string PlaybackId = "";
         private string PlaybackSession = "";
@@ -224,12 +225,14 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
         public void StopAudio() { Receiving = false; Incoming?.Writer.TryComplete(); }
         public bool PlaybackFinished(string Id, string Session, bool Succeeded)
         {
-            return Session == PlaybackSession && (Id == PlaybackId || (Id.Length == 0 && !Announcement)) &&
+            return Session == PlaybackSession && (Id == PlaybackId || (Id.Length == 0 && !Announcement && !PlayingTone)) &&
                 Playback?.TrySetResult(Succeeded) == true;
         }
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken CancellationToken) => Incoming?.Reader.ReadAllAsync(CancellationToken)
             ?? throw new InvalidOperationException();
-        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken CancellationToken)
+        public Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken CancellationToken) => DeliverAsync(Chunks, false, CancellationToken);
+        public Task PlayToneAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken CancellationToken) => DeliverAsync(Chunks, true, CancellationToken);
+        private async Task DeliverAsync(IAsyncEnumerable<AudioChunk> Chunks, bool IsTone, CancellationToken CancellationToken)
         {
             var Wave = await VoiceAudioStore.WaveAsync(Chunks, CancellationToken);
             var UseFlac = Configuration.GetValue("SatelliteBridge:UseFlac", true);
@@ -244,6 +247,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             var Id = Audio.Add(Data);
             var Base = Configuration["Assister:PublicUrl"] ?? throw new InvalidOperationException("Public audio URL is required.");
             Playback = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            PlayingTone = IsTone;
             PlaybackId = Guid.NewGuid().ToString();
             PlaybackSession = Announcement ? "" : TransportSession;
             PlaybackRunId = RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId;
@@ -253,7 +257,7 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             PlaybackTrace = Delivery;
             try
             {
-                await Outgoing.WriteAsync(new() { Type = "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
+                await Outgoing.WriteAsync(new() { Type = IsTone ? "tone-ready" : "audio-ready", Url = Base.TrimEnd('/') + "/api/voice/audio/" + Id + (UseFlac ? ".flac" : ".wav"),
                     Text = Announcement ? "announcement" : "", SessionId = PlaybackSession, PlaybackId = PlaybackId, TraceId = RunTracing.RunId.ToString() }, CancellationToken);
                 if (Playback is not null)
                 {
@@ -264,7 +268,14 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
                     Delivery.Complete();
                 }
             }
-            finally { Playback = null; PlaybackTrace = null; Announcement = false; Audio.Remove(Id); }
+            catch when (IsTone)
+            {
+                using var StopDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                try { await Outgoing.WriteAsync(new() { Type = "stop-playback", SessionId = PlaybackSession, PlaybackId = PlaybackId }, StopDeadline.Token); }
+                catch (Exception Error) when (Error is OperationCanceledException or ChannelClosedException) { }
+                throw;
+            }
+            finally { Playback = null; PlaybackTrace = null; Announcement = false; PlayingTone = false; Audio.Remove(Id); }
         }
         public async Task SendEventAsync(SatelliteEvent Event, CancellationToken CancellationToken)
         {

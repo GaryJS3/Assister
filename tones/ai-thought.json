@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "AI Think",
+  "masterVolume": 0.3,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Think less low",
+      "frequencyHz": 600.25,
+      "durationMs": 70,
+      "gapAfterMs": 35,
+      "waveform": "sine",
+      "volume": 0.65,
+      "attackMs": 5,
+      "releaseMs": 12
+    },
+    {
+      "name": "Think Low",
+      "frequencyHz": 523.25,
+      "durationMs": 70,
+      "gapAfterMs": 35,
+      "waveform": "sine",
+      "volume": 0.65,
+      "attackMs": 5,
+      "releaseMs": 12
+    }
+  ]
+}

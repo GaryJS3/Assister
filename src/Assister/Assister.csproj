@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Protobuf Include="../../bridge/satellite.proto" GrpcServices="Both" />
+    <Content Include="../../tones/*.json" Link="tones/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

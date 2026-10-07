@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Tone Designer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #111418;
+      --panel: #1a1f26;
+      --panel2: #222832;
+      --border: #343c48;
+      --text: #eef2f6;
+      --muted: #aab3bf;
+      --accent: #63b3ff;
+      --danger: #ff7272;
+      --ok: #73d69b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: #15191e;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.9fr);
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .panel-title {
+      padding: 12px 14px;
+      background: var(--panel2);
+      border-bottom: 1px solid var(--border);
+      font-weight: 650;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: #2a313c;
+      color: var(--text);
+      border-radius: 7px;
+      padding: 8px 11px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #343d49;
+    }
+
+    button.primary {
+      background: #195a91;
+      border-color: #2f78b8;
+    }
+
+    button.primary:hover {
+      background: #216aa6;
+    }
+
+    button.danger {
+      color: #ffd2d2;
+      border-color: #714040;
+    }
+
+    button.small {
+      padding: 5px 8px;
+      font-size: 0.82rem;
+    }
+
+    .global-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    input, select, textarea {
+      background: #101419;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 8px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+    }
+
+    .tone-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .tone-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      background: #151a20;
+    }
+
+    .tone-row-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .tone-index {
+      font-weight: 700;
+      min-width: 34px;
+    }
+
+    .tone-name {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .tone-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(90px, 1fr));
+      gap: 8px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .status {
+      min-height: 1.25em;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.error { color: var(--danger); }
+
+    textarea {
+      width: 100%;
+      min-height: 490px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      line-height: 1.4;
+      font-size: 0.84rem;
+    }
+
+    .schema {
+      margin-top: 12px;
+      padding: 10px;
+      background: #12171c;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .schema code {
+      color: #d9e6f2;
+    }
+
+    .empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+
+    @media (max-width: 1000px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .tone-grid {
+        grid-template-columns: repeat(3, minmax(90px, 1fr));
+      }
+    }
+
+    @media (max-width: 650px) {
+      main { padding: 10px; }
+      .global-grid,
+      .tone-grid {
+        grid-template-columns: repeat(2, minmax(90px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Simple Tone Designer</h1>
+  <p>Build short beep/boop sequences, audition them immediately, and save/load the sound definition as JSON.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-title">Tone Sequence</div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button id="playAll" class="primary">▶ Play</button>
+        <button id="stopAll">■ Stop</button>
+        <button id="addTone">+ Add Tone</button>
+        <button id="presetBeepBeep">Preset: Beep Beep</button>
+        <button id="presetBeepBoop">Preset: Beep Boop</button>
+        <button id="presetChirp">Preset: Chirp</button>
+        <button id="clearAll" class="danger">Clear</button>
+      </div>
+
+      <div class="global-grid">
+        <label>
+          Sound name
+          <input id="soundName" type="text" value="My Tone" />
+        </label>
+        <label>
+          Master volume
+          <input id="masterVolume" type="number" min="0" max="1" step="0.05" value="0.6" />
+        </label>
+        <label>
+          Repeat count
+          <input id="repeatCount" type="number" min="1" max="20" step="1" value="1" />
+        </label>
+        <label>
+          Repeat gap (ms)
+          <input id="repeatGapMs" type="number" min="0" max="10000" step="10" value="150" />
+        </label>
+      </div>
+
+      <div id="toneList" class="tone-list"></div>
+      <div id="status" class="status"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">JSON</div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button id="applyJson" class="primary">Load JSON</button>
+        <button id="copyJson">Copy</button>
+        <button id="downloadJson">Export .json</button>
+        <button id="openJson">Import .json</button>
+        <input id="fileInput" type="file" accept=".json,application/json" hidden />
+      </div>
+
+      <textarea id="jsonText" spellcheck="false"></textarea>
+
+      <div class="schema">
+        <strong>Schema:</strong> version <code>1</code>. Playback is a list of tones containing
+        <code>frequencyHz</code>, <code>durationMs</code>, <code>gapAfterMs</code>,
+        <code>waveform</code>, <code>volume</code>, <code>attackMs</code>, and
+        <code>releaseMs</code>. This makes the JSON straightforward to reproduce in
+        .NET, embedded code, another browser, or an audio-generation service.
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+
+  const els = {
+    toneList: $("toneList"),
+    jsonText: $("jsonText"),
+    status: $("status"),
+    soundName: $("soundName"),
+    masterVolume: $("masterVolume"),
+    repeatCount: $("repeatCount"),
+    repeatGapMs: $("repeatGapMs"),
+    fileInput: $("fileInput")
+  };
+
+  let audioContext = null;
+  let activeOscillators = [];
+  let stopTimer = null;
+
+  let sound = {
+    version: 1,
+    name: "My Tone",
+    masterVolume: 0.6,
+    repeatCount: 1,
+    repeatGapMs: 150,
+    tones: [
+      makeTone("Beep", 880, 120, 80),
+      makeTone("Boop", 440, 180, 0)
+    ]
+  };
+
+  function makeTone(name = "Tone", frequencyHz = 660, durationMs = 150, gapAfterMs = 50) {
+    return {
+      name,
+      frequencyHz,
+      durationMs,
+      gapAfterMs,
+      waveform: "sine",
+      volume: 0.8,
+      attackMs: 5,
+      releaseMs: 15
+    };
+  }
+
+  function clampNumber(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function intValue(value, min, max, fallback) {
+    return Math.round(clampNumber(value, min, max, fallback));
+  }
+
+  function normalizeTone(t, index) {
+    const waveforms = ["sine", "square", "triangle", "sawtooth"];
+    return {
+      name: String(t?.name ?? `Tone ${index + 1}`),
+      frequencyHz: clampNumber(t?.frequencyHz, 20, 20000, 660),
+      durationMs: clampNumber(t?.durationMs, 1, 60000, 150),
+      gapAfterMs: clampNumber(t?.gapAfterMs, 0, 60000, 50),
+      waveform: waveforms.includes(t?.waveform) ? t.waveform : "sine",
+      volume: clampNumber(t?.volume, 0, 1, 0.8),
+      attackMs: clampNumber(t?.attackMs, 0, 10000, 5),
+      releaseMs: clampNumber(t?.releaseMs, 0, 10000, 15)
+    };
+  }
+
+  function normalizeSound(obj) {
+    if (!obj || typeof obj !== "object") {
+      throw new Error("JSON root must be an object.");
+    }
+
+    const tones = Array.isArray(obj.tones) ? obj.tones : [];
+
+    return {
+      version: 1,
+      name: String(obj.name ?? "Imported Tone"),
+      masterVolume: clampNumber(obj.masterVolume, 0, 1, 0.6),
+      repeatCount: intValue(obj.repeatCount, 1, 20, 1),
+      repeatGapMs: clampNumber(obj.repeatGapMs, 0, 60000, 150),
+      tones: tones.map(normalizeTone)
+    };
+  }
+
+  function soundToJson() {
+    return JSON.stringify(sound, null, 2);
+  }
+
+  function syncGlobalControlsFromSound() {
+    els.soundName.value = sound.name;
+    els.masterVolume.value = sound.masterVolume;
+    els.repeatCount.value = sound.repeatCount;
+    els.repeatGapMs.value = sound.repeatGapMs;
+  }
+
+  function syncSoundFromGlobalControls() {
+    sound.name = els.soundName.value;
+    sound.masterVolume = clampNumber(els.masterVolume.value, 0, 1, 0.6);
+    sound.repeatCount = intValue(els.repeatCount.value, 1, 20, 1);
+    sound.repeatGapMs = clampNumber(els.repeatGapMs.value, 0, 60000, 150);
+  }
+
+  function updateJson() {
+    syncSoundFromGlobalControls();
+    els.jsonText.value = soundToJson();
+  }
+
+  function setStatus(message, kind = "") {
+    els.status.textContent = message;
+    els.status.className = `status ${kind}`.trim();
+  }
+
+  function toneField(label, field, value, type = "number", attrs = "") {
+    if (type === "select") {
+      return `
+        <label>
+          ${label}
+          <select data-field="${field}">
+            <option value="sine" ${value === "sine" ? "selected" : ""}>sine</option>
+            <option value="square" ${value === "square" ? "selected" : ""}>square</option>
+            <option value="triangle" ${value === "triangle" ? "selected" : ""}>triangle</option>
+            <option value="sawtooth" ${value === "sawtooth" ? "selected" : ""}>sawtooth</option>
+          </select>
+        </label>`;
+    }
+
+    return `
+      <label>
+        ${label}
+        <input data-field="${field}" type="${type}" value="${escapeHtml(String(value))}" ${attrs} />
+      </label>`;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#039;"
+    })[c]);
+  }
+
+  function render() {
+    syncGlobalControlsFromSound();
+
+    if (sound.tones.length === 0) {
+      els.toneList.innerHTML = `<div class="empty">No tones. Click <strong>Add Tone</strong> or load a preset.</div>`;
+    } else {
+      els.toneList.innerHTML = sound.tones.map((tone, index) => `
+        <div class="tone-row" data-index="${index}">
+          <div class="tone-row-header">
+            <div class="tone-index">#${index + 1}</div>
+            <input class="tone-name" data-field="name" type="text" value="${escapeHtml(tone.name)}" />
+            <button class="small" data-action="play-one">▶</button>
+            <button class="small" data-action="up" ${index === 0 ? "disabled" : ""}>↑</button>
+            <button class="small" data-action="down" ${index === sound.tones.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="small" data-action="duplicate">Copy</button>
+            <button class="small danger" data-action="delete">Delete</button>
+          </div>
+
+          <div class="tone-grid">
+            ${toneField("Frequency (Hz)", "frequencyHz", tone.frequencyHz, "number", 'min="20" max="20000" step="1"')}
+            ${toneField("Duration (ms)", "durationMs", tone.durationMs, "number", 'min="1" max="60000" step="1"')}
+            ${toneField("Gap after (ms)", "gapAfterMs", tone.gapAfterMs, "number", 'min="0" max="60000" step="1"')}
+            ${toneField("Waveform", "waveform", tone.waveform, "select")}
+            ${toneField("Volume", "volume", tone.volume, "number", 'min="0" max="1" step="0.05"')}
+            ${toneField("Attack (ms)", "attackMs", tone.attackMs, "number", 'min="0" max="10000" step="1"')}
+            ${toneField("Release (ms)", "releaseMs", tone.releaseMs, "number", 'min="0" max="10000" step="1"')}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    updateJson();
+  }
+
+  function ensureAudioContext() {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
+    return audioContext;
+  }
+
+  function stopPlayback() {
+    if (stopTimer) {
+      clearTimeout(stopTimer);
+      stopTimer = null;
+    }
+
+    for (const osc of activeOscillators) {
+      try { osc.stop(); } catch (_) {}
+    }
+    activeOscillators = [];
+    setStatus("Stopped.");
+  }
+
+  function scheduleTone(ctx, tone, startTime, masterVolume) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = tone.waveform;
+    osc.frequency.setValueAtTime(tone.frequencyHz, startTime);
+
+    const durationSec = Math.max(0.001, tone.durationMs / 1000);
+    const endTime = startTime + durationSec;
+
+    const attackSec = Math.min(durationSec / 2, Math.max(0, tone.attackMs / 1000));
+    const releaseSec = Math.min(durationSec / 2, Math.max(0, tone.releaseMs / 1000));
+    const peak = Math.max(0.0001, tone.volume * masterVolume);
+
+    gain.gain.cancelScheduledValues(startTime);
+    gain.gain.setValueAtTime(0.0001, startTime);
+
+    if (attackSec > 0) {
+      gain.gain.linearRampToValueAtTime(peak, startTime + attackSec);
+    } else {
+      gain.gain.setValueAtTime(peak, startTime);
+    }
+
+    const releaseStart = Math.max(startTime + attackSec, endTime - releaseSec);
+    gain.gain.setValueAtTime(peak, releaseStart);
+
+    if (releaseSec > 0) {
+      gain.gain.linearRampToValueAtTime(0.0001, endTime);
+    } else {
+      gain.gain.setValueAtTime(0.0001, endTime);
+    }
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(startTime);
+    osc.stop(endTime + 0.01);
+
+    osc.addEventListener("ended", () => {
+      activeOscillators = activeOscillators.filter(x => x !== osc);
+    }, { once: true });
+
+    activeOscillators.push(osc);
+    return endTime;
+  }
+
+  function playSequence() {
+    stopPlayback();
+    syncSoundFromGlobalControls();
+
+    if (sound.tones.length === 0) {
+      setStatus("Nothing to play.", "error");
+      return;
+    }
+
+    const ctx = ensureAudioContext();
+    let cursor = ctx.currentTime + 0.04;
+
+    for (let repeat = 0; repeat < sound.repeatCount; repeat++) {
+      for (const tone of sound.tones) {
+        const end = scheduleTone(ctx, tone, cursor, sound.masterVolume);
+        cursor = end + (tone.gapAfterMs / 1000);
+      }
+
+      if (repeat < sound.repeatCount - 1) {
+        cursor += sound.repeatGapMs / 1000;
+      }
+    }
+
+    const totalMs = Math.max(0, (cursor - ctx.currentTime) * 1000);
+    setStatus(`Playing ${sound.tones.length} tone(s), repeated ${sound.repeatCount}x.`, "ok");
+
+    stopTimer = setTimeout(() => {
+      stopTimer = null;
+      setStatus(`Finished. Approx. ${Math.round(totalMs)} ms total.`, "ok");
+    }, totalMs + 50);
+  }
+
+  function playOne(index) {
+    const tone = sound.tones[index];
+    if (!tone) return;
+
+    stopPlayback();
+    syncSoundFromGlobalControls();
+
+    const ctx = ensureAudioContext();
+    const start = ctx.currentTime + 0.03;
+    const end = scheduleTone(ctx, tone, start, sound.masterVolume);
+
+    setStatus(`Playing "${tone.name}".`, "ok");
+    stopTimer = setTimeout(() => {
+      stopTimer = null;
+      setStatus(`Finished "${tone.name}".`, "ok");
+    }, Math.max(0, (end - ctx.currentTime) * 1000) + 50);
+  }
+
+  function loadPreset(kind) {
+    if (kind === "beep-beep") {
+      sound = {
+        version: 1,
+        name: "Beep Beep",
+        masterVolume: 0.6,
+        repeatCount: 1,
+        repeatGapMs: 150,
+        tones: [
+          makeTone("Beep 1", 880, 110, 90),
+          makeTone("Beep 2", 880, 110, 0)
+        ]
+      };
+    } else if (kind === "beep-boop") {
+      sound = {
+        version: 1,
+        name: "Beep Boop",
+        masterVolume: 0.6,
+        repeatCount: 1,
+        repeatGapMs: 150,
+        tones: [
+          makeTone("Beep", 900, 120, 75),
+          makeTone("Boop", 450, 180, 0)
+        ]
+      };
+    } else if (kind === "chirp") {
+      sound = {
+        version: 1,
+        name: "Three Tone Chirp",
+        masterVolume: 0.55,
+        repeatCount: 1,
+        repeatGapMs: 150,
+        tones: [
+          { ...makeTone("Low", 523.25, 80, 20), waveform: "triangle" },
+          { ...makeTone("Mid", 659.25, 80, 20), waveform: "triangle" },
+          { ...makeTone("High", 783.99, 120, 0), waveform: "triangle" }
+        ]
+      };
+    }
+
+    stopPlayback();
+    render();
+    setStatus(`Loaded preset "${sound.name}".`, "ok");
+  }
+
+  els.toneList.addEventListener("input", (event) => {
+    const row = event.target.closest(".tone-row");
+    const field = event.target.dataset.field;
+    if (!row || !field) return;
+
+    const index = Number(row.dataset.index);
+    const tone = sound.tones[index];
+    if (!tone) return;
+
+    if (field === "name" || field === "waveform") {
+      tone[field] = event.target.value;
+    } else {
+      const ranges = {
+        frequencyHz: [20, 20000, 660],
+        durationMs: [1, 60000, 150],
+        gapAfterMs: [0, 60000, 50],
+        volume: [0, 1, 0.8],
+        attackMs: [0, 10000, 5],
+        releaseMs: [0, 10000, 15]
+      };
+      const [min, max, fallback] = ranges[field] || [0, 100000, 0];
+      tone[field] = clampNumber(event.target.value, min, max, fallback);
+    }
+
+    updateJson();
+  });
+
+  els.toneList.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+
+    const row = button.closest(".tone-row");
+    if (!row) return;
+
+    const index = Number(row.dataset.index);
+    const action = button.dataset.action;
+
+    if (action === "play-one") {
+      playOne(index);
+      return;
+    }
+
+    if (action === "delete") {
+      sound.tones.splice(index, 1);
+    } else if (action === "duplicate") {
+      const copy = structuredClone(sound.tones[index]);
+      copy.name = `${copy.name} Copy`;
+      sound.tones.splice(index + 1, 0, copy);
+    } else if (action === "up" && index > 0) {
+      [sound.tones[index - 1], sound.tones[index]] = [sound.tones[index], sound.tones[index - 1]];
+    } else if (action === "down" && index < sound.tones.length - 1) {
+      [sound.tones[index + 1], sound.tones[index]] = [sound.tones[index], sound.tones[index + 1]];
+    }
+
+    render();
+  });
+
+  ["soundName", "masterVolume", "repeatCount", "repeatGapMs"].forEach(id => {
+    $(id).addEventListener("input", updateJson);
+  });
+
+  $("playAll").addEventListener("click", playSequence);
+  $("stopAll").addEventListener("click", stopPlayback);
+
+  $("addTone").addEventListener("click", () => {
+    sound.tones.push(makeTone(`Tone ${sound.tones.length + 1}`));
+    render();
+  });
+
+  $("clearAll").addEventListener("click", () => {
+    stopPlayback();
+    sound.tones = [];
+    render();
+    setStatus("Tone list cleared.");
+  });
+
+  $("presetBeepBeep").addEventListener("click", () => loadPreset("beep-beep"));
+  $("presetBeepBoop").addEventListener("click", () => loadPreset("beep-boop"));
+  $("presetChirp").addEventListener("click", () => loadPreset("chirp"));
+
+  $("applyJson").addEventListener("click", () => {
+    try {
+      const parsed = JSON.parse(els.jsonText.value);
+      sound = normalizeSound(parsed);
+      stopPlayback();
+      render();
+      setStatus("JSON loaded.", "ok");
+    } catch (err) {
+      setStatus(`Could not load JSON: ${err.message}`, "error");
+    }
+  });
+
+  $("copyJson").addEventListener("click", async () => {
+    updateJson();
+    try {
+      await navigator.clipboard.writeText(els.jsonText.value);
+      setStatus("JSON copied to clipboard.", "ok");
+    } catch (_) {
+      els.jsonText.select();
+      document.execCommand("copy");
+      setStatus("JSON copied to clipboard.", "ok");
+    }
+  });
+
+  $("downloadJson").addEventListener("click", () => {
+    updateJson();
+
+    const blob = new Blob([els.jsonText.value], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    const safeName = (sound.name || "tone")
+      .trim()
+      .replace(/[^a-z0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "tone";
+
+    a.href = url;
+    a.download = `${safeName}.json`;
+    a.click();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("JSON exported.", "ok");
+  });
+
+  $("openJson").addEventListener("click", () => {
+    els.fileInput.value = "";
+    els.fileInput.click();
+  });
+
+  els.fileInput.addEventListener("change", async () => {
+    const file = els.fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      sound = normalizeSound(parsed);
+      stopPlayback();
+      render();
+      setStatus(`Imported ${file.name}.`, "ok");
+    } catch (err) {
+      setStatus(`Could not import file: ${err.message}`, "error");
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

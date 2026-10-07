@@ -111,6 +111,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
                 pattern = Decision.Match?.Pattern, candidates = Decision.Candidates.Select(Item => Item.Definition.Id), Decision.Reason });
             Step.Complete(Decision.Status);
         }
+        if (Decision.Match is not null) { await VoiceFeedback.EmitAsync("intent-match", CancellationToken); }
         if (Decision.Status is "ambiguous" or "invalid-request") { return Result(Decision.Reason, Decision.Status); }
         if (Decision.Match is { } Registered && Actions is not null && !Actions.CanExecute(Registered.Definition.ActionId))
         {
@@ -126,7 +127,10 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             if (LanguageModel is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
             try
             {
-                return Result(await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText, DeviceContext), "succeeded", "language-model");
+                await VoiceFeedback.EmitAsync("ai-think", CancellationToken);
+                var Response = await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText, DeviceContext);
+                await VoiceFeedback.EmitAsync("ai-thought", CancellationToken);
+                return Result(Response, "succeeded", "language-model");
             }
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
             catch (ControlNotConfirmedException Error)

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "name": "Done",
+  "masterVolume": 0.72,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Done Low",
+      "frequencyHz": 523.25,
+      "durationMs": 75,
+      "gapAfterMs": 18,
+      "waveform": "triangle",
+      "volume": 0.8,
+      "attackMs": 3,
+      "releaseMs": 10
+    },
+    {
+      "name": "Done Mid",
+      "frequencyHz": 659.25,
+      "durationMs": 75,
+      "gapAfterMs": 18,
+      "waveform": "triangle",
+      "volume": 0.9,
+      "attackMs": 3,
+      "releaseMs": 10
+    },
+    {
+      "name": "Done High",
+      "frequencyHz": 783.99,
+      "durationMs": 140,
+      "gapAfterMs": 0,
+      "waveform": "triangle",
+      "volume": 1.0,
+      "attackMs": 3,
+      "releaseMs": 22
+    }
+  ]
+}

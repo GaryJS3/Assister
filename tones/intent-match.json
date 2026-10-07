@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "Intent Match",
+  "masterVolume": 0.38,
+  "repeatCount": 1,
+  "repeatGapMs": 80,
+  "tones": [
+    {
+      "name": "Intent Tick",
+      "frequencyHz": 880,
+      "durationMs": 55,
+      "gapAfterMs": 0,
+      "waveform": "sine",
+      "volume": 0.75,
+      "attackMs": 2,
+      "releaseMs": 7
+    }
+  ]
+}

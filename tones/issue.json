@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "Issue",
+  "masterVolume": 0.48,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Issue Pulse 1",
+      "frequencyHz": 330,
+      "durationMs": 95,
+      "gapAfterMs": 55,
+      "waveform": "triangle",
+      "volume": 0.75,
+      "attackMs": 3,
+      "releaseMs": 12
+    }
+  ]
+}

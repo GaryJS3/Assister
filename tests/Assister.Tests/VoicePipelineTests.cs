@@ -8,6 +8,24 @@ namespace Assister.Tests;
 public sealed class VoicePipelineTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToneFeedbackIsOrderedAndFailureDoesNotPreventResponse(bool FailTone)
+    {
+        var Config = new ConfigurationBuilder().Build();
+        var Catalog = new ToneCatalog(new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { ContentRootPath = AppContext.BaseDirectory }, Config);
+        var Satellite = new FakeSatellite { Catalog = Catalog, FailTone = FailTone };
+        var Manager = new SatelliteManager();
+        Manager.Register(Satellite);
+        var Result = await new VoicePipeline(new FakeStt(), new FakeTts(), new FakeCoordinator(), Manager, Config, Tones: Catalog)
+            .RunAsync(Satellite, null, CancellationToken.None);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal(1, Satellite.AudioChunks);
+        Assert.Equal(FailTone ? ["awake"] : new[] { "awake", "confirmed", "done", "goodbye" }, Satellite.ToneNames);
+        Assert.Equal(0, Manager.ActiveSessionCount);
+    }
+
+    [Theory]
     [InlineData("Stop.")]
     [InlineData("please cancel!")]
     [InlineData("stop talking")]
@@ -125,8 +143,17 @@ public sealed class VoicePipelineTests
             yield return new(new byte[2], 16000, 2, 1);
         }
     }
-    private sealed class FakeSatellite : ISatelliteConnection
+    private sealed class FakeSatellite : ISatelliteConnection, ITonePlayback
     {
+        public ToneCatalog? Catalog { get; init; }
+        public bool FailTone { get; init; }
+        public List<string> ToneNames { get; } = [];
+        public async Task PlayToneAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token)
+        {
+            await foreach (var Chunk in Audio.WithCancellation(Token))
+                ToneNames.Add(ToneCatalog.Names.Single(Name => ToneCatalog.Render(Catalog!.Read(Name)).Pcm.Span.SequenceEqual(Chunk.Pcm.Span)));
+            if (FailTone) { throw new IOException("Feedback unavailable"); }
+        }
         public string SatelliteId => "bedroom";
         public string Name => "Bedroom";
         public string? Area => "Bedroom";

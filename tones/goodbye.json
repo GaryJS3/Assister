@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "Goodbye",
+  "masterVolume": 0.58,
+  "repeatCount": 1,
+  "repeatGapMs": 120,
+  "tones": [
+    {
+      "name": "Goodbye High",
+      "frequencyHz": 659.25,
+      "durationMs": 95,
+      "gapAfterMs": 25,
+      "waveform": "sine",
+      "volume": 0.75,
+      "attackMs": 4,
+      "releaseMs": 15
+    },
+    {
+      "name": "Goodbye Low",
+      "frequencyHz": 440,
+      "durationMs": 170,
+      "gapAfterMs": 0,
+      "waveform": "sine",
+      "volume": 0.72,
+      "attackMs": 4,
+      "releaseMs": 30
+    }
+  ]
+}

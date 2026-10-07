@@ -70,6 +70,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
         Socket.Options.SetRequestHeader("Authorization", "Bearer " + Token);
         var Target = new UriBuilder(new Uri(Client.BaseAddress, "api/voice")) { Scheme = Address.Scheme == "https" ? "wss" : "ws" };
         var Devices = new Dictionary<string, EchoMuseConnection>(StringComparer.Ordinal);
+        var FeedbackPlayback = false;
         var Tasks = new HashSet<Task>();
         using var SendGate = new SemaphoreSlim(1);
         async Task Send(object Message, CancellationToken CancellationToken)
@@ -99,6 +100,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                     !Hello.RootElement.TryGetProperty("protocolVersion", out var Version) || Version.GetInt32() != 1 ||
                     EchoMuseConnection.Text(Hello.RootElement, "voiceBackend") != "external")
                     throw new IOException("Unsupported controller voice protocol or backend.");
+                FeedbackPlayback = Hello.RootElement.TryGetProperty("feedbackPlayback", out var Feedback) && Feedback.ValueKind == JsonValueKind.True;
             }
             await RefreshAsync();
             Inventory = PollAsync();
@@ -216,6 +218,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 if (Connection is null)
                 {
                     Connection = new(DeviceId, Id, Registration.Name, Registration.AreaId, Send, Audio, Configuration, Manager);
+                    Connection.FeedbackPlaybackSupported = FeedbackPlayback;
                     if (!Manager.Register(Connection)) { continue; }
                     lock (Devices) { Devices.Add(DeviceId, Connection); }
                 }

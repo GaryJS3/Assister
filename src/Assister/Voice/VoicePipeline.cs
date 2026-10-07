@@ -11,7 +11,7 @@ public sealed record VoiceSession(Guid Id, string SatelliteId, string? Area, Gui
 public sealed record VoiceResult(VoiceSession Session, RequestResult? Request, string Outcome);
 
 public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvider Tts, IRequestCoordinator Coordinator,
-    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null)
+    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null, ToneCatalog? Tones = null)
 {
     public async Task<VoiceResult> RunAsync(ISatelliteConnection Satellite, Guid? ConversationId, CancellationToken CancellationToken)
     {
@@ -30,11 +30,32 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         if (!Satellites.BeginSession(Satellite.SatelliteId, Session.Id, Timeout)) { Run.Complete("busy"); return new(Session, null, "busy"); }
         Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.CapturingAudio);
+        using var FeedbackGate = new SemaphoreSlim(1);
+        var FeedbackUnavailable = false;
+        async Task Feedback(string Name, CancellationToken Token)
+        {
+            if (Tones is not { Enabled: true } || Satellite is not ITonePlayback { SupportsTonePlayback: true } Player) { return; }
+            await FeedbackGate.WaitAsync(Token);
+            try
+            {
+                if (FeedbackUnavailable) { return; }
+                using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+                Deadline.CancelAfter(TimeSpan.FromSeconds(5));
+                await Player.PlayToneAsync(Tones.Audio(Name), Deadline.Token);
+                Satellites.Record(Satellite.SatelliteId, "Tone played", Name, Session.Id);
+            }
+            catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }
+            catch (Exception Error) when (Error is IOException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException or OperationCanceledException or System.Net.WebSockets.WebSocketException or UnauthorizedAccessException)
+            { FeedbackUnavailable = true; Satellites.Record(Satellite.SatelliteId, "Tone unavailable", Name + " (" + Error.GetType().Name + ")", Session.Id); }
+            finally { FeedbackGate.Release(); }
+        }
+        using var FeedbackScope = VoiceFeedback.Begin(Feedback);
         RequestResult? Result = null;
         var Phase = "stt-failed";
         Timeout.CancelAfter(TimeSpan.FromMinutes(3));
         try
         {
+            await Feedback("awake", Timeout.Token);
             await Satellite.SendEventAsync(new("transcribing", SessionId: Session.Id), Timeout.Token);
             var Input = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true }
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
@@ -82,17 +103,18 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 Recognition.Complete();
                 RunTracing.Transcript(Transcript.Text);
             }
-            if (string.IsNullOrWhiteSpace(Transcript.Text)) { Run.Complete("no-speech"); return new(Session, null, "no-speech"); }
+            if (string.IsNullOrWhiteSpace(Transcript.Text)) { await Feedback("goodbye", Timeout.Token); Run.Complete("no-speech"); return new(Session, null, "no-speech"); }
             if (StopCommands.IsStop(Transcript.Text))
             {
                 await Satellites.StopAsync(Satellite.SatelliteId, Timeout.Token);
                 Timeout.Token.ThrowIfCancellationRequested();
             }
+            await Feedback("confirmed", Timeout.Token);
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Routing);
             await Satellite.SendEventAsync(new("transcribed", Transcript.Text, Session.Id), Timeout.Token);
             await Satellite.SendEventAsync(new("processing", SessionId: Session.Id), Timeout.Token);
             Phase = "processing-failed";
-            if (Configuration.GetValue("Voice:StreamingEnabled", false) && Coordinator is IStreamingRequestCoordinator Streaming)
+            if (!(Tones is { Enabled: true } && Satellite is ITonePlayback { SupportsTonePlayback: true }) && Configuration.GetValue("Voice:StreamingEnabled", false) && Coordinator is IStreamingRequestCoordinator Streaming)
             {
                 var Text = Channel.CreateBounded<string>(new BoundedChannelOptions(8) { SingleReader = true, SingleWriter = true });
                 var Sentences = new SentenceBuffer();
@@ -139,6 +161,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     Latency.Metadata(new { streaming = true, timeToFirstAudioMilliseconds = FirstAudioAtOutput is { } First ? (double?)(First - Session.StartedAt).TotalMilliseconds : null,
                         earlyPlaybackSupported = Satellite is IStreamingAudioPlayback { SupportsStreamingPlayback: true } });
                     Latency.Complete();
+                    await Feedback("goodbye", Timeout.Token);
                     await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
                     Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Complete);
                     Run.Complete(Result.Outcome);
@@ -187,12 +210,28 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                         await foreach (var Chunk in Tts.SynthesizeAsync(Sentence, Voice, Token).WithCancellation(Token)) { yield return Chunk; }
                 }
             }
-            Result = await Coordinator.ProcessAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId), Timeout.Token);
+            using (var IssueLifetime = CancellationTokenSource.CreateLinkedTokenSource(Timeout.Token))
+            {
+                async Task SlowRequestAsync()
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(Configuration.GetValue("Voice:Tones:IssueAfterSeconds", 8), 1, 120)), IssueLifetime.Token);
+                        await Feedback("issue", IssueLifetime.Token);
+                    }
+                    catch (OperationCanceledException) when (IssueLifetime.IsCancellationRequested) { }
+                }
+                var Warning = SlowRequestAsync();
+                try { Result = await Coordinator.ProcessAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId), Timeout.Token); }
+                finally { IssueLifetime.Cancel(); await Warning; }
+            }
             Session = Session with { ConversationId = Result.ConversationId };
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Synthesizing, Result.ConversationId);
             var Spoken = Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response);
             RunTracing.Response(Result.Response, Spoken, Result.Outcome, Result.HandledBy, Result.ConversationId);
             await Satellite.SendEventAsync(new("response", Result.Response, Session.Id, Result.ConversationId), Timeout.Token);
+            if (Result.Outcome != "succeeded") { await Feedback(Result.Outcome == "failed" ? "error" : "issue", Timeout.Token); }
+            await Feedback("done", Timeout.Token);
             Phase = "playback-failed";
             async IAsyncEnumerable<AudioChunk> Synthesize([EnumeratorCancellation] CancellationToken Token)
             {
@@ -217,6 +256,17 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 Synthesis.Output(new { encoding = "PCM", OutputFormat?.SampleRate, OutputFormat?.SampleWidth, OutputFormat?.Channels,
                     pcmByteCount = Bytes, audioDurationMilliseconds = Duration, timeToFirstAudioMilliseconds = FirstAudio });
                 Synthesis.Complete();
+                // EchoMuse completes its transport turn immediately after the response.
+                // Put Goodbye in that same audio object so it cannot race a follow-up.
+                if (Satellite is EchoMuseConnection.Turn { SupportsTonePlayback: true } && Tones is { Enabled: true }
+                    && !FeedbackUnavailable && !Result.Response.Contains('?') && OutputFormat is not null)
+                {
+                    AudioChunk? Goodbye = null;
+                    try { Goodbye = Tones.RenderFor("goodbye", OutputFormat); }
+                    catch (Exception Error) when (Error is IOException or ArgumentException or System.Text.Json.JsonException or UnauthorizedAccessException)
+                    { Satellites.Record(Satellite.SatelliteId, "Tone unavailable", "goodbye", Session.Id); }
+                    if (Goodbye is not null) { yield return Goodbye; }
+                }
                 Phase = "playback-failed";
                 Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.WaitingForPlayback);
             }
@@ -226,6 +276,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 Playback.Output(new { deliveryCompleted = true });
                 Playback.Complete();
             }
+            if (Satellite is not EchoMuseConnection.Turn) { await Feedback("goodbye", Timeout.Token); }
             await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Complete);
             Run.Complete(Result.Outcome);
@@ -252,6 +303,12 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 "processing-failed" => VoiceSessionState.RoutingFailed,
                 _ => VoiceSessionState.PlaybackFailed
             });
+            using var ErrorToneDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            if (!CancellationToken.IsCancellationRequested)
+            {
+                try { await Feedback("error", ErrorToneDeadline.Token); }
+                catch (OperationCanceledException) when (ErrorToneDeadline.IsCancellationRequested) { }
+            }
             return new(Session, Result, Phase);
         }
         finally { Satellites.EndSession(Satellite.SatelliteId, Session.Id); }
