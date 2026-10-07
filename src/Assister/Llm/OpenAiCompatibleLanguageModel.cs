@@ -8,6 +8,11 @@ using Assister.Contracts;
 
 namespace Assister.Llm;
 
+public sealed class InvalidLanguageModelResponseException(string Reason) : InvalidOperationException("Language model returned an invalid or incomplete response.")
+{
+    public string Reason { get; } = Reason;
+}
+
 public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguration Configuration) : ILanguageModel
 {
     private const int MaximumBytes = 262144;
@@ -180,6 +185,8 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
 
     private static LlmResponse BuildResponse(string? Content, IReadOnlyList<LlmToolCall> Calls, string? Finish)
     {
+        if (Finish is not ("stop" or "tool_calls"))
+            throw new InvalidLanguageModelResponseException(Finish == "length" ? "token-limit" : Finish == "content_filter" ? "content-filter" : "missing-or-invalid-finish-reason");
         if (Finish is not ("stop" or "tool_calls") || Calls.Count > 16
             || Calls.Any(Call => Call.Type != "function" || string.IsNullOrWhiteSpace(Call.Id)
                 || Call.Id.Length > 128 || Call.Function is null || string.IsNullOrWhiteSpace(Call.Function.Name)
@@ -193,7 +200,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         return new(Content, Calls, Finish);
     }
 
-    private static InvalidOperationException InvalidResponse() => new("Language model returned an invalid or incomplete response.");
+    private static InvalidLanguageModelResponseException InvalidResponse() => new("invalid-response-or-incomplete-stream");
 
     private static async IAsyncEnumerable<string> ReadLinesAsync(Stream Stream,
         [EnumeratorCancellation] CancellationToken Token)

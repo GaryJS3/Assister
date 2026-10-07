@@ -44,6 +44,8 @@ public sealed class ToolLoopTests
 
     [Theory]
     [InlineData("What's the highest wind speed today?", "ha_get_history")]
+    [InlineData("What has the wind speed been today?", "ha_get_history")]
+    [InlineData("What's the wind speed been today?", "ha_get_history")]
     [InlineData("What has the highest wind speed been according to the weather station today?", "ha_get_history")]
     [InlineData("What was the weather yesterday?", "ha_get_history")]
     [InlineData("What's the wind speed right now?", "ha_get_state")]

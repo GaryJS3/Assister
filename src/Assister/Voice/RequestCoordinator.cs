@@ -141,11 +141,14 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             {
                 using (var Failure = RunTracing.Start("Error", "Language model failure", "LLM routing stopped; supported direct commands remain available."))
                 {
-                    Failure.Metadata(new { failureCategory = Error.GetType().Name });
+                    Failure.Metadata(new { failureCategory = Error.GetType().Name,
+                        responseFailure = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.Reason });
                     Failure.Complete("failed");
                 }
                 Logger.LogWarning("Language model request failed ({FailureType}).", Error.GetType().Name);
-                return Result("The language model is unavailable. You can still use supported direct device commands.", "unavailable", "language-model");
+                return Result(Error is Assister.Llm.InvalidLanguageModelResponseException
+                    ? "The language model returned an invalid or incomplete response. Please try again."
+                    : "The language model is unavailable. You can still use supported direct device commands.", "unavailable", "language-model");
             }
         }
         if (Intent.Kind == DirectIntentKind.SetBrightness && Intent.BrightnessPercent is not (>= 0 and <= 100))

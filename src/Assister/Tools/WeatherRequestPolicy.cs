@@ -17,7 +17,7 @@ public static class WeatherRequestPolicy
             && History.Where(Item => Item.Role == "user").TakeLast(2).Any(Item => Matches(Item.Content ?? "", Topic));
         if (!Matches(Message, Topic) && !FollowUp) return WeatherRequestKind.None;
         // Observations take precedence over future keywords, including after a forecast conversation.
-        if (Matches(Message, @"\b(?:yesterday|ago|earlier|historical|history|so far|has been|have been|was|were|did|gotten|(?:last|this) (?:week|month|morning|afternoon|evening|night))\b")
+        if (Matches(Message, @"\b(?:yesterday|ago|earlier|historical|history|so far|been|was|were|did|gotten|(?:last|this) (?:week|month|morning|afternoon|evening|night))\b")
             || Matches(Message, @"\b(?:highest|lowest|maximum|minimum|average|total|how much)\b")
                 && !Matches(Message, @"\b(?:will|forecast|expected|tomorrow|tonight|next)\b"))
             return WeatherRequestKind.History;

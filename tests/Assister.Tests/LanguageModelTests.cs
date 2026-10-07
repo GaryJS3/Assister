@@ -78,13 +78,13 @@ public sealed class LanguageModelTests
     [InlineData("{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}")]
     public async Task InvalidCompletionsAreRejected(string Body)
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Create(new(Body)).CompleteAsync(new([new("user", "test")]), default));
+        await Assert.ThrowsAsync<InvalidLanguageModelResponseException>(() => Create(new(Body)).CompleteAsync(new([new("user", "test")]), default));
     }
 
     [Fact]
     public async Task ResponseLimitAndRemoteErrorsDoNotExposePayloads()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Create(new(new string('x', 262145)))
+        await Assert.ThrowsAsync<InvalidLanguageModelResponseException>(() => Create(new(new string('x', 262145)))
             .CompleteAsync(new([new("user", "test")]), default));
         var Error = await Assert.ThrowsAsync<InvalidOperationException>(() => Create(new("secret credential", Status: HttpStatusCode.Unauthorized))
             .CompleteAsync(new([new("user", "test")]), default));
@@ -98,7 +98,7 @@ public sealed class LanguageModelTests
     [InlineData("data: broken\n\n")]
     public async Task IncompleteStreamsNeverPublishCompletedResults(string Data)
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsAsync<InvalidLanguageModelResponseException>(async () =>
         {
             await foreach (var Event in Create(new(Data)).StreamAsync(new([new("user", "test")]), default))
             {
