@@ -10,6 +10,51 @@ namespace Assister.Tests;
 public sealed class DirectIntentTests
 {
     [Theory]
+    [InlineData("Set the office fan speed to 50%.")]
+    [InlineData("Can you set the office fan to 50%?")]
+    [InlineData("Set fan.office_fan to 50 percent")]
+    [InlineData("Adjust the fan in the office to 50")]
+    [InlineData("Turn the office fan on to 50 percent")]
+    [InlineData("Switch on the office fan 50%")]
+    public async Task FanSpeedCommandsResolveFanInsteadOfItsLights(string Message)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"fan.office_fan","new_state":{"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan","supported_features":1,"percentage":25,"percentage_step":25}}}"""));
+        var Result = await Coordinator.ProcessAsync(new(Message), CancellationToken.None);
+        Assert.Equal("succeeded", Result.Outcome);
+        var Call = Assert.Single(Fake.Calls);
+        Assert.Equal(HomeAssistantAction.SetFanSpeed, Call.Action);
+        Assert.Equal(50, Call.SpeedPercent);
+        Assert.Null(Call.BrightnessPercent);
+        Assert.Equal(["fan.office_fan"], Call.EntityIds);
+    }
+
+    [Theory]
+    [InlineData(101, "invalid-request")]
+    [InlineData(-1, "invalid-request")]
+    [InlineData(50, "unsupported")]
+    public async Task InvalidOrUnsupportedFanSpeedNeverSendsControl(int Speed, string Outcome)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"fan.office_fan","new_state":{"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan","supported_features":0}}}"""));
+        var Result = await Coordinator.ProcessAsync(new($"Set the office fan speed to {Speed}%"), CancellationToken.None);
+        Assert.Equal(Outcome, Result.Outcome);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Fact]
+    public async Task FanStateIncludesSpeedAndPowerQueriesResolveFans()
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"fan.office_fan","new_state":{"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan","supported_features":1,"percentage":50}}}"""));
+        var Result = await Coordinator.ProcessAsync(new("What is the office fan set to?"), CancellationToken.None);
+        Assert.Contains("50 percent speed", Result.Response);
+        Assert.Empty(Fake.Calls);
+        await Coordinator.ProcessAsync(new("turn office fan off"), CancellationToken.None);
+        Assert.Equal(["fan.office_fan"], Assert.Single(Fake.Calls).EntityIds);
+    }
+
+    [Theory]
     [InlineData("What's the status of all the current lights in the house?")]
     [InlineData("What is the state of all lights?")]
     [InlineData("What's the status of both office lights?")]

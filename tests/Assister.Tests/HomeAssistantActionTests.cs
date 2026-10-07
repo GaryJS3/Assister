@@ -9,6 +9,43 @@ namespace Assister.Tests;
 public sealed class HomeAssistantActionTests
 {
     [Theory]
+    [InlineData(0)]
+    [InlineData(50)]
+    [InlineData(35)]
+    [InlineData(100)]
+    public async Task FanSpeedUsesPercentageServiceAndConfirmsSpeed(int Speed)
+    {
+        var Cache = new HomeAssistantStateCache();
+        var Configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            { ["HomeAssistant:Url"] = "https://home.example/", ["HomeAssistant:Token"] = "test" }).Build();
+        using var Connection = new HomeAssistantClient(Configuration, Cache, () => new FakeConnection(), NullLogger<HomeAssistantClient>.Instance);
+        await Connection.StartAsync(CancellationToken.None);
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (Connection.Status != "Connected") { await Task.Delay(10, Deadline.Token); }
+            Cache.ApplyEvent(JsonSerializer.Deserialize<JsonElement>("""{"entity_id":"fan.office","new_state":{"entity_id":"fan.office","state":"on","attributes":{"supported_features":1,"percentage":25,"percentage_step":25}}}"""));
+            var Handler = new RecordingHandler();
+            using var FanHttp = new HttpClient(Handler);
+            var Client = new HomeAssistantActionClient(FanHttp, Configuration, Connection, Cache);
+            await Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["fan.office"], SpeedPercent: Speed), Deadline.Token);
+            Assert.Equal("/api/services/fan/set_percentage", Handler.Url!.AbsolutePath);
+            Assert.Equal(Speed, Handler.Body.GetProperty("percentage").GetInt32());
+            Assert.False(Handler.Body.TryGetProperty("brightness_pct", out _));
+            Assert.Equal(1, Handler.Calls);
+            if (Speed > 0)
+            {
+                Handler.PercentageOverride = 1;
+                using var WrongSpeed = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["fan.office"], SpeedPercent: Speed), WrongSpeed.Token));
+                Assert.Equal(2, Handler.Calls);
+            }
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["light.desk"], SpeedPercent: 50), Deadline.Token));
+        }
+        finally { await Connection.StopAsync(CancellationToken.None); }
+    }
+
+    [Theory]
     [InlineData(HomeAssistantAction.TurnOn, null, "turn_on")]
     [InlineData(HomeAssistantAction.TurnOff, null, "turn_off")]
     [InlineData(HomeAssistantAction.SetBrightness, 50, "turn_on")]
@@ -88,6 +125,7 @@ public sealed class HomeAssistantActionTests
         }
         public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
         public bool ConfirmState { get; set; } = true;
+        public int? PercentageOverride { get; set; }
         public int Reads { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
@@ -95,12 +133,13 @@ public sealed class HomeAssistantActionTests
             if (Request.Method == HttpMethod.Get)
             {
                 Reads++;
-                var Off = Url!.AbsolutePath.EndsWith("turn_off", StringComparison.Ordinal);
+                var Fan = Body.TryGetProperty("percentage", out var SpeedValue);
+                var Off = Url!.AbsolutePath.EndsWith("turn_off", StringComparison.Ordinal) || Fan && SpeedValue.GetInt32() == 0;
                 var Percent = Body.TryGetProperty("brightness_pct", out var Value) ? Value.GetInt32() : 100;
                 var State = ConfirmState ? Off ? "off" : "on" : "unknown";
                 return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new
                 {
-                    entity_id = "light.desk", state = State, attributes = new { brightness = (int)Math.Round(Percent * 255.0 / 100) }
+                    entity_id = Fan ? "fan.office" : "light.desk", state = State, attributes = new { brightness = (int)Math.Round(Percent * 255.0 / 100), percentage = PercentageOverride ?? (Fan ? (int)(Math.Ceiling(SpeedValue.GetInt32() / 25.0) * 25) : 0), supported_features = 1, percentage_step = 25 }
                 })) };
             }
             Calls++;
@@ -132,7 +171,7 @@ public sealed class HomeAssistantActionTests
             var Result = Data.GetProperty("type").GetString() switch
             {
                 "get_states" => """[{"entity_id":"light.desk","state":"on","attributes":{"supported_color_modes":["brightness"]}}]""",
-                "get_services" => """{"light":{"turn_on":{},"turn_off":{}}}""",
+                "get_services" => """{"light":{"turn_on":{},"turn_off":{}},"fan":{"turn_on":{},"turn_off":{},"set_percentage":{}}}""",
                 "subscribe_events" => "null",
                 _ => "[]"
             };

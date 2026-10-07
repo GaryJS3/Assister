@@ -24,6 +24,8 @@ public sealed class HomeAssistantIntentActions : IIntentActionProvider
         new("home-assistant.set-brightness", "home-assistant", "Home Assistant", "Set light brightness", true,
             [Target, new("brightness", "Brightness", "percent", true), Area], DirectIntentKind.SetBrightness),
         new("home-assistant.query-state", "home-assistant", "Home Assistant", "Read device state", false, [Target, Area], DirectIntentKind.QueryState),
+        new("home-assistant.set-fan-speed", "home-assistant", "Home Assistant", "Set fan speed", true,
+            [Target, new("speed", "Speed", "percent", true), Area], DirectIntentKind.SetFanSpeed),
         new("home-assistant.query-temperature", "home-assistant", "Home Assistant", "Read temperature", false, [Area], DirectIntentKind.QueryTemperature)
     ];
 }

@@ -55,11 +55,11 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
                 Outcome = Snapshot.IsStale ? "unavailable" : Resolution.Entities.Count == 0
                     ? Resolution.Alternatives.Count > 0 ? "ambiguous" : "not-found"
                     : Resolution.Entities.Any(Entity => Entity.IsUnavailable) ? "unavailable"
-                    : Match.Intent.Kind == DirectIntentKind.SetBrightness && Resolution.Entities.Any(Entity => !Entity.SupportsBrightness) ? "unsupported" : "ready";
+                    : Match.Intent.Kind == DirectIntentKind.SetBrightness && Resolution.Entities.Any(Entity => !Entity.SupportsBrightness) ? "unsupported" : Match.Intent.Kind == DirectIntentKind.SetFanSpeed && Resolution.Entities.Any(Entity => !Entity.SupportsFanSpeed) ? "unsupported" : "ready";
                 Reason = Outcome switch
                 {
                     "unavailable" => "Home Assistant or the resolved device is unavailable.", "ambiguous" => "The device target needs clarification.",
-                    "not-found" => "No matching device was found in the requested area.", "unsupported" => "The device does not support brightness.",
+                    "not-found" => "No matching device was found in the requested area.", "unsupported" => "The device does not support the requested percentage control.",
                     _ => "The resolved action is ready. No command has been sent."
                 };
                 if (Outcome == "ready")

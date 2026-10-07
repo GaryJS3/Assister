@@ -111,3 +111,13 @@ Assistant's carried-in initial state is timestamped at range start, not its olde
 state-change time. Oversized upstream histories return
 `history_response_too_large`, allowing narrower queries. The model-facing tool
 result remains limited to 16 KiB independently of the upstream response cap.
+
+Fan controls support on/off and percentage speed. Examples: “set the office fan
+speed to 50%”, “set fan.office_fan to 50 percent”, and “what is the office fan set
+to?”. Speed commands resolve fan entities and require the SET_SPEED capability
+and advertised `fan.set_percentage` service. Controls read back power and speed
+before confirming completion, including rounding to reported speed increments.
+The model tool uses `action=set_fan_speed` and `speed_pct`, separately from light
+brightness. Compact state exposes `supports_fan_speed`, `speed_pct` and
+`percentage_step`; an absent speed stays unknown. The intent editor supports
+`{target:fan}`, `{speed:percent}`, fixed fan speed and `{speed}` responses.

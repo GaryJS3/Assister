@@ -15,7 +15,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     public EntityResolutionResult Resolve(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
     {
         var Target = LanguageParser.Noun(Intent.Target);
-        if (Intent.Kind is DirectIntentKind.SetBrightness or DirectIntentKind.TurnOn or DirectIntentKind.TurnOff
+        if (Intent.Kind is DirectIntentKind.SetBrightness or DirectIntentKind.SetFanSpeed or DirectIntentKind.TurnOn or DirectIntentKind.TurnOff
             && Target.Contains(" and ", StringComparison.Ordinal))
         {
             // Preserve real names containing "and" before interpreting a target list.
@@ -40,13 +40,13 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         var Target = LanguageParser.Noun(Intent.Target);
         var Candidates = Snapshot.Entities.Where(Entity => Eligible(Entity, Intent.Kind)).ToArray();
         var Area = Intent.ExplicitArea;
-        var Domain = Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : null);
+        var Domain = Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : Intent.Kind == DirectIntentKind.SetFanSpeed ? "fan" : null);
         EntityResolutionResult Result(IReadOnlyList<HomeAssistantEntity> Entities, double Confidence, IReadOnlyList<HomeAssistantEntity> Alternatives)
             => new(Entities, Confidence, Alternatives, Area ?? Entities.FirstOrDefault()?.AreaName,
                 Domain ?? (Intent.Kind == DirectIntentKind.QueryTemperature ? "temperature sensor" : Intent.Kind is DirectIntentKind.TurnOn or DirectIntentKind.TurnOff ? "light or switch" : null));
         EntityResolutionResult Unique(HomeAssistantEntity[] Entities, double Confidence) => Entities.Length == 1
             ? Result(Entities, Confidence, []) : Result([], 0, Entities.Take(5).ToArray());
-        var Plural = Target is "lights" or "switches" || Target.EndsWith(" lights", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal);
+        var Plural = Target is "lights" or "switches" or "fans" || Target.EndsWith(" lights", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal) || Target.EndsWith(" fans", StringComparison.Ordinal);
 
         if (Area is null)
         {
@@ -54,7 +54,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
             // Prefer that named device before interpreting "living room light" as an area query.
             var NamedDomain = Domain ?? (Target.EndsWith(" light", StringComparison.Ordinal) || Target.EndsWith(" lights", StringComparison.Ordinal)
                 ? "light" : Target.EndsWith(" switch", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal) ? "switch" : null);
-            var Specific = Target is not ("light" or "lights" or "switch" or "switches" or "temperature");
+            var Specific = Target is not ("light" or "lights" or "switch" or "switches" or "fan" or "fans" or "temperature");
             var Named = Candidates.Where(Entity => Specific && (NamedDomain is null || Entity.Domain == NamedDomain)
                 && Names(Entity).Any(Name => LanguageParser.Noun(Name) == Target)).ToArray();
             if (Specific && Named.Length == 0 && Target.Contains(' '))
@@ -79,6 +79,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
         var Words = Target.Split(' ');
         if (Domain is null && Words.LastOrDefault() is "light" or "lights") { Domain = "light"; }
         else if (Domain is null && Words.LastOrDefault() is "switch" or "switches") { Domain = "switch"; }
+        if (Domain is null && Words.LastOrDefault() is "fan" or "fans") { Domain = "fan"; }
         if (Domain is not null) { Candidates = Candidates.Where(Entity => Entity.Domain == Domain).ToArray(); }
 
         if (Area is not null)
@@ -88,7 +89,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
                 Area + " " + Target, Domains: Domain is null ? null : [Domain]);
         }
 
-        var Generic = Target is "light" or "lights" or "switch" or "switches" || (Intent.Kind == DirectIntentKind.QueryTemperature && Target == "temperature");
+        var Generic = Target is "light" or "lights" or "switch" or "switches" or "fan" or "fans" || (Intent.Kind == DirectIntentKind.QueryTemperature && Target == "temperature");
         if (Generic)
         {
             Area ??= SatelliteArea;
@@ -129,7 +130,8 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     {
         DirectIntentKind.QueryTemperature => Entity.IsTemperature,
         DirectIntentKind.SetBrightness => Entity.Domain == "light",
-        DirectIntentKind.TurnOn or DirectIntentKind.TurnOff => Entity.Domain is "light" or "switch",
+        DirectIntentKind.SetFanSpeed => Entity.Domain == "fan",
+        DirectIntentKind.TurnOn or DirectIntentKind.TurnOff => Entity.Domain is "light" or "switch" or "fan",
         _ => true
     };
 
@@ -142,7 +144,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     private static string StripDomain(string Name, string? Domain)
     {
         if (Domain is null) { return Name; }
-        var Suffixes = Domain == "light" ? new[] { " lights", " light" } : new[] { " switches", " switch" };
+        var Suffixes = Domain == "light" ? new[] { " lights", " light" } : Domain == "fan" ? new[] { " fans", " fan" } : new[] { " switches", " switch" };
         foreach (var Suffix in Suffixes)
         {
             if (Name.EndsWith(Suffix, StringComparison.Ordinal)) { return Name[..^Suffix.Length]; }

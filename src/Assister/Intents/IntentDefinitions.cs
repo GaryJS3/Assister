@@ -8,7 +8,7 @@ namespace Assister.Intents;
 
 public sealed record IntentDefinition(string Id, string Name, string ActionId, bool Enabled,
     string[] Patterns, string? Target = null, int? Brightness = null, string? Area = null,
-    string Response = "{response}", bool BuiltIn = false, long Version = 0);
+    string Response = "{response}", bool BuiltIn = false, long Version = 0, int? SpeedPercent = null);
 
 public sealed record IntentExample(string Id, string Name, string Text, string? Area,
     string? ExpectedRuleId, string MatchStatus = "matched", string? ExpectedTarget = null,
@@ -35,6 +35,7 @@ public static class IntentCatalog
         ["builtin-turn-off"] = ["turn off {target}", "turn {target} off"],
         ["builtin-brightness"] = ["set {target} to {brightness} percent", "set living room light to 100"],
         ["builtin-state"] = ["what is the state of {target}", "what's the status of {target}", "is {target} on"],
+        ["builtin-fan-speed"] = ["set office fan speed to 50 percent"],
         ["builtin-temperature"] = ["what is the temperature in {area}", "what's the temperature"]
     };
     public static readonly IntentDefinition[] BuiltIns =
@@ -43,6 +44,7 @@ public static class IntentCatalog
         new("builtin-turn-off", "Turn power off", "home-assistant.turn-off", true, [], BuiltIn: true),
         new("builtin-brightness", "Set light brightness", "home-assistant.set-brightness", true, [], BuiltIn: true),
         new("builtin-state", "Read device state", "home-assistant.query-state", true, [], BuiltIn: true),
+        new("builtin-fan-speed", "Set fan speed", "home-assistant.set-fan-speed", true, [], BuiltIn: true),
         new("builtin-temperature", "Read temperature", "home-assistant.query-temperature", true, [], BuiltIn: true),
         new("builtin-time", "Current local time", "assister.time", true, ["what time is it", "what is the time"], BuiltIn: true),
         new("builtin-date", "Current local date", "assister.date", true, ["what is today's date", "what is the date", "what day is it"], BuiltIn: true)
@@ -53,6 +55,7 @@ public static class IntentCatalog
         new("example-brightness", "Bare brightness regression", "Set living room light to 100.", null, "builtin-brightness", ExpectedTarget: "living room light", ExpectedBrightness: 100),
         new("example-power", "Named light power", "Turn light.desk off", null, "builtin-turn-off", ExpectedTarget: "light.desk"),
         new("example-temperature", "Area temperature", "What's the temperature in the office?", null, "builtin-temperature", ExpectedTarget: "temperature"),
+        new("example-fan-speed", "Fan speed regression", "Set the office fan speed to 50%.", null, "builtin-fan-speed", ExpectedTarget: "office fan"),
         new("example-time", "Local time", "What time is it?", null, "builtin-time"),
         new("example-unmatched", "Reasoning stays with the model", "Why was the office warmer yesterday?", null, null, "unmatched")
     ];
@@ -60,7 +63,7 @@ public static class IntentCatalog
     public static string NativeId(DirectIntentKind Kind) => Kind switch
     {
         DirectIntentKind.TurnOn => "builtin-turn-on", DirectIntentKind.TurnOff => "builtin-turn-off",
-        DirectIntentKind.SetBrightness => "builtin-brightness", DirectIntentKind.QueryState => "builtin-state", _ => "builtin-temperature"
+        DirectIntentKind.SetBrightness => "builtin-brightness", DirectIntentKind.SetFanSpeed => "builtin-fan-speed", DirectIntentKind.QueryState => "builtin-state", _ => "builtin-temperature"
     };
 }
 
@@ -79,7 +82,7 @@ public sealed class IntentStore(AssisterDbContext Database, IntentActionRegistry
         Validate(Definition, Registry);
         var Native = IntentCatalog.BuiltIns.SingleOrDefault(Row => Row.Id == Definition.Id);
         if (Native is not null && (!Definition.BuiltIn || Definition.ActionId != Native.ActionId || Definition.Target is not null
-            || Definition.Brightness is not null || Definition.Area is not null))
+            || Definition.Brightness is not null || Definition.SpeedPercent is not null || Definition.Area is not null))
         {
             throw new ArgumentException("Built-in actions and fixed slots cannot be changed. Add aliases or create a custom intent.");
         }
@@ -156,7 +159,7 @@ public sealed class IntentStore(AssisterDbContext Database, IntentActionRegistry
         if (!ValidId(Definition.Id) || Definition.Id == "catalog-initialized" || string.IsNullOrWhiteSpace(Definition.Name) || Definition.Name.Length > 128
             || Definition.Patterns is null || Definition.Patterns.Length > 24
             || !Definition.BuiltIn && Definition.Patterns.Length == 0 || Definition.Target?.Length > 256 || Definition.Area?.Length > 128
-            || Definition.Brightness is < 0 or > 100 || Definition.Response is null || Definition.Response.Length is < 1 or > 1000)
+            || Definition.Brightness is < 0 or > 100 || Definition.SpeedPercent is < 0 or > 100 || Definition.Response is null || Definition.Response.Length is < 1 or > 1000)
         {
             throw new ArgumentException("Invalid intent fields. Use a registered action, at most 24 phrases and brightness from 0 to 100.");
         }
@@ -169,18 +172,19 @@ public sealed class IntentStore(AssisterDbContext Database, IntentActionRegistry
             }
             foreach (var Input in Action.Inputs.Where(Input => Input.Required))
             {
-                var Fixed = Input.Name switch { "target" => Definition.Target, "brightness" => Definition.Brightness?.ToString(), "area" => Definition.Area, _ => null };
+                var Fixed = Input.Name switch { "target" => Definition.Target, "brightness" => Definition.Brightness?.ToString(), "speed" => Definition.SpeedPercent?.ToString(), "area" => Definition.Area, _ => null };
                 if (string.IsNullOrWhiteSpace(Fixed) && !Slots.Contains(Input.Name)) { throw new ArgumentException($"{Input.Label} needs a phrase slot or a fixed value."); }
             }
         }
         if (Definition.Target is not null && !Action.Inputs.Any(Input => Input.Name == "target")
             || Definition.Brightness is not null && !Action.Inputs.Any(Input => Input.Name == "brightness")
+            || Definition.SpeedPercent is not null && !Action.Inputs.Any(Input => Input.Name == "speed")
             || Definition.Area is not null && !Action.Inputs.Any(Input => Input.Name == "area")) { throw new ArgumentException("A fixed value is not supported by this action."); }
         if (Definition.ActionId == "assister.reply" && Definition.Response.Contains("{response}", StringComparison.Ordinal))
         {
             throw new ArgumentException("A fixed reply needs its own response text instead of {response}.");
         }
-        var Remainder = Regex.Replace(Definition.Response, @"\{(?:response|target|brightness|area|time|date)\}", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
+        var Remainder = Regex.Replace(Definition.Response, @"\{(?:response|target|brightness|speed|area|time|date)\}", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
         if (Remainder.Contains('{') || Remainder.Contains('}')) { throw new ArgumentException("Unknown response placeholder."); }
     }
 }

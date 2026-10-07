@@ -8,7 +8,7 @@ const actionLabel = actionId => { const a = actionFor(actionId); return a ? `${a
 function renderInputs() {
   const a = actionFor($('action').value);
   $('action-inputs').textContent = a ? `${a.id} · ${a.stateChanging ? 'Changes state' : 'Read-only / local response'} · Inputs: ${a.inputs.map(i => `${i.label} (${i.type}${i.required ? ', required' : ', optional'})`).join(', ') || 'None'}` : '';
-  for (const [field, input] of [['fixed-target', 'target'], ['fixed-brightness', 'brightness'], ['fixed-area', 'area']]) $(field).disabled = selected?.builtIn || !a?.inputs.some(i => i.name === input);
+  for (const [field, input] of [['fixed-target', 'target'], ['fixed-brightness', 'brightness'], ['fixed-speed', 'speed'], ['fixed-area', 'area']]) $(field).disabled = selected?.builtIn || !a?.inputs.some(i => i.name === input);
 }
 function populateActions(actionId) {
   $('action').replaceChildren();
@@ -34,6 +34,7 @@ function definition() {
   return { id: selected?.id || id('intent'), name: $('name').value.trim(), actionId: $('action').value, enabled: $('enabled').checked,
     patterns: $('patterns').value.split('\n').map(x => x.trim()).filter(Boolean), target: $('fixed-target').disabled ? null : $('fixed-target').value.trim() || null,
     brightness: $('fixed-brightness').disabled || $('fixed-brightness').value === '' ? null : Number($('fixed-brightness').value), area: $('fixed-area').disabled ? null : $('fixed-area').value.trim() || null,
+    speedPercent: $('fixed-speed').disabled || $('fixed-speed').value === '' ? null : Number($('fixed-speed').value),
     response: $('response-template').value, builtIn: selected?.builtIn || false, version: selected?.version || 0 };
 }
 function select(d) {
@@ -45,6 +46,7 @@ function select(d) {
   $('enabled').checked = d.enabled; $('patterns').value = d.patterns.join('\n');
   $('pattern-label').textContent = d.builtIn && !['assister.time', 'assister.date'].includes(d.actionId) ? ' / additional aliases' : '';
   $('fixed-target').value = d.target || ''; $('fixed-brightness').value = d.brightness ?? ''; $('fixed-area').value = d.area || '';
+  $('fixed-speed').value = d.speedPercent ?? '';
   renderInputs();
   $('response-template').value = d.response; $('delete-intent').hidden = d.builtIn || !definitions.some(x => x.id === d.id);
   $('dirty').textContent = ''; $('preview-draft').checked = false; invalidate(); renderLibrary();

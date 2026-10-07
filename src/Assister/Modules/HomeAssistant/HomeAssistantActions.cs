@@ -9,10 +9,11 @@ public enum HomeAssistantAction
 {
     TurnOn,
     TurnOff,
-    SetBrightness
+    SetBrightness,
+    SetFanSpeed
 }
 
-public sealed record HomeAssistantControl(HomeAssistantAction Action, IReadOnlyList<string> EntityIds, int? BrightnessPercent = null);
+public sealed record HomeAssistantControl(HomeAssistantAction Action, IReadOnlyList<string> EntityIds, int? BrightnessPercent = null, int? SpeedPercent = null);
 
 public interface IHomeAssistantClient
 {
@@ -41,17 +42,19 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
         var Targets = Control.EntityIds.Select(Id => Snapshot.Entities.SingleOrDefault(Entity => Entity.EntityId == Id)
             ?? throw new InvalidOperationException("The control target no longer exists.")).ToArray();
         var Domain = Targets[0].Domain;
-        if (Domain is not ("light" or "switch") || Targets.Any(Entity => Entity.Domain != Domain || Entity.IsUnavailable))
+        if (Domain is not ("light" or "switch" or "fan") || Targets.Any(Entity => Entity.Domain != Domain || Entity.IsUnavailable))
         {
             throw new InvalidOperationException("The control target is unsupported or unavailable.");
         }
 
         var Service = Control.Action switch
         {
-            HomeAssistantAction.TurnOn when Control.BrightnessPercent is null => "turn_on",
-            HomeAssistantAction.TurnOff when Control.BrightnessPercent is null => "turn_off",
+            HomeAssistantAction.TurnOn when Control.BrightnessPercent is null && Control.SpeedPercent is null => "turn_on",
+            HomeAssistantAction.TurnOff when Control.BrightnessPercent is null && Control.SpeedPercent is null => "turn_off",
+            HomeAssistantAction.SetFanSpeed when Domain == "fan" && Control.BrightnessPercent is null && Control.SpeedPercent is >= 0 and <= 100
+                && Targets.All(Entity => Entity.SupportsFanSpeed) => "set_percentage",
             HomeAssistantAction.SetBrightness when Domain == "light" && Control.BrightnessPercent is >= 0 and <= 100
-                && Targets.All(Entity => Entity.SupportsBrightness) => Control.BrightnessPercent == 0 ? "turn_off" : "turn_on",
+                && Control.SpeedPercent is null && Targets.All(Entity => Entity.SupportsBrightness) => Control.BrightnessPercent == 0 ? "turn_off" : "turn_on",
             _ => throw new InvalidOperationException("The requested control is unsupported.")
         };
         if (Snapshot.Services.ValueKind != JsonValueKind.Object || !Snapshot.Services.TryGetProperty(Domain, out var Services)
@@ -61,6 +64,7 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
         }
 
         var Data = new Dictionary<string, object> { ["entity_id"] = Control.EntityIds };
+        if (Control.Action == HomeAssistantAction.SetFanSpeed) { Data["percentage"] = Control.SpeedPercent!.Value; }
         if (Control.Action == HomeAssistantAction.SetBrightness && Control.BrightnessPercent > 0)
         {
             Data["brightness_pct"] = Control.BrightnessPercent.Value;
@@ -111,7 +115,11 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
                 if (!StateResponse.IsSuccessStatusCode) { throw new InvalidOperationException("The device state could not be confirmed."); }
                 await using var StateStream = await StateResponse.Content.ReadAsStreamAsync(Timeout.Token);
                 using var State = await JsonDocument.ParseAsync(StateStream, cancellationToken: Timeout.Token);
-                if (Matches(Control, State.RootElement)) { Pending.Remove(Id); }
+                if (Matches(Control, State.RootElement))
+                {
+                    if (Domain == "fan") { Cache.ApplyEvent(JsonSerializer.SerializeToElement(new { entity_id = Id, new_state = State.RootElement })); }
+                    Pending.Remove(Id);
+                }
             }
             if (Pending.Count > 0) { await Task.Delay(200, Timeout.Token); }
         }
@@ -122,8 +130,22 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
     private static bool Matches(HomeAssistantControl Control, JsonElement State)
     {
         var Expected = Control.Action == HomeAssistantAction.TurnOff
+            || Control.Action == HomeAssistantAction.SetFanSpeed && Control.SpeedPercent == 0
             || Control.Action == HomeAssistantAction.SetBrightness && Control.BrightnessPercent == 0 ? "off" : "on";
         if (!State.TryGetProperty("state", out var Power) || Power.GetString() != Expected) { return false; }
+        if (Control.Action == HomeAssistantAction.SetFanSpeed && Control.SpeedPercent > 0)
+        {
+            if (!State.TryGetProperty("attributes", out var FanAttributes)) { return false; }
+            var ExpectedSpeed = (double)Control.SpeedPercent.Value;
+            if (FanAttributes.TryGetProperty("percentage_step", out var StepValue) && StepValue.ValueKind == JsonValueKind.Number
+                && StepValue.TryGetDouble(out var Step) && double.IsFinite(Step) && Step is > 0 and <= 100)
+            {
+                ExpectedSpeed = Math.Min(100, Math.Ceiling(ExpectedSpeed / Step - 1e-9) * Step);
+            }
+            return FanAttributes.TryGetProperty("percentage", out var Percentage) && Percentage.ValueKind == JsonValueKind.Number
+                && Percentage.TryGetDouble(out var ActualSpeed) && double.IsFinite(ActualSpeed)
+                && Math.Abs(ActualSpeed - ExpectedSpeed) <= 0.5;
+        }
         return Control.Action != HomeAssistantAction.SetBrightness || Control.BrightnessPercent == 0
             || State.TryGetProperty("attributes", out var Attributes) && Attributes.TryGetProperty("brightness", out var Brightness)
             && Brightness.TryGetInt32(out var Actual) && Math.Abs(Actual - Control.BrightnessPercent!.Value * 255.0 / 100) <= 2;

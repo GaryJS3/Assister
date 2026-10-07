@@ -14,13 +14,13 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
     {
         "ha_search" => "Find Home Assistant entities by name, device name, alias or area. Device nouns infer domains; use domains for light/switch lists. Unassigned devices can match a room in their names. An empty array is no match; an error is a failed search, not proof devices do not exist.",
         "ha_get_state" => "Read current compact state for entities found by search.",
-        "ha_control" => "Control searched lights or switches for the current authorized action. Use entity_ids to control multiple targets together, or entity_id for one. Search in this turn before controlling. Never replay earlier commands during questions. Targets and action are checked against the current request by the server.",
+        "ha_control" => "Control searched lights, switches or fans for the current authorized action. Use entity_ids to control multiple targets together, or entity_id for one. Search in this turn before controlling. Never replay earlier commands during questions. Targets and action are checked against the current request by the server.",
         _ => "Get numeric range statistics (count, min, max, sample mean, sum, median) for searched entities. Optional top_count/bottom_count return ranked readings; include_samples returns a chronological page using sample_offset/sample_limit. include_timestamps defaults true; extrema ties use the earliest timestamp. Statistics cover the full range, never just the page. At most 50 detailed readings across all entities per call. Times need UTC offsets; end cannot be future; maximum range seven days."
     }, Schema(Name switch
     {
         "ha_search" => """{"type":"object","properties":{"query":{"type":"string"},"area":{"type":"string"},"domains":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["query"],"additionalProperties":false}""",
         "ha_get_state" => """{"type":"object","properties":{"entity_ids":{"type":"array","items":{"type":"string"}}},"required":["entity_ids"],"additionalProperties":false}""",
-        "ha_control" => """{"type":"object","properties":{"entity_id":{"type":"string"},"entity_ids":{"type":"array","items":{"type":"string"}},"action":{"type":"string","enum":["turn_on","turn_off","set_brightness"]},"brightness_pct":{"type":"integer","minimum":0,"maximum":100}},"required":["action"],"additionalProperties":false}""",
+        "ha_control" => """{"type":"object","properties":{"entity_id":{"type":"string"},"entity_ids":{"type":"array","items":{"type":"string"}},"action":{"type":"string","enum":["turn_on","turn_off","set_brightness","set_fan_speed"]},"brightness_pct":{"type":"integer","minimum":0,"maximum":100},"speed_pct":{"type":"integer","minimum":0,"maximum":100}},"required":["action"],"additionalProperties":false}""",
         _ => """{"type":"object","properties":{"entity_ids":{"type":"array","items":{"type":"string"}},"start":{"type":"string"},"end":{"type":"string"},"include_timestamps":{"type":"boolean"},"top_count":{"type":"integer","minimum":0,"maximum":50},"bottom_count":{"type":"integer","minimum":0,"maximum":50},"include_samples":{"type":"boolean"},"sample_offset":{"type":"integer","minimum":0},"sample_limit":{"type":"integer","minimum":1,"maximum":50}},"required":["entity_ids","start","end"],"additionalProperties":false}"""
     })));
 
@@ -60,7 +60,7 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
                 || System.Text.RegularExpressions.Regex.IsMatch(Authorized.Target, @"\b(?:both|all|lights|switches)\b");
             if (Allowed.Length == 0 || !Plural && Allowed.Length > 1 || Entities.Any(Entity => !Allowed.Any(Item => Item.EntityId == Entity.EntityId)))
                 return "{\"error\":\"The requested targets are unresolved or ambiguous. Ask which devices the user means.\",\"code\":\"ambiguous_targets\"}";
-            if (Entities.Any(Entity => Entity.Domain is not ("light" or "switch") || Entity.IsUnavailable)
+            if (Entities.Any(Entity => Entity.Domain is not ("light" or "switch" or "fan") || Entity.IsUnavailable)
                 || Entities.Select(Entity => Entity.Domain).Distinct().Count() != 1) { throw new InvalidOperationException(); }
             foreach (var Entity in Allowed) { Context.RequestedControls.Add(Entity.EntityId); }
             var Action = Arguments.GetProperty("action").GetString() switch
@@ -68,24 +68,29 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
                 "turn_on" => HomeAssistantAction.TurnOn,
                 "turn_off" => HomeAssistantAction.TurnOff,
                 "set_brightness" => HomeAssistantAction.SetBrightness,
+                "set_fan_speed" => HomeAssistantAction.SetFanSpeed,
                 _ => throw new InvalidOperationException()
             };
             int? Brightness = Arguments.TryGetProperty("brightness_pct", out var Value) ? Value.GetInt32() : null;
+            int? Speed = Arguments.TryGetProperty("speed_pct", out var SpeedValue) ? SpeedValue.GetInt32() : null;
+            if (Action == HomeAssistantAction.SetFanSpeed && (Speed is null || Speed != Authorized.SpeedPercent || Entities.Any(Entity => !Entity.SupportsFanSpeed))
+                || Action != HomeAssistantAction.SetFanSpeed && Speed is not null) { throw new InvalidOperationException(); }
             if (Action == HomeAssistantAction.SetBrightness && (Brightness is null || Brightness != Authorized.Brightness || Entities.Any(Entity => !Entity.SupportsBrightness))
                 || Action != HomeAssistantAction.SetBrightness && Brightness is not null) { throw new InvalidOperationException(); }
             if (Ids.Any(Context.AttemptedControls.Contains))
                 return "{\"error\":\"A control was already attempted for this device in this request. Do not retry.\",\"code\":\"control_already_attempted\"}";
             foreach (var Id in Ids) { Context.AttemptedControls.Add(Id); }
             if (Context.Conversation is { } Active)
-                Active.LastAttempted = new(Authorized.Action, Ids, "unconfirmed", DateTimeOffset.UtcNow, Brightness);
-            await Actions.ControlAsync(new(Action, Ids, Brightness), CancellationToken);
+                Active.LastAttempted = new(Authorized.Action, Ids, "unconfirmed", DateTimeOffset.UtcNow, Brightness, Speed);
+            await Actions.ControlAsync(new(Action, Ids, Brightness, Speed), CancellationToken);
             foreach (var Id in Ids) { Context.CompletedControls.Add(Id); }
             if (Context.Conversation is { } Conversation)
             {
-                Conversation.LastCompleted = new(Authorized.Action, Context.CompletedControls.Order().ToArray(), DateTimeOffset.UtcNow, Brightness);
-                Conversation.LastAttempted = new(Authorized.Action, Ids, "completed", DateTimeOffset.UtcNow, Brightness);
+                Conversation.LastCompleted = new(Authorized.Action, Context.CompletedControls.Order().ToArray(), DateTimeOffset.UtcNow, Brightness, Speed);
+                Conversation.LastAttempted = new(Authorized.Action, Ids, "completed", DateTimeOffset.UtcNow, Brightness, Speed);
             }
-            return JsonSerializer.Serialize(new { status = "completed", action = Authorized.Action, entity_ids = Ids });
+            return JsonSerializer.Serialize(new { status = "completed", action = Authorized.Action, entity_ids = Ids, requested_speed_pct = Speed,
+                fan_states = Action == HomeAssistantAction.SetFanSpeed ? Cache.Snapshot().Entities.Where(Entity => Ids.Contains(Entity.EntityId)).Select(Compact).ToArray() : null });
         }
         var StartText = Arguments.GetProperty("start").GetString()!;
         var EndText = Arguments.GetProperty("end").GetString()!;
@@ -106,6 +111,9 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         unit = Entity.State.GetProperty("attributes").TryGetProperty("unit_of_measurement", out var Unit)
             && Unit.ValueKind == JsonValueKind.String ? Unit.GetString() : null,
         supports_brightness = Entity.SupportsBrightness,
+        supports_fan_speed = Entity.SupportsFanSpeed,
+        speed_pct = Entity.FanSpeedPercent,
+        percentage_step = Entity.FanPercentageStep,
         is_temperature = Entity.IsTemperature,
         brightness_pct = Entity.State.GetProperty("attributes").TryGetProperty("brightness", out var Brightness)
             && Brightness.ValueKind == JsonValueKind.Number && Brightness.TryGetInt32(out var Value) ? (int?)Math.Round(Value * 100.0 / 255) : null

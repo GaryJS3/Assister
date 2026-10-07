@@ -8,15 +8,17 @@ public enum DirectIntentKind
     TurnOff,
     SetBrightness,
     QueryState,
-    QueryTemperature
+    QueryTemperature,
+    SetFanSpeed
 }
 
-public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null, string? TargetDomain = null)
+public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null, string? TargetDomain = null, int? SpeedPercent = null)
 {
     public string MatchedRule => Kind switch
     {
         DirectIntentKind.TurnOn or DirectIntentKind.TurnOff => "TurnPower",
         DirectIntentKind.SetBrightness => "SetBrightnessPercent",
+        DirectIntentKind.SetFanSpeed => "SetFanSpeedPercent",
         DirectIntentKind.QueryTemperature => "QueryTemperature",
         _ => "QueryState"
     };
@@ -40,8 +42,25 @@ public sealed class IntentClassifier : IIntentEngine
     {
         var Text = Normalize(Message);
 
+        var Fan = Pattern(Text, @"^(?:set|adjust|make|turn) (?:(?<target>.+?) (?:to|at)|on (?<target>.+?) (?:to|at)) (?<percent>-?\d{1,9})\s*(?:percent|%)?$");
+        if (Fan.Success && Pattern(Fan.Groups["target"].Value, @"\bfans?\b").Success
+            && !Pattern(Fan.Groups["target"].Value, @"\b(?:lights?|lamps?|brightness)\b|^light\.").Success)
+        {
+            var Target = Regex.Replace(Fan.Groups["target"].Value, @"\s+speed\b|\s+on$", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+            var SlotsMatch = Slots(DirectIntentKind.SetFanSpeed, Target);
+            return SlotsMatch with { SpeedPercent = int.Parse(Fan.Groups["percent"].Value) };
+        }
+
         var Match = Pattern(Text, @"^(?:turn|switch) (?:(?<target>.+?) on|on (?<target>.+?)) (?:to |at )?(?<percent>-?\d{1,9})\s*(?:percent|%)?$");
-        if (Match.Success) { return Slots(DirectIntentKind.SetBrightness, Match.Groups["target"].Value, int.Parse(Match.Groups["percent"].Value)); }
+        if (Match.Success)
+        {
+            var Target = Match.Groups["target"].Value;
+            if (Pattern(Target, @"\bfans?\b|^fan\.").Success && !Pattern(Target, @"\b(?:lights?|lamps?)\b|^light\.").Success)
+            {
+                return Slots(DirectIntentKind.SetFanSpeed, Target) with { SpeedPercent = int.Parse(Match.Groups["percent"].Value) };
+            }
+            return Slots(DirectIntentKind.SetBrightness, Target, int.Parse(Match.Groups["percent"].Value));
+        }
 
         Match = Pattern(Text, @"^turn (?<target>.+) (?<power>on|off)$");
         if (!Match.Success) { Match = Pattern(Text, @"^turn (?<power>on|off) (?<target>.+)$"); }
@@ -54,6 +73,8 @@ public sealed class IntentClassifier : IIntentEngine
         if (Match.Success)
         {
             var Target = Match.Groups["target"].Value;
+            if (Pattern(Target, @"\bfans?\b|^fan\.").Success
+                && !Pattern(Target, @"\b(?:lights?|lamps?|brightness)\b|^light\.").Success) { return null; }
             // A bare number is brightness only for a light target, not a thermostat or other device.
             if (Text.EndsWith("percent", StringComparison.Ordinal) || Text.EndsWith('%')
                 || Pattern(Target, @"\b(?:light|lights|lamp|lamps)\b").Success || Target.StartsWith("light.", StringComparison.Ordinal))
@@ -68,6 +89,12 @@ public sealed class IntentClassifier : IIntentEngine
 
         Match = Pattern(Text, @"^(?:what is|what's) the (?:state|status) of (?<target>.+)$");
         if (!Match.Success) { Match = Pattern(Text, @"^is (?<target>.+) (?:on|off)$"); }
+        if (!Match.Success)
+        {
+            var FanState = Pattern(Text, @"^(?:what is|what's) (?:(?:the )?speed of )?(?<target>.+?)(?: set to)?$");
+            if (FanState.Success && Pattern(FanState.Groups["target"].Value, @"\bfan\b|^fan\.").Success
+                && (Text.EndsWith(" set to", StringComparison.Ordinal) || Text.Contains("speed of ", StringComparison.Ordinal))) { Match = FanState; }
+        }
         if (!Match.Success) { return null; }
         var StateTarget = Match.Groups["target"].Value;
         // The native state handler reads exactly one entity. Group questions need

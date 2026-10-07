@@ -5,12 +5,28 @@ namespace Assister.Tests;
 
 public sealed class IntentEngineTests
 {
+    [Theory]
+    [InlineData(50, "matched")]
+    [InlineData(101, "invalid-request")]
+    public void FanSpeedTemplateUsesItsOwnNumericSlot(int Speed, string Status)
+    {
+        var Definition = new IntentDefinition("fan-alias", "Fan alias", "home-assistant.set-fan-speed", true,
+            ["spin {target:fan} at {speed:percent} percent"]);
+        IntentStore.Validate(Definition);
+        var Decision = IntentMatching.Match($"spin office fan at {Speed} percent", [Definition], new IntentClassifier());
+        Assert.Equal(Status, Decision.Status);
+        var Intent = Assert.Single(Decision.Candidates).Intent!;
+        Assert.Equal(Speed, Intent.SpeedPercent);
+        Assert.Null(Intent.BrightnessPercent);
+        Assert.Equal("fan", Intent.TargetDomain);
+    }
+
     [Fact]
     public void RegistryRequiresUniqueQualifiedActionsAndValidationUsesRegisteredInputs()
     {
         var Registry = IntentActionRegistry.Default;
         Assert.Equal(2, Registry.Integrations.Length);
-        Assert.Equal(8, Registry.Actions.Length);
+        Assert.Equal(9, Registry.Actions.Length);
         Assert.Throws<ArgumentException>(() => new IntentActionRegistry([new HomeAssistantIntentActions(), new HomeAssistantIntentActions()]));
         Assert.Throws<ArgumentException>(() => Registry.Get("SetBrightness"));
         Assert.Throws<ArgumentException>(() => IntentStore.Validate(new("bad-input", "Bad input", "assister.reply", true, ["hello {target}"], Response: "Hello.")));

@@ -11,7 +11,7 @@ public static class SemanticControlRequest
     private static readonly LlmTool Interpretation = new(new("interpret_device_request",
         "Describe whether the current user is requesting an immediate device change. This tool only interprets text; it never changes a device.",
         JsonSerializer.Deserialize<JsonElement>("""
-        {"type":"object","properties":{"action":{"type":"string","enum":["none","turn_on","turn_off","set_brightness"]},"target":{"type":"string"},"brightness_pct":{"type":"integer","minimum":0,"maximum":100},"area":{"type":"string"}},"required":["action"],"additionalProperties":false}
+        {"type":"object","properties":{"action":{"type":"string","enum":["none","turn_on","turn_off","set_brightness","set_fan_speed"]},"target":{"type":"string"},"brightness_pct":{"type":"integer","minimum":0,"maximum":100},"speed_pct":{"type":"integer","minimum":0,"maximum":100},"area":{"type":"string"}},"required":["action"],"additionalProperties":false}
         """)));
 
     public static async Task<ControlRequest?> InterpretAsync(ILanguageModel Model, string Message, CancellationToken Token)
@@ -26,7 +26,7 @@ public static class SemanticControlRequest
                 + "For an immediate command extract its action and device target from the message, without inventing device names or IDs. "
                 + "Use a concise target noun phrase preserving room names, plural requests and named devices. "
                 + "Use set_brightness for requests to turn lights on at a specified percentage, including bare numbers and full brightness (100). "
-                + "Include brightness_pct only if specified; include area only if explicit. Do not infer targets from any other context. "
+                + "Use set_fan_speed and speed_pct for a fan speed command; never treat fan speed as brightness. Include brightness_pct only if specified; include area only if explicit. Do not infer targets from any other context. "
                 + "If no clear immediate action is requested, use none."),
             new("user", Message)
         ], [Interpretation], "required");
@@ -47,6 +47,8 @@ public static class SemanticControlRequest
         if (Action == "none" || !Value.TryGetProperty("target", out var Target)) { return null; }
         int? Brightness = Value.TryGetProperty("brightness_pct", out var Percent) ? Percent.GetInt32() : null;
         if (Action == "set_brightness" && Brightness is null || Action != "set_brightness" && Brightness is not null) { return null; }
-        return new(Action, Target.GetString()!, Brightness, Value.TryGetProperty("area", out var Area) ? Area.GetString() : null);
+        int? Speed = Value.TryGetProperty("speed_pct", out var SpeedValue) ? SpeedValue.GetInt32() : null;
+        if (Action == "set_fan_speed" && Speed is null || Action != "set_fan_speed" && Speed is not null) { return null; }
+        return new(Action, Target.GetString()!, Brightness, Value.TryGetProperty("area", out var Area) ? Area.GetString() : null, Speed);
     }
 }

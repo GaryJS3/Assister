@@ -203,6 +203,7 @@ App.MapGet("/api/homeassistant/entities", (string? Query, int? Limit, HomeAssist
             Entity.AreaName,
             State = Entity.State.GetProperty("state").GetString(),
             Entity.SupportsBrightness,
+            Entity.SupportsFanSpeed, Entity.FanSpeedPercent, Entity.FanPercentageStep,
             Entity.IsTemperature
         }).ToArray();
     return Results.Ok(new

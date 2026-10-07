@@ -60,7 +60,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             && System.Text.RegularExpressions.Regex.IsMatch(LanguageParser.Normalize(Request.Message), @"^(?:did you|have you) (?:turn|switch|set|dim|change)\b.*\b(?:them|it|those|these|both)\b"))
         {
             string Names(IEnumerable<string> Ids) => string.Join(" and ", Ids.Select(Id => Cache.Snapshot().Entities.FirstOrDefault(Entity => Entity.EntityId == Id)?.Name ?? Id));
-            var Action = LastAttempt.Action switch { "turn_on" => "turn on", "turn_off" => "turn off", _ => "set the brightness of" };
+            var Action = LastAttempt.Action switch { "turn_on" => "turn on", "turn_off" => "turn off", "set_fan_speed" => "set the speed of", _ => "set the brightness of" };
             var Amount = LastAttempt.BrightnessPercent is { } Percent ? " to " + Percent + " percent" : "";
             return Result(LastAttempt.Outcome == "completed" ? "The last confirmed action was to " + Action + " " + Names(LastAttempt.EntityIds) + Amount + "."
                 : "I could not confirm the last command for " + Names(LastAttempt.EntityIds) + ". Please check those devices before trying again.",
@@ -88,6 +88,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             {
                 "turn_on" => "turn on " + Names,
                 "turn_off" => "turn off " + Names,
+                "set_fan_speed" => "set " + Names + " to " + CurrentControl.SpeedPercent + " percent",
                 _ => "set " + Names + " to " + CurrentControl.Brightness + " percent"
             };
         }
@@ -100,12 +101,12 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         {
             Decision = await Classifier.MatchAsync(ClassifierText, CancellationToken);
             Intent = Decision.Match?.Intent;
-            if (CurrentControl is null && Intent is { Kind: DirectIntentKind.TurnOn or DirectIntentKind.TurnOff or DirectIntentKind.SetBrightness })
-                CurrentControl = new(Intent.Kind == DirectIntentKind.TurnOn ? "turn_on" : Intent.Kind == DirectIntentKind.TurnOff ? "turn_off" : "set_brightness",
-                    Intent.Target, Intent.BrightnessPercent, Intent.ExplicitArea);
+            if (CurrentControl is null && Intent is { Kind: DirectIntentKind.TurnOn or DirectIntentKind.TurnOff or DirectIntentKind.SetBrightness or DirectIntentKind.SetFanSpeed })
+                CurrentControl = new(Intent.Kind == DirectIntentKind.TurnOn ? "turn_on" : Intent.Kind == DirectIntentKind.TurnOff ? "turn_off" : Intent.Kind == DirectIntentKind.SetFanSpeed ? "set_fan_speed" : "set_brightness",
+                    Intent.Target, Intent.BrightnessPercent, Intent.ExplicitArea, Intent.SpeedPercent);
             Step.Input(new { originalInput = Request.Message, normalizedInput = IntentClassifier.Normalize(Request.Message) }, false);
             Step.Output(new { matched = Decision.Status == "matched", rule = Decision.Match?.Definition.BuiltIn == true && Intent is not null ? Intent.MatchedRule : Decision.Match?.Definition.Id, intent = Intent?.Kind.ToString(),
-                Intent?.Target, Intent?.BrightnessPercent, Intent?.ExplicitArea, reason = Decision.Reason }, false);
+                Intent?.Target, Intent?.BrightnessPercent, Intent?.SpeedPercent, Intent?.ExplicitArea, reason = Decision.Reason }, false);
             Step.Metadata(new { ruleId = Decision.Match?.Definition.Id, actionId = Decision.Match?.Definition.ActionId, integrationId = Decision.Match?.Definition.ActionId.Split('.')[0],
                 pattern = Decision.Match?.Pattern, candidates = Decision.Candidates.Select(Item => Item.Definition.Id), Decision.Reason });
             Step.Complete(Decision.Status);
@@ -152,6 +153,9 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             return Result("Brightness must be between 0 and 100 percent.", "invalid-request");
         }
 
+        if (Intent.Kind == DirectIntentKind.SetFanSpeed && Intent.SpeedPercent is not (>= 0 and <= 100))
+        { return Result("Fan speed must be between 0 and 100 percent.", "invalid-request"); }
+
         var Snapshot = Cache.Snapshot();
         if (Snapshot.IsStale) { return Result("Home Assistant is unavailable. Please try again when it reconnects.", "unavailable"); }
         using (var Step = RunTracing.Start("Entity resolution", "Resolve the named device against the current Home Assistant cache and requested area."))
@@ -181,9 +185,9 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             IntentResult Response;
             using (var Step = RunTracing.Start("Intent execution", "Execute the resolved intent or answer from cached state."))
             {
-                Step.Input(new { action = Intent.Kind.ToString(), entities = Resolution.Entities.Select(Entity => Entity.EntityId), Intent.BrightnessPercent });
+                Step.Input(new { action = Intent.Kind.ToString(), entities = Resolution.Entities.Select(Entity => Entity.EntityId), Intent.BrightnessPercent, Intent.SpeedPercent });
                 if (DeviceContext is not null && CurrentControl is not null)
-                    DeviceContext.LastAttempted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), "unconfirmed", DateTimeOffset.UtcNow, Intent.BrightnessPercent);
+                    DeviceContext.LastAttempted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), "unconfirmed", DateTimeOffset.UtcNow, Intent.BrightnessPercent, Intent.SpeedPercent);
                 Response = Actions is null ? await Handler.ExecuteAsync(Intent, Resolution, CancellationToken)
                     : await Actions.ExecuteAsync(Decision.Match!, Resolution, CancellationToken);
                 Step.Output(new { Response.Response, Response.Outcome });
@@ -194,7 +198,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
                 DeviceContext.References = Resolution.Entities.Take(10).Select(Entity => new DeviceReference(Entity.EntityId, Entity.Name)).ToArray();
                 DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
                 if (Response.Outcome == "succeeded" && CurrentControl is not null)
-                    DeviceContext.LastCompleted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), DateTimeOffset.UtcNow, Intent.BrightnessPercent);
+                    DeviceContext.LastCompleted = new(CurrentControl.Action, Resolution.Entities.Select(Entity => Entity.EntityId).ToArray(), DateTimeOffset.UtcNow, Intent.BrightnessPercent, Intent.SpeedPercent);
                 if (CurrentControl is not null && DeviceContext.LastAttempted is { } Attempt)
                     DeviceContext.LastAttempted = Attempt with { Outcome = Response.Outcome == "succeeded" ? "completed" : Response.Outcome };
             }

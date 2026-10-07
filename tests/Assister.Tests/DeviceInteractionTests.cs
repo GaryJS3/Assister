@@ -18,6 +18,46 @@ namespace Assister.Tests;
 public sealed class DeviceInteractionTests
 {
     [Fact]
+    public async Task ModelFanControlUsesAuthorizedPercentageAndNeverLightBrightness()
+    {
+        await using var App = await Fixture.Create();
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"office fan","domains":["fan"]}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"fan.office_fan","action":"set_fan_speed","speed_pct":50}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new("Fan speed command completed.", [], "stop"));
+        var Answer = await App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None);
+        Assert.Contains("completed", Answer);
+        var Action = Assert.Single(App.Actions.Calls);
+        Assert.Equal(HomeAssistantAction.SetFanSpeed, Action.Action);
+        Assert.Equal(50, Action.SpeedPercent);
+        Assert.Null(Action.BrightnessPercent);
+        var Search = Json(App.Model.Requests[1].Messages.Single(Message => Message.ToolCallId == "search").Content!)[0];
+        Assert.Equal(30, Search.GetProperty("speed_pct").GetDouble());
+        Assert.True(Search.GetProperty("supports_fan_speed").GetBoolean());
+        Assert.Equal(10, Search.GetProperty("percentage_step").GetDouble());
+    }
+
+    [Theory]
+    [InlineData("light.office_fan", 50)]
+    [InlineData("fan.office_fan", 25)]
+    public async Task FanControlCannotChangeLightsOrUseUnauthorizedSpeed(string Target, int Speed)
+    {
+        await using var App = await Fixture.Create();
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"office"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", JsonSerializer.Serialize(new { entity_id = Target, action = "set_fan_speed", speed_pct = Speed }))], "tool_calls"));
+        App.Model.Responses.Enqueue(new("Done.", [], "stop"));
+        if (Target.StartsWith("light.", StringComparison.Ordinal))
+        {
+            var Answer = await App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None);
+            Assert.Contains("Which fan", Answer);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<ControlNotConfirmedException>(() => App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None));
+        }
+        Assert.Empty(App.Actions.Calls);
+    }
+
+    [Fact]
     public async Task WholeHouseStatusUsesModelSearchWithoutDeviceChanges()
     {
         await using var App = await Fixture.Create();
@@ -426,7 +466,7 @@ public sealed class DeviceInteractionTests
                   {"entity_id":"light.kitchen_main_lights","state":"off","attributes":{"friendly_name":"Kitchen Main Lights","brightness":null,"supported_color_modes":["brightness"]}},
                   {"entity_id":"light.bedroom","state":"off","attributes":{"friendly_name":"Bedroom Light"}},
                   {"entity_id":"device_tracker.office_lights","state":"home","attributes":{"friendly_name":"Office Lights"}},
-                  {"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan"}}
+                  {"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan","supported_features":49,"percentage":30,"percentage_step":10}}
                 ]
                 """), Json("{}"), Json("""[{"entity_id":"light.office_fan","area_id":"office"},{"entity_id":"light.office_fan_light_2","area_id":"office"}]"""),
                 Json("[]"), Json("""[{"area_id":"office","name":"Office"}]"""));

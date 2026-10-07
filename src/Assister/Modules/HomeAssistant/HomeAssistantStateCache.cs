@@ -7,6 +7,12 @@ public sealed record HomeAssistantEntity(string EntityId, string Name, string? A
     public string Domain => EntityId.Split('.')[0];
     public IReadOnlyList<string> Aliases { get; init; } = [];
     public string? DeviceName { get; init; }
+    public bool SupportsFanSpeed => Domain == "fan" && State.GetProperty("attributes").TryGetProperty("supported_features", out var Features)
+        && Features.ValueKind == JsonValueKind.Number && Features.TryGetInt32(out var Bits) && (Bits & 1) != 0;
+    public double? FanSpeedPercent => Domain == "fan" && State.GetProperty("attributes").TryGetProperty("percentage", out var Value)
+        && Value.ValueKind == JsonValueKind.Number && Value.TryGetDouble(out var Percent) && double.IsFinite(Percent) && Percent is >= 0 and <= 100 ? Percent : null;
+    public double? FanPercentageStep => Domain == "fan" && State.GetProperty("attributes").TryGetProperty("percentage_step", out var Value)
+        && Value.ValueKind == JsonValueKind.Number && Value.TryGetDouble(out var Step) && double.IsFinite(Step) && Step is > 0 and <= 100 ? Step : null;
     public bool IsUnavailable => State.GetProperty("state").GetString() is "unavailable" or "unknown";
     public bool IsTemperature => Domain == "sensor" && State.GetProperty("attributes").TryGetProperty("device_class", out var Class)
         && Class.ValueKind == JsonValueKind.String && Class.GetString() == "temperature";

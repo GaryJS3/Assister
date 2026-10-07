@@ -33,7 +33,7 @@ public static class IntentTemplate
         var Slots = new HashSet<string>();
         string? Domain = null;
         var Index = 0;
-        foreach (Match Slot in Regex.Matches(Text, @"\{(?<name>target|brightness|area)(?::(?<type>light|switch|entity|percent|area))?\}", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
+        foreach (Match Slot in Regex.Matches(Text, @"\{(?<name>target|brightness|speed|area)(?::(?<type>light|switch|fan|entity|percent|area))?\}", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
         {
             var Literal = Text[Index..Slot.Index];
             if (Literal.Contains('{') || Literal.Contains('}')) { throw new ArgumentException("Unknown slot. Use target, brightness or area."); }
@@ -42,11 +42,11 @@ public static class IntentTemplate
             var Type = Slot.Groups["type"].Value;
             if (!Slots.Add(Name)) { throw new ArgumentException("A phrase cannot repeat the same slot."); }
             if (Index > 0 && Slot.Index == Index) { throw new ArgumentException("Separate slots with literal words."); }
-            if (Name == "brightness" && Type is not ("" or "percent")
+            if (Name is "brightness" or "speed" && Type is not ("" or "percent")
                 || Name == "area" && Type is not ("" or "area")
-                || Name == "target" && Type is not ("" or "light" or "switch" or "entity")) { throw new ArgumentException("The slot type does not match its name."); }
-            if (Name == "target" && Type is "light" or "switch") { Domain = Type; }
-            Pattern.Append(Name == "brightness" ? @"(?<brightness>-?\d{1,9})" : $"(?<{Name}>.{{1,256}}?)");
+                || Name == "target" && Type is not ("" or "light" or "switch" or "fan" or "entity")) { throw new ArgumentException("The slot type does not match its name."); }
+            if (Name == "target" && Type is "light" or "switch" or "fan") { Domain = Type; }
+            Pattern.Append(Name is "brightness" or "speed" ? $@"(?<{Name}>-?\d{{1,9}})" : $"(?<{Name}>.{{1,256}}?)");
             Index = Slot.Index + Slot.Length;
         }
         var Tail = Text[Index..];
@@ -86,8 +86,10 @@ public static class IntentMatching
                 var Target = Compiled.Slots.Contains("target") ? LanguageParser.Noun(Match.Groups["target"].Value) : Definition.Target;
                 var Area = Compiled.Slots.Contains("area") ? LanguageParser.Noun(Match.Groups["area"].Value) : Definition.Area;
                 int? Brightness = Compiled.Slots.Contains("brightness") ? int.Parse(Match.Groups["brightness"].Value, CultureInfo.InvariantCulture) : Definition.Brightness;
+                int? Speed = Compiled.Slots.Contains("speed") ? int.Parse(Match.Groups["speed"].Value, CultureInfo.InvariantCulture) : Definition.SpeedPercent;
                 var Intent = (Registry ?? IntentActionRegistry.Default).Get(Definition.ActionId).DeviceIntent is { } Kind
-                    ? new IntentMatch(Kind, Kind == DirectIntentKind.QueryTemperature ? "temperature" : Target ?? "", Brightness, Area, Compiled.TargetDomain) : null;
+                    ? new IntentMatch(Kind, Kind == DirectIntentKind.QueryTemperature ? "temperature" : Target ?? "", Kind == DirectIntentKind.SetFanSpeed ? null : Brightness,
+                        Area, Compiled.TargetDomain, Speed) : null;
                 // Two patterns in one definition may extract different slots; retain conflicts.
                 var Equivalent = Candidates.FindIndex(Item => Item.Definition.Id == Definition.Id
                     && Item.Intent is { } Prior && Intent is not null && (Prior with { TargetDomain = null }) == (Intent with { TargetDomain = null })
@@ -106,6 +108,8 @@ public static class IntentMatching
         {
             return new("invalid-request", Normalized, Candidates.ToArray(), "Brightness must be between 0 and 100 percent.");
         }
+        if (Candidates[0].Intent is { Kind: DirectIntentKind.SetFanSpeed, SpeedPercent: not (>= 0 and <= 100) })
+        { return new("invalid-request", Normalized, Candidates.ToArray(), "Fan speed must be between 0 and 100 percent."); }
         return new("matched", Normalized, Candidates.ToArray(), "One enabled deterministic rule matched.");
     }
 }
@@ -121,9 +125,10 @@ public static class IntentResponses
         }
         if (Candidate.Definition.ActionId == "assister.time") { Response = $"It is {Time.ToString("h:mm tt", CultureInfo.InvariantCulture)}."; }
         if (Candidate.Definition.ActionId == "assister.date") { Response = $"Today is {Time.ToString("dddd, MMMM d, yyyy", CultureInfo.InvariantCulture)}."; }
-        return Regex.Replace(Candidate.Definition.Response, @"\{(?<slot>response|target|brightness|area|time|date)\}", Match => Match.Groups["slot"].Value switch
+        return Regex.Replace(Candidate.Definition.Response, @"\{(?<slot>response|target|brightness|speed|area|time|date)\}", Match => Match.Groups["slot"].Value switch
         {
             "response" => Response, "target" => Candidate.Intent?.Target ?? "", "brightness" => Candidate.Intent?.BrightnessPercent?.ToString(CultureInfo.InvariantCulture) ?? "",
+            "speed" => Candidate.Intent?.SpeedPercent?.ToString(CultureInfo.InvariantCulture) ?? "",
             "area" => Candidate.Intent?.ExplicitArea ?? "", "time" => Time.ToString("h:mm tt", CultureInfo.InvariantCulture),
             _ => Time.ToString("dddd, MMMM d, yyyy", CultureInfo.InvariantCulture)
         }, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
