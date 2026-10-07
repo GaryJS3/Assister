@@ -53,7 +53,8 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
             // A room name inside a device's full name does not require an HA area assignment.
             // Prefer that named device before interpreting "living room light" as an area query.
             var NamedDomain = Domain ?? (Target.EndsWith(" light", StringComparison.Ordinal) || Target.EndsWith(" lights", StringComparison.Ordinal)
-                ? "light" : Target.EndsWith(" switch", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal) ? "switch" : null);
+                ? "light" : Target.EndsWith(" switch", StringComparison.Ordinal) || Target.EndsWith(" switches", StringComparison.Ordinal) ? "switch"
+                : Target.EndsWith(" fan", StringComparison.Ordinal) || Target.EndsWith(" fans", StringComparison.Ordinal) ? "fan" : null);
             var Specific = Target is not ("light" or "lights" or "switch" or "switches" or "fan" or "fans" or "temperature");
             var Named = Candidates.Where(Entity => Specific && (NamedDomain is null || Entity.Domain == NamedDomain)
                 && Names(Entity).Any(Name => LanguageParser.Noun(Name) == Target)).ToArray();

@@ -9,6 +9,19 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Fact]
+    public void FanQueryDoesNotMatchLightsSharingItsHomeAssistantDeviceName()
+    {
+        var Fan = new HomeAssistantEntity("fan.office_fan", "Office Fan", "office", "Office",
+            Json("""{"state":"on","attributes":{"percentage":50,"supported_features":49}}""")) { DeviceName = "Office Fan" };
+        var Light = new HomeAssistantEntity("light.office_fan", "Office Yellow Light", "office", "Office",
+            Json("""{"state":"off","attributes":{}}""")) { DeviceName = "Office Fan" };
+        var Intent = new IntentClassifier().Classify("What is the office fan set to?")!;
+        var Result = new HomeAssistantEntityResolver().Resolve(Intent, null, new(false, [Fan, Light], Json("{}")));
+        Assert.Equal("fan.office_fan", Assert.Single(Result.Entities).EntityId);
+        Assert.Empty(Result.Alternatives);
+    }
+
     [Theory]
     [InlineData("Set the office fan speed to 50%.")]
     [InlineData("Can you set the office fan to 50%?")]
