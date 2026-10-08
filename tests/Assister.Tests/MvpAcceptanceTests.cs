@@ -71,6 +71,7 @@ public sealed class MvpAcceptanceTests
         App.Model.Responses.Enqueue(Call("daily", "weather_forecast", new { type = "daily" }));
         App.Model.Responses.Enqueue(new("The forecast is sunny, around 75 degrees Fahrenheit.", [], "stop"));
         var First = await App.VoiceAsync("What is the weather this weekend?");
+        App.Model.Responses.Enqueue(Call("prior", "chat_history", new { limit = 2 }));
         App.Model.Responses.Enqueue(Call("night", "weather_forecast", new { type = "twice_daily" }));
         App.Model.Responses.Enqueue(new("Sunday night is forecast to be clear, around 60 degrees Fahrenheit.", [], "stop"));
         var Next = await App.VoiceAsync("What about Sunday night?");
@@ -79,8 +80,10 @@ public sealed class MvpAcceptanceTests
         Assert.Equal(First.Session.ConversationId, Next.Session.ConversationId);
         Assert.Equal(2, App.HttpHandler.ForecastTypes.Count);
         Assert.Equal(["daily", "twice_daily"], App.HttpHandler.ForecastTypes);
-        Assert.Contains(App.Model.Requests[2].Tools!, Tool => Tool.Function.Name == "weather_forecast");
-        Assert.Contains(App.Model.Requests[3].Messages, Message => Message.Role == "tool" && Message.Content!.Contains("is_daytime"));
+        Assert.DoesNotContain(App.Model.Requests[2].Messages, Message => Message.Content == "What is the weather this weekend?");
+        Assert.Contains(App.Model.Requests[2].Tools!, Tool => Tool.Function.Name == "chat_history");
+        Assert.Contains(App.Model.Requests[3].Tools!, Tool => Tool.Function.Name == "weather_forecast");
+        Assert.Contains(App.Model.Requests[4].Messages, Message => Message.Role == "tool" && Message.Content!.Contains("is_daytime"));
         Assert.Empty(App.Actions.Calls);
     }
 
@@ -107,7 +110,7 @@ public sealed class MvpAcceptanceTests
                 var Result = await App.Coordinator.ProcessAsync(new("continue our discussion", "first"), CancellationToken.None);
                 Assert.Equal(Conversation, Result.ConversationId);
                 var History = App.Model.Requests.Single().Messages.Skip(1).SkipLast(1).ToArray();
-                Assert.InRange(History.Sum(Message => Message.Content?.Length ?? 0), 1, 12000);
+                Assert.Empty(History);
                 Assert.DoesNotContain(History, Message => Message.Role == "tool");
                 var Rejected = await App.Coordinator.ProcessAsync(new("continue", "second", ConversationId: Conversation), CancellationToken.None);
                 Assert.Equal("invalid-request", Rejected.Outcome);
@@ -153,7 +156,7 @@ public sealed class MvpAcceptanceTests
                 { ["HomeAssistant:Url"] = "http://home.test/", ["HomeAssistant:Token"] = "test", ["Weather:EntityId"] = "  ", ["Voice:StreamingEnabled"] = "false" }).Build();
             var Store = new LocalStore(Database);
             var Tools = new[] { "ha_search", "ha_get_state", "ha_control", "ha_get_history" }
-                .Select(Name => (IAssisterTool)new HomeAssistantTool(Name, Cache, App.Actions, App.Http, Config)).Append(new WeatherTool(Cache, App.Http, Config)).ToArray();
+                .Select(Name => (IAssisterTool)new HomeAssistantTool(Name, Cache, App.Actions, App.Http, Config)).Append(new WeatherTool(Cache, App.Http, Config)).Append(new ChatHistoryTool(Store)).ToArray();
             var Registry = new ToolRegistry(Tools);
             var Intents = new IntentStore(Database, IntentActionRegistry.Default);
             await Intents.InitializeAsync(CancellationToken.None);

@@ -9,7 +9,7 @@ namespace Assister.Tools;
 public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default,
     DeviceConversationContext? Conversation = null)
 {
-    public bool ForecastAllowed { get; init; }
+    public bool ForecastAllowed { get; set; }
     public ControlRequest? Control { get; set; } = ControlRequest.Parse(Request.Message, Conversation);
     public bool SemanticControlChecked { get; set; }
     public DeviceConversationContext? ControlConversation { get; } = Conversation is null ? null : new()

@@ -78,6 +78,7 @@ Builder.Services.AddTransient<ITextToSpeechProvider>(Services =>
     return new WyomingTextToSpeechProvider(new(Config["TextToSpeech:Host"] ?? "", Config.GetValue("TextToSpeech:Port", 10200)));
 });
 Builder.Services.AddHostedService<TimerExpiryService>();
+Builder.Services.AddTransient<IAssisterTool, ChatHistoryTool>();
 foreach (var Name in new[] { "memory_store", "memory_search", "memory_delete" })
 {
     Builder.Services.AddTransient<IAssisterTool>(Services => new MemoryTool(Name, Services.GetRequiredService<LocalStore>()));

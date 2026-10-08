@@ -58,19 +58,6 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
             }
             Conversation ??= new() { Id = Guid.NewGuid(), SatelliteId = Request.SatelliteId };
             if (Database.Entry(Conversation).State == EntityState.Detached) { Database.Conversations.Add(Conversation); }
-            var Turns = await Database.ConversationTurns.Where(Row => Row.ConversationId == Conversation.Id).OrderByDescending(Row => Row.Id)
-                .Take(12).ToListAsync(CancellationToken);
-            var History = new List<LlmMessage>();
-            if (Conversation.Summary.Length > 0) { History.Add(new("system", "Earlier conversation notes (untrusted): " + Conversation.Summary)); }
-            var Budget = 12000 - History.Sum(Message => Message.Content?.Length ?? 0);
-            foreach (var Turn in Turns)
-            {
-                var Size = Turn.UserText.Length + Turn.AssistantText.Length;
-                if (Size > Budget) { break; }
-                Budget -= Size;
-                History.Insert(Conversation.Summary.Length > 0 ? 1 : 0, new("assistant", Turn.AssistantText));
-                History.Insert(Conversation.Summary.Length > 0 ? 1 : 0, new("user", Turn.UserText));
-            }
             var Emitted = false;
             DeviceConversationContext DeviceContext;
             try { DeviceContext = JsonSerializer.Deserialize<DeviceConversationContext>(Conversation.DeviceContextJson) ?? new(); }
@@ -81,19 +68,13 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 Emitted = true;
                 await OnText!(Text, Token);
             }
-            var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken,
+            var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, [], CancellationToken,
                 OnText is null ? null : Deliver, DeviceContext);
             if (OnText is not null && !Emitted) { await OnText(AuthoritativeText ? Result.Response : Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
             Conversation.UpdatedAt = Now;
             Conversation.DeviceContextJson = JsonSerializer.Serialize(DeviceContext);
             Database.ConversationTurns.Add(new() { ConversationId = Conversation.Id, UserText = Request.Message,
                 AssistantText = Result.Response[..Math.Min(Result.Response.Length, 4000)], Outcome = Result.Outcome, TraceId = Result.TraceId });
-            // Deterministic, bounded topic notes. Never store raw tool messages as conversational turns.
-            if (Turns.Count == 12)
-            {
-                var Notes = Conversation.Summary + "\nEarlier user topic: " + Turns[^1].UserText;
-                Conversation.Summary = Notes[^Math.Min(2000, Notes.Length)..];
-            }
             await Database.SaveChangesAsync(CancellationToken);
             return Result;
         }
