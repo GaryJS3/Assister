@@ -66,7 +66,13 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
                 return Result("There is no connected speaker to adjust.", "unavailable", "satellite-volume");
             if (!Satellites.State(Request.SatelliteId).Capabilities.VolumeControl)
                 return Result("Voice volume control is unavailable on this speaker. Use its volume buttons or settings.", "unsupported", "satellite-volume");
-            await Connection!.SendEventAsync(new("set-volume", (Level / (double)Maximum).ToString(System.Globalization.CultureInfo.InvariantCulture)), CancellationToken);
+            try
+            {
+                await Connection!.SendEventAsync(new("set-volume", (Level / (double)Maximum).ToString(System.Globalization.CultureInfo.InvariantCulture)), CancellationToken);
+            }
+            catch (Exception Error) when (Error is IOException or HttpRequestException or InvalidOperationException
+                || Error is OperationCanceledException && !CancellationToken.IsCancellationRequested)
+            { return Result("I could not confirm the volume command was sent. Please check the speaker.", "failed", "satellite-volume"); }
             return Result("Volume command sent.", "succeeded", "satellite-volume");
         }
         DeviceContext?.Expire();

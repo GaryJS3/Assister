@@ -27,6 +27,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
             || Regex.IsMatch(Request.Message, @"\b(?:my|mine|prefer|preference|favorite|favourite)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
         var Weather = WeatherRequestPolicy.Classify(Request.Message, History);
         var Selected = Registry.All.Keys.Where(Name => Name.StartsWith("ha_", StringComparison.Ordinal)
+            || Name == "satellite_set_volume"
             || Name == "chat_history"
             || Name == "memory_search" && Memory
             || Name == "memory_store" && MemoryAuthorization.CanStore(Request.Message)

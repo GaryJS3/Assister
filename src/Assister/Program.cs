@@ -79,6 +79,7 @@ Builder.Services.AddTransient<ITextToSpeechProvider>(Services =>
 });
 Builder.Services.AddHostedService<TimerExpiryService>();
 Builder.Services.AddTransient<IAssisterTool, ChatHistoryTool>();
+Builder.Services.AddTransient<IAssisterTool, SatelliteVolumeTool>();
 foreach (var Name in new[] { "memory_store", "memory_search", "memory_delete" })
 {
     Builder.Services.AddTransient<IAssisterTool>(Services => new MemoryTool(Name, Services.GetRequiredService<LocalStore>()));

@@ -19,6 +19,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     private readonly object Gate = new();
     private Playback? Announcement;
     private Turn? Voice;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<bool>> VolumeRequests = new();
     public string SatelliteId => Id;
     public string Name => Label;
     public string? Area => Room;
@@ -38,6 +39,12 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public bool Handle(JsonElement Message)
     {
         if (Text(Message, "deviceId") != DeviceId) { return false; }
+        if (Text(Message, "type") == "volume_result" && Text(Message, "requestId") is { } VolumeId
+            && VolumeRequests.TryGetValue(VolumeId, out var Pending))
+        {
+            Pending.TrySetResult(Text(Message, "status") == "sent");
+            return true;
+        }
         lock (Gate)
         {
             if (Text(Message, "requestId") is null && Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
@@ -87,6 +94,25 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     }
     public async Task SendEventAsync(SatelliteEvent Event, CancellationToken Token)
     {
+        if (Event.Type == "set-volume")
+        {
+            if (!double.TryParse(Event.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out var Volume) || !double.IsFinite(Volume) || Volume is < 0 or > 1)
+                throw new ArgumentException("Volume must be between zero and one.");
+            var RequestId = Guid.NewGuid().ToString("N");
+            var Pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            VolumeRequests[RequestId] = Pending;
+            try
+            {
+                await Send(new { type = "set_volume", deviceId = DeviceId, requestId = RequestId, volume = Volume }, Token);
+                if (!await Pending.Task.WaitAsync(TimeSpan.FromSeconds(5), Token))
+                    throw new IOException("Controller rejected volume command.");
+                Manager.Record(Id, "Volume command sent");
+            }
+            catch (TimeoutException) { throw new IOException("Volume command acknowledgement timed out."); }
+            finally { VolumeRequests.TryRemove(RequestId, out _); }
+            return;
+        }
         if (Event.Type != "stop-playback") { return; }
         object? Command;
         Turn? CancelledTurn = null;

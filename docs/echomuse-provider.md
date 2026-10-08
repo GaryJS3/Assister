@@ -23,8 +23,19 @@ ownership conflict and a 60-second retry interval. Errors log types, never remot
 Authenticated `/api/devices` inventory imports approved logical identities as
 `echomuse-{deviceId}`. Existing name/area/enabled policy remains authoritative. Runtime device
 connectivity, firmware, selected wake model, volume and mute refresh every 15 seconds.
-Wake-word writes, volume/mute writes and media commands are not advertised through this
-initial adapter because those REST write contracts have not been validated.
+Controllers advertising `volumeControl: true` in the voice hello support volume writes.
+Assister sends `set_volume` with `deviceId`, a unique `requestId` and a normalized
+`volume` (0–1); `volume_result` acknowledges `sent` or `rejected`. The controller
+uses its codec conversion and output-mute handling. A sent acknowledgement confirms
+dispatch, not physical volume; inventory remains the source of reported volume.
+Older controllers continue to report volume control as unsupported. Wake-word and
+mute writes remain unsupported by this adapter.
+
+Direct commands include “volume 5” (0–10) and “set the volume to 50 percent”.
+The LLM's `satellite_set_volume` tool accepts either `percent` or `delta_percent`
+and always targets the request's current satellite. Relative changes require known
+reported volume. The tool rejects repeat volume attempts within the same request.
+Both Assister and the EchoMuse controller change must be deployed to enable this.
 
 Each activation has a separate bounded channel and cancellation lifetime. The input format
 is 16 kHz mono signed 16-bit PCM; malformed, overflowing or over-20-second audio is rejected.
