@@ -229,6 +229,44 @@ public sealed class DirectIntentTests
         Assert.Empty(Fake.Calls);
     }
 
+    [Theory]
+    [InlineData("my")]
+    [InlineData("our")]
+    [InlineData("the")]
+    public async Task PossessiveAreaTemperatureUsesConciseRoundedReading(string Prefix)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"sensor.office_temperature","new_state":{"entity_id":"sensor.office_temperature","state":"79.376","attributes":{"friendly_name":"OfficeTemp LYWSD03MMC/MJWSD05MMC_PVVX-tempc","device_class":"temperature","unit_of_measurement":"°F"}}}"""));
+        var Result = await Coordinator.ProcessAsync(new($"What's the temperature in {Prefix} office?"), default);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("Office temperature is 79.4 degrees Fahrenheit.", Result.Response);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Fact]
+    public async Task TranscriptArtifactOffersRetryWithoutChangingDevice()
+    {
+        var (Coordinator, Fake, _) = Create();
+        var Result = await Coordinator.ProcessAsync(new("Set B, reading lamp to 100."), default);
+        Assert.Equal("ambiguous", Result.Outcome);
+        Assert.Equal("Did you mean Desk light? Please repeat the command.", Result.Response);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Theory]
+    [InlineData("Volume 10", "unavailable")]
+    [InlineData("set the volume to 50 percent", "unavailable")]
+    [InlineData("Volume 11", "invalid-request")]
+    [InlineData("Volume -1", "invalid-request")]
+    public async Task VolumeDoesNotFallThroughToLanguageModel(string Message, string Outcome)
+    {
+        var (Coordinator, Fake, _) = Create();
+        var Result = await Coordinator.ProcessAsync(new(Message), default);
+        Assert.Equal(Outcome, Result.Outcome);
+        Assert.Equal("satellite-volume", Result.HandledBy);
+        Assert.Empty(Fake.Calls);
+    }
+
     [Fact]
     public async Task AliasesResolveButPartialNamesAndDuplicateNamesRequireClarification()
     {
@@ -256,7 +294,35 @@ public sealed class DirectIntentTests
         Assert.Single(Fake.Calls);
     }
 
-    private static (RequestCoordinator, FakeHomeAssistant, HomeAssistantStateCache) Create()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VolumeHonorsSpeakerCapabilityAndSendsNormalizedLevel(bool Supported)
+    {
+        var Manager = new Assister.Satellites.SatelliteManager();
+        var Speaker = new VolumeSpeaker();
+        Manager.Register(Speaker);
+        Manager.Update("test", State => State with { Capabilities = new() { VolumeControl = Supported } });
+        var (Coordinator, _, _) = Create(Manager);
+        var Result = await Coordinator.ProcessAsync(new("Volume 10"), default);
+        Assert.Equal(Supported ? "succeeded" : "unsupported", Result.Outcome);
+        Assert.Equal("satellite-volume", Result.HandledBy);
+        if (Supported) { Assert.Equal(new Assister.Satellites.SatelliteEvent("set-volume", "1"), Assert.Single(Speaker.Events)); }
+        else { Assert.Empty(Speaker.Events); Assert.Contains("volume buttons", Result.Response); }
+    }
+
+    private sealed class VolumeSpeaker : Assister.Satellites.ISatelliteConnection
+    {
+        public string SatelliteId => "test";
+        public string Name => "Test";
+        public string? Area => null;
+        public List<Assister.Satellites.SatelliteEvent> Events { get; } = [];
+        public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new NotSupportedException();
+        public Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) => throw new NotSupportedException();
+        public Task SendEventAsync(Assister.Satellites.SatelliteEvent Event, CancellationToken Token) { Events.Add(Event); return Task.CompletedTask; }
+    }
+
+    private static (RequestCoordinator, FakeHomeAssistant, HomeAssistantStateCache) Create(Assister.Satellites.SatelliteManager? Satellites = null)
     {
         var Cache = new HomeAssistantStateCache();
         Cache.Load(Json("""
@@ -277,7 +343,7 @@ public sealed class DirectIntentTests
             Json("""[{"area_id":"office","name":"Office"},{"area_id":"kitchen","name":"Kitchen"}]"""));
         Cache.SetStale(false);
         var Fake = new FakeHomeAssistant();
-        return (new(new IntentClassifier(), new HomeAssistantEntityResolver(), new(Fake), Cache, NullLogger<RequestCoordinator>.Instance), Fake, Cache);
+        return (new(new IntentClassifier(), new HomeAssistantEntityResolver(), new(Fake), Cache, NullLogger<RequestCoordinator>.Instance, Satellites: Satellites), Fake, Cache);
     }
 
     private static JsonElement Json(string Text) => JsonSerializer.Deserialize<JsonElement>(Text);

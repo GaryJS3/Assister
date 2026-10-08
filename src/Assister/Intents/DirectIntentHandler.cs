@@ -24,6 +24,13 @@ public sealed class DirectIntentHandler(IHomeAssistantClient HomeAssistant, Home
             InteractionFeedback.Emit("context.selected", new ContextSelection("entity-" + Entity.EntityId, "entity_state", "home_assistant", Entity.Name,
                 System.Text.Json.JsonSerializer.Serialize(new { state = Value, unit = Unit }), new { entityId = Entity.EntityId }, 0));
             Unit = Unit switch { "°F" => "degrees Fahrenheit", "°C" => "degrees Celsius", _ => Unit };
+            if (Intent.Kind == DirectIntentKind.QueryTemperature
+                && double.TryParse(Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var Temperature)
+                && double.IsFinite(Temperature))
+            {
+                var Location = Entity.AreaName ?? Resolution.EffectiveArea;
+                return new($"{(Location is null ? "The temperature" : Location + " temperature")} is {Temperature.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}{(Unit is null ? "" : " " + Unit)}.", "succeeded");
+            }
             return new($"{Entity.Name} is {Value}{(Unit is null ? "" : " " + Unit)}.", "succeeded");
         }
 

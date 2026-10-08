@@ -31,7 +31,9 @@ public static class LanguageParser
     public static string Noun(string Text)
     {
         var Value = Normalize(Text);
-        return Value.StartsWith("the ", StringComparison.Ordinal) ? Value[4..] : Value;
+        foreach (var Prefix in new[] { "the ", "my ", "our " })
+            if (Value.StartsWith(Prefix, StringComparison.Ordinal)) { return Value[Prefix.Length..]; }
+        return Value;
     }
 }
 

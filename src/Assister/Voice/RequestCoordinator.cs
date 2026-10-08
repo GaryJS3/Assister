@@ -53,6 +53,22 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         {
             return Result(TimerResponse, "succeeded", "timer");
         }
+        var VolumeCommand = System.Text.RegularExpressions.Regex.Match(LanguageParser.Normalize(Request.Message),
+            @"^(?:(?:set|turn|change) (?:the )?)?volume(?: (?:to|at))? (?<level>-?\d{1,3})(?<percent>\s*(?:percent|%))?$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        if (VolumeCommand.Success)
+        {
+            var Level = int.Parse(VolumeCommand.Groups["level"].Value, System.Globalization.CultureInfo.InvariantCulture);
+            // Bare levels follow the familiar 0–10 voice-device scale; explicit percentages use 0–100.
+            var Maximum = VolumeCommand.Groups["percent"].Length > 0 ? 100 : 10;
+            if (Level < 0 || Level > Maximum) { return Result($"Volume must be between 0 and {Maximum}.", "invalid-request", "satellite-volume"); }
+            if (Satellites is null || !Satellites.TryGet(Request.SatelliteId, out var Connection))
+                return Result("There is no connected speaker to adjust.", "unavailable", "satellite-volume");
+            if (!Satellites.State(Request.SatelliteId).Capabilities.VolumeControl)
+                return Result("Voice volume control is unavailable on this speaker. Use its volume buttons or settings.", "unsupported", "satellite-volume");
+            await Connection!.SendEventAsync(new("set-volume", (Level / (double)Maximum).ToString(System.Globalization.CultureInfo.InvariantCulture)), CancellationToken);
+            return Result("Volume command sent.", "succeeded", "satellite-volume");
+        }
         DeviceContext?.Expire();
         var CurrentControl = ControlRequest.Parse(Request.Message, DeviceContext);
         var ClassifierText = Request.Message;
@@ -174,6 +190,14 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Resolution.Entities.Count == 0)
         {
+            var SpeechArtifact = System.Text.RegularExpressions.Regex.Match(Intent.Target, @"^[a-z],\s+(?<target>.+)$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+            if (Resolution.Alternatives.Count == 0 && SpeechArtifact.Success)
+            {
+                var Suggested = Resolver.Resolve(Intent with { Target = SpeechArtifact.Groups["target"].Value }, Request.Area, Snapshot);
+                if (Suggested.Entities.Count > 0)
+                    return Result("Did you mean " + string.Join(" and ", Suggested.Entities.Select(Entity => Entity.Name)) + "? Please repeat the command.", "ambiguous", "clarification");
+            }
             if (DeviceContext is not null && Resolution.Alternatives.Count > 0)
             {
                 DeviceContext.References = Resolution.Alternatives.Where(Entity => Entity.Domain is "light" or "switch")

@@ -251,8 +251,8 @@ public sealed class BridgeTransportService(SatelliteManager Manager, IServiceSco
             PlaybackId = Guid.NewGuid().ToString();
             PlaybackSession = Announcement ? "" : TransportSession;
             PlaybackRunId = RunTracing.RunId == Guid.Empty ? null : RunTracing.RunId;
-            using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Publish audio-ready and wait for the satellite's explicit playback acknowledgement.");
-            Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow });
+            using var Delivery = RunTracing.Start("Playback", IsTone ? "Feedback tone playback" : "Satellite playback", "Publish audio-ready and wait for the satellite's explicit playback acknowledgement.");
+            Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow, isTone = IsTone });
             StartedPlayback = false;
             PlaybackTrace = Delivery;
             try
