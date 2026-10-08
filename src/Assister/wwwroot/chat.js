@@ -5,6 +5,21 @@
   let attachments = [], uploads = 0, executing = false;
   let recording, pendingAudio, registrationTimer;
   const views = new Map();
+  let toneQueue = Promise.resolve(), toneEpoch = 0, toneAudio, finishTone;
+  function stopTones() { toneEpoch++; toneAudio?.pause(); finishTone?.(); toneQueue = Promise.resolve(); }
+  function playTone(data, id) {
+    const epoch = toneEpoch;
+    toneQueue = toneQueue.then(() => {
+      if (epoch !== toneEpoch || id !== active || !$('speak').checked || Date.parse(data.expiresAt) < Date.now()) return;
+      return new Promise(resolve => {
+        const audio = new Audio(data.url); toneAudio = audio;
+        const done = () => { clearTimeout(timeout); if (toneAudio === audio) { toneAudio = null; finishTone = null; } resolve(); };
+        finishTone = done; const timeout = setTimeout(() => { audio.pause(); done(); }, 5000);
+        audio.onended = done; audio.onerror = done; audio.play().catch(done);
+      });
+    }).catch(() => {});
+    return toneQueue;
+  }
   function error(e) { $('error').textContent = e.message || String(e); }
   async function api(path, method = 'GET', body) {
     const response = await fetch('/api/client' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -13,12 +28,13 @@
     const text = await response.text(); return text ? JSON.parse(text) : null;
   }
   function closeStream() { generation++; clearTimeout(reconnect); if (socket) { socket.onclose = null; socket.close(); socket = null; } }
-  function signedOut() { closeStream(); clearInterval(registrationTimer); if (recording) stopMic(false).catch(error); $('client').hidden = true; $('login').hidden = false; $('connection').textContent = 'Disconnected'; }
+  function signedOut() { stopTones(); closeStream(); clearInterval(registrationTimer); if (recording) stopMic(false).catch(error); $('client').hidden = true; $('login').hidden = false; $('connection').textContent = 'Disconnected'; }
   function busy(value) { executing = value; $('send').disabled = value || uploads > 0 || !!recording; $('cancel').hidden = !value; $('files').disabled = value; $('mic').disabled = value || uploads > 0; }
   async function register() {
     const capabilities = ['text.input', 'text.output', 'attachments.file', 'attachments.image'];
     if (window.AudioContext && window.AudioWorkletNode && navigator.mediaDevices?.getUserMedia) capabilities.push('audio.input');
     if (window.HTMLAudioElement) capabilities.push('audio.output');
+    if (window.HTMLAudioElement) capabilities.push('audio.tones');
     await api('/clients/register', 'POST', { clientType: 'web', deviceName: 'Web conversation client', capabilities });
   }
   async function startMic() {
@@ -115,6 +131,12 @@
     if (event.sequence !== v.cursor + 1) throw new Error('Event gap. Reconnect to recover.');
     v.cursor = event.sequence;
     const data = event.data;
+    if (event.type === 'tone.play' && !replaying && item.id === active && $('speak').checked && Date.parse(data.expiresAt) >= Date.now()) {
+      if (data.placement === 'after-response-audio') {
+        if (v.audio?.ended) playTone({ ...data, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id);
+        else v.goodbye = data;
+      } else playTone(data, item.id);
+    }
     if (event.type === 'stt.partial' || event.type === 'stt.final') { v.inputText.textContent = data.text; v.status.textContent = event.type === 'stt.final' ? 'Transcribed' : 'Transcribing'; }
     if (event.type === 'stt.started') v.status.textContent = 'Transcribing';
     if (event.type === 'response.started') v.status.textContent = 'Responding';
@@ -126,10 +148,15 @@
       const report = state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error);
       v.mediaStatus.textContent = 'Audio ready';
       audio.onplaying = () => { if (!playbackId) { playbackId = crypto.randomUUID(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
-      audio.onended = () => { if (playbackId) report('completed'); playbackId = null; v.mediaStatus.textContent = 'Playback complete'; };
-      audio.onpause = () => { if (!audio.ended && playbackId) { report('stopped'); playbackId = null; v.mediaStatus.textContent = 'Playback stopped'; } };
+      audio.onended = () => { if (playbackId) report('completed'); playbackId = null; v.mediaStatus.textContent = 'Playback complete';
+        if (v.goodbye) { const cue = v.goodbye; v.goodbye = null; playTone({ ...cue, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id); } };
+      audio.onpause = () => { if (!audio.ended && playbackId) { v.goodbye = null; report('stopped'); playbackId = null; v.mediaStatus.textContent = 'Playback stopped'; } };
       audio.onerror = () => { playbackId ||= crypto.randomUUID(); report('failed'); playbackId = null; v.mediaStatus.textContent = 'Playback failed; text remains available'; };
-      if (!replaying && item.id === active && $('speak').checked) audio.play().catch(() => { v.mediaStatus.textContent = 'Audio ready — press play'; });
+      if (!replaying && item.id === active && $('speak').checked) {
+        const epoch = toneEpoch;
+        toneQueue.then(() => { if (epoch === toneEpoch && item.id === active && $('speak').checked) return audio.play(); })
+          .catch(() => { v.mediaStatus.textContent = 'Audio ready — press play'; });
+      }
     }
     if (event.type === 'context.added' || event.type === 'context.updated') {
       v.contextItems.set(data.id, data); v.contextSummary.textContent = `Context used (${v.contextItems.size})`;
@@ -148,14 +175,15 @@
     }
     if (event.type.startsWith('interaction.')) v.status.textContent = event.type.slice(12).replaceAll('_', ' ');
     if (['interaction.completed', 'interaction.failed', 'interaction.cancelled'].includes(event.type)) {
+      if (event.type === 'interaction.cancelled') { if (item.id === active) stopTones(); v.goodbye = null; v.audio?.pause(); }
       v.terminal = true;
       if (data.message) v.status.textContent += ` · ${data.message}`;
       if (item.id === active) { busy(false); $('connection').textContent = 'Connected'; }
     }
   }
-  async function replay(item) {
+  async function replay(item, live = false) {
     const v = views.get(item.id);
-    while (true) { const events = await api(`/interactions/${item.id}/events?afterSequence=${v.cursor}`); events.forEach(e => apply(item, e, true)); if (events.length < 256) break; }
+    while (true) { const events = await api(`/interactions/${item.id}/events?afterSequence=${v.cursor}`); events.forEach(e => apply(item, e, !live)); if (events.length < 256) break; }
   }
   function connect(item) {
     closeStream(); const current = generation; const v = views.get(item.id);
@@ -184,6 +212,7 @@
     };
   }
   async function open(id) {
+    stopTones();
     if (recording) await stopMic(false);
     for (const v of views.values()) v.audio?.pause();
     closeStream(); conversation = id; active = null; pendingAudio = null; pendingSubmission = null; attachments = []; renderAttachments(); busy(false); views.clear(); $('messages').replaceChildren(); $('activity').replaceChildren();
@@ -212,18 +241,19 @@
   $('composer').onsubmit = async e => {
     e.preventDefault(); const message = $('message').value.trim(); if (!message) return;
     busy(true); $('error').textContent = '';
+    stopTones();
     pendingSubmission = pendingSubmission?.message === message ? pendingSubmission : { message, idempotencyKey: crypto.randomUUID(), attachmentIds: attachments.map(a => a.id), audioAttachmentId: pendingAudio, speak: $('speak').checked };
     try {
       const item = await api(`/conversations/${conversation}/interactions`, 'POST', pendingSubmission);
       pendingSubmission = null; pendingAudio = null; attachments = []; renderAttachments(); $('message').value = ''; $('activity').replaceChildren(); active = item.id;
       if (!views.has(item.id)) view(item);
-      await replay(item); connect(item);
+      await replay(item, true); connect(item);
     } catch (e) { busy(false); error(e); }
   };
-  $('cancel').onclick = async () => { try { views.get(active)?.audio?.pause(); await api(`/interactions/${active}/cancel`, 'POST'); $('connection').textContent = 'Cancelling'; } catch (e) { error(e); } };
+  $('cancel').onclick = async () => { try { stopTones(); const v = views.get(active); if (v) v.goodbye = null; v?.audio?.pause(); await api(`/interactions/${active}/cancel`, 'POST'); $('connection').textContent = 'Cancelling'; } catch (e) { error(e); } };
   $('files').onchange = e => upload(Array.from(e.target.files), 'file_picker');
   $('mic').onclick = () => (recording ? stopMic(true) : startMic()).catch(error);
-  $('speak').onchange = () => { pendingSubmission = null; };
+  $('speak').onchange = () => { pendingSubmission = null; if (!$('speak').checked) { stopTones(); for (const v of views.values()) v.goodbye = null; } };
   $('composer').ondragover = e => { e.preventDefault(); };
   $('composer').ondrop = e => { e.preventDefault(); upload(Array.from(e.dataTransfer.files), 'drop'); };
   $('message').onpaste = e => { const files = Array.from(e.clipboardData.files); if (files.length) { e.preventDefault(); upload(files, 'clipboard'); } };

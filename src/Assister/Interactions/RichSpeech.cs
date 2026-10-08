@@ -73,7 +73,10 @@ public sealed class RichSpeech(ISpeechToTextProvider Stt, ITextToSpeechProvider 
         }
         catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }
         catch (Exception)
-        { Store.Append(Id, "tts.failed", new ProtocolError("tts_failed", "Speech generation failed. The text answer is still available.", true)); }
+        {
+            await Assister.Voice.VoiceFeedback.EmitAsync("issue", Token);
+            Store.Append(Id, "tts.failed", new ProtocolError("tts_failed", "Speech generation failed. The text answer is still available.", true));
+        }
     }
 }
 public sealed class RichSpeechException(string Code) : Exception(Code);

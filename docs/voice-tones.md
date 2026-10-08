@@ -46,7 +46,28 @@ mixing/queue contract. No rich-client event subscription is added yet.
 preview. `POST /api/satellites/{id}/tones/{name}` plays a tone as an independent
 announcement on an idle satellite and waits for playback acknowledgment; busy
 or unavailable satellites return 409. These endpoints follow the existing voice
-audio and satellite operations API boundaries. Rich clients can consume previews.
+audio and satellite operations API boundaries.
+
+Rich-client interaction streams advertise `audio.tones` and emit durable
+`tone.play` events containing `name`, `url`, `expiresAt` and `placement`. The
+server emits Confirmed after input is ready, Intent-Match/AI Think/AI Thought
+from the shared coordinator, Done before the first response text, Issue for a
+slow request or recoverable failure, Error for execution/transcription failure,
+and Goodbye before the terminal event. Tone generation follows
+`Voice:Tones:Enabled` and the slow warning follows `Voice:Tones:IssueAfterSeconds`.
+Awake remains a local microphone-ready cue: uploaded audio does not tell the
+server when a client started listening.
+
+Clients deduplicate by event sequence, skip expired cues and never autoplay
+historical events when rebuilding a conversation. Immediate cues expire after
+five seconds. A fresh `after-response-audio` cue is accepted within that window
+and held until the corresponding response finishes playing; it must be cleared
+on cancellation, stopped playback, sign-out or conversation change. It does not
+mean that speech has already been heard. The web client opts into playback with
+"Speak answers and play tones", serializes immediate cues ahead of speech, and
+does not replay Goodbye on later manual speech replays. Browser autoplay policies
+may suppress cues. Native clients receive the same events through `ObserveAsync`,
+deserialize their data as `ToneCue`, and fetch WAV audio using `DownloadToneAsync`.
 
 Definitions support sine, square, triangle and sawtooth; note volumes and master
 volume are multiplied. Attack and release are linear, capped at half the note

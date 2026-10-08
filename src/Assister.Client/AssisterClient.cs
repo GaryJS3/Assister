@@ -45,6 +45,8 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
     public async Task ReportPlaybackAsync(Guid Id, PlaybackReport Report, CancellationToken Token = default)
     { using var Response = await Http.PostAsJsonAsync($"api/client/interactions/{Id}/playback", Report, Token); Response.EnsureSuccessStatusCode(); }
     public Task<Stream> DownloadAudioAsync(Guid Id, CancellationToken Token = default) => Http.GetStreamAsync($"api/client/interactions/{Id}/audio", Token);
+    public Task<Stream> DownloadToneAsync(string Name, CancellationToken Token = default)
+        => Http.GetStreamAsync($"api/voice/tones/{Uri.EscapeDataString(Name)}.wav", Token);
     public async Task<ClientAttachment> UploadAttachmentAsync(ReadOnlyMemory<byte> Bytes, string Name, string MimeType,
         string Source = "user", CancellationToken Token = default)
     {

@@ -11,6 +11,7 @@ public sealed record DeviceRequest(Guid RequestId, Guid InteractionId, string Ta
     JsonElement Parameters, DateTimeOffset Deadline);
 public sealed record DeviceResponse(Guid RequestId, bool Success, JsonElement? Result = null, ProtocolError? Error = null);
 public sealed record PlaybackReport(string State, Guid PlaybackId);
+public sealed record ToneCue(string Name, string Url, DateTimeOffset ExpiresAt, string Placement = "immediate");
 public sealed record ClientAttachment(Guid Id, string Name, string MimeType, long Size, string Source,
     DateTimeOffset CreatedAt, string Processing, string? ClientId = null);
 public sealed record InputDocument(Guid AttachmentId, string Name, string Text, string? ClientId = null);

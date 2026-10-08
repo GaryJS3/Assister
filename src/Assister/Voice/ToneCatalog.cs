@@ -124,7 +124,7 @@ public sealed class ToneCatalog(IHostEnvironment Environment, IConfiguration Con
     }
 }
 
-// Async-local scope follows the shared coordinator without sending feedback for text clients.
+// Async-local scope follows the shared coordinator to satellite playback or rich-client cue events.
 public static class VoiceFeedback
 {
     private static readonly AsyncLocal<Func<string, CancellationToken, Task>?> Current = new();

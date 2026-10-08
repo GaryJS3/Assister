@@ -15,6 +15,65 @@ public sealed class RichClientTests
 {
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ServerToneCuesAreOrderedReplayableAndRespectDisable(bool Enabled)
+    {
+        using var Base = new TestApplication(); Base.Coordinator.Release.TrySetResult();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureAppConfiguration((_, Config) =>
+            Config.AddInMemoryCollection(new Dictionary<string, string?> { ["Voice:Tones:Enabled"] = Enabled.ToString() })));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, "Hello", "tone-cues");
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await WaitTerminal(Http, Item.Id, Deadline.Token);
+        var Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events"))!;
+        var Cues = Events.Where(Event => Event.Type == "tone.play").ToArray();
+        if (!Enabled) { Assert.Empty(Cues); return; }
+        Assert.Equal(new[] { "confirmed", "ai-think", "ai-thought", "done", "goodbye" },
+            Cues.Select(Event => Event.Data.Deserialize<ToneCue>(Json)!.Name));
+        Assert.True(Cues.Single(Event => Event.Data.GetProperty("name").GetString() == "done").Sequence < Events.First(Event => Event.Type == "response.delta").Sequence);
+        Assert.True(Cues.Last().Sequence < Events.Single(Event => Event.Type == "interaction.completed").Sequence);
+        foreach (var Event in Cues)
+        {
+            var Cue = Event.Data.Deserialize<ToneCue>(Json)!;
+            Assert.Equal(Event.Timestamp.AddSeconds(5).ToUnixTimeSeconds(), Cue.ExpiresAt.ToUnixTimeSeconds());
+            Assert.Equal("immediate", Cue.Placement);
+            using var Audio = await Client.DownloadToneAsync(Cue.Name, Deadline.Token);
+            Assert.True(Audio.CanRead);
+        }
+        var Ws = App.Server.CreateWebSocketClient(); Ws.ConfigureRequest = Request => Request.Headers.Authorization = "Bearer " + Token;
+        var Observer = new Assister.Client.AssisterClient(Http, (Uri, Token) => Ws.ConnectAsync(Uri, Token));
+        var Replayed = new List<InteractionEvent>();
+        await foreach (var Event in Observer.ObserveAsync(Item.Id, Token: Deadline.Token)) Replayed.Add(Event);
+        Assert.Equal(Cues.Select(Event => Event.EventId), Replayed.Where(Event => Event.Type == "tone.play").Select(Event => Event.EventId));
+    }
+    [Fact]
+    public async Task SlowInteractionIssuesOneCueAndCancellationStopsFurtherCues()
+    {
+        using var Base = new TestApplication();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureAppConfiguration((_, Config) =>
+            Config.AddInMemoryCollection(new Dictionary<string, string?> { ["Voice:Tones:IssueAfterSeconds"] = "1" })));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, "wait", "tone-cancel");
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        InteractionEvent[] Events;
+        do
+        {
+            await Task.Delay(50, Deadline.Token);
+            Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        } while (!Events.Any(Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "issue"));
+        await Client.CancelAsync(Item.Id, Deadline.Token);
+        await WaitTerminal(Http, Item.Id, Deadline.Token);
+        Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.Single(Events, Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "issue");
+        Assert.DoesNotContain(Events, Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() is "error" or "goodbye");
+        Assert.Equal("interaction.cancelled", Events.Last().Type);
+    }
     [Fact]
     public async Task VoiceTranscriptTtsAndPlaybackHaveIndependentDurableStates()
     {
@@ -36,6 +95,7 @@ public sealed class RichClientTests
         Assert.Contains(Events, Event => Event.Type == "stt.partial"); Assert.Contains(Events, Event => Event.Type == "stt.final");
         Assert.True(Events.Single(Event => Event.Type == "response.completed").Sequence < Events.Single(Event => Event.Type == "tts.started").Sequence);
         Assert.Contains(Events, Event => Event.Type == "tts.completed");
+        Assert.Equal("after-response-audio", Events.Single(Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "goodbye").Data.GetProperty("placement").GetString());
         using var Wave = await Client.DownloadAudioAsync(Item.Id); using var Bytes = new MemoryStream(); await Wave.CopyToAsync(Bytes);
         Assert.True(Bytes.ToArray().AsSpan().StartsWith("RIFF"u8));
         Assert.Equal(Item.Id, (await Client.SubmitAsync(Conversation.Id, Request)).Id); // Transcript updates do not break submission idempotency.
@@ -59,10 +119,12 @@ public sealed class RichClientTests
         Assert.Equal("Hello world", (await Client.GetAsync(NoSpeech.Id))!.Response);
         Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"/api/client/interactions/{NoSpeech.Id}/audio")).StatusCode);
         Assert.Contains((await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{NoSpeech.Id}/events"))!, Event => Event.Type == "tts.failed");
+        Assert.Contains((await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{NoSpeech.Id}/events"))!, Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "issue");
         var Calls = Base.Coordinator.Calls; Stt.Fail = true;
         var NoTranscript = await Client.SubmitAsync(Conversation.Id, Request with { IdempotencyKey = "stt-fails" });
         Assert.Equal("failed", (await WaitTerminal(Http, NoTranscript.Id, Deadline.Token)).Status);
         Assert.Equal(Calls, Base.Coordinator.Calls);
+        Assert.Contains((await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{NoTranscript.Id}/events"))!, Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "error");
         Stt.Fail = false; Tts.Fail = false; Tts.Block = true;
         var StopSpeech = await Client.SubmitAsync(Conversation.Id, Request with { IdempotencyKey = "cancel-tts" });
         await Tts.Started.Task.WaitAsync(Deadline.Token); await Client.CancelAsync(StopSpeech.Id);
@@ -189,6 +251,7 @@ public sealed class RichClientTests
         Assert.Equal("failed", Final.Status); // An unconfigured HA connection must never issue a control.
         var Events = (await Client.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events"))!;
         Assert.Contains(Events, Event => Event.Type == "step.started" && Event.Data.GetProperty("kind").GetString() == "IntentClassification");
+        Assert.Contains(Events, Event => Event.Type == "tone.play" && Event.Data.GetProperty("name").GetString() == "intent-match");
         Assert.Equal(Final.Response, Events.Single(Event => Event.Type == "response.completed").Data.GetProperty("text").GetString());
         Assert.Equal(Final.Response, string.Concat(Events.Where(Event => Event.Type == "response.delta").Select(Event => Event.Data.GetProperty("text").GetString())));
         Assert.Equal(HttpStatusCode.OK, (await Client.GetAsync($"/api/client/interactions/{Item.Id}/trace")).StatusCode);
@@ -339,6 +402,8 @@ public sealed class RichClientTests
         {
             LastRequest = Request; Calls++;
             InteractionFeedback.Emit("step.started", new { stepId = Guid.NewGuid(), label = "Running local test model" });
+            await Assister.Voice.VoiceFeedback.EmitAsync("ai-think", Token);
+            await Assister.Voice.VoiceFeedback.EmitAsync("ai-thought", Token);
             await OnText("Hello", Token);
             if (Request.Message == "wait") await Task.Delay(Timeout.InfiniteTimeSpan, Token);
             else await Release.Task.WaitAsync(Token);

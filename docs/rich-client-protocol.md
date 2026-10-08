@@ -70,6 +70,20 @@ Submissions optionally include `attachmentIds`, with at most eight distinct IDs 
 
 ## Voice and playback
 
+The additive `audio.tones` feature sends `tone.play` on the ordinary interaction
+stream. Data is `{ "name": "confirmed", "url": "/api/voice/tones/confirmed.wav",
+"expiresAt": "ISO-8601 UTC timestamp", "placement": "immediate" }`. These are
+server-timed playback suggestions, not playback acknowledgements. Use event
+sequence deduplication, ignore history/expired cues, and allow users to mute them.
+Queue immediate cues before response audio. `placement: "after-response-audio"`
+means accept the fresh cue now, then play it once when that interaction's speech
+ends; clear it on cancellation/stopped playback or navigation. The server uses
+this placement for Goodbye when speech audio exists. No speech cue is sent for
+cancelled requests. Awake can be fetched locally when the microphone is ready.
+The .NET SDK exposes `ToneCue` and `DownloadToneAsync`; the web client's speech
+checkbox enables tones as well. See [voice tones](voice-tones.md) for mappings
+and configuration.
+
 Upload raw `audio/pcm` bytes at 16 kHz, mono, signed 16-bit little-endian, then submit `{ "message": "Voice input", "idempotencyKey": "...", "audioAttachmentId": "guid", "speak": true }`. The recording is buffered before submission; this increment does not stream microphone frames to STT while the user is speaking. PCM is limited to 1 MiB (about 32 seconds), and the browser recorder caps itself at 30 seconds even if page timers are delayed. Other codecs and formats must be converted by the native client.
 
 The server emits `stt.started`, genuine `stt.partial` updates when the provider supplies chunks, then persists `stt.final` and replaces the interaction input with the transcript before routing. Empty/overlong transcripts fail without executing the request. Wyoming partial callbacks currently run during transcription finalization after audio upload. Final-only providers still work; no synthetic partials are produced. Native streaming microphone framing remains a future extension.
