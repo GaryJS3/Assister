@@ -8,6 +8,26 @@ namespace Assister.Tests;
 
 public sealed class ToolLoopTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FeedbackSurroundsEveryModelRoundIncludingToolFollowup(bool Streaming)
+    {
+        var Registry = new ToolRegistry([new FakeTool()]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new(null, [new("search", new("ha_search", "{\"query\":\"desk\"}"))], "tool_calls"));
+        Model.Responses.Enqueue(new("Found the desk.", [], "stop"));
+        var Cues = new List<(string Name, int Calls)>();
+        using var Feedback = Assister.Voice.VoiceFeedback.Begin((Name, Token) =>
+        {
+            Cues.Add((Name, Model.Requests.Count));
+            return Task.CompletedTask;
+        });
+        await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build()).RespondAsync(
+            new("Find the desk"), [], CancellationToken.None,
+            OnText: Streaming ? (_, _) => Task.CompletedTask : null);
+        Assert.Equal(new[] { ("ai-think", 0), ("ai-thought", 1), ("ai-think", 1), ("ai-thought", 2) }, Cues);
+    }
     [Fact]
     public async Task ContextTracksMessagesActuallySentIncludingToolProvenanceAndRounds()
     {

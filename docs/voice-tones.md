@@ -53,7 +53,9 @@ Rich-client interaction streams advertise `audio.tones` and emit durable
 server emits Confirmed after input is ready, Intent-Match/AI Think/AI Thought
 from the shared coordinator, Done before the first response text, Issue for a
 slow request or recoverable failure, Error for execution/transcription failure,
-and Goodbye before the terminal event. Tone generation follows
+and Goodbye before the terminal event. AI Think and AI Thought surround every
+model call, including subsequent rounds after tool results. Failed or cancelled
+model calls do not emit AI Thought. Tone generation follows
 `Voice:Tones:Enabled` and the slow warning follows `Voice:Tones:IssueAfterSeconds`.
 Awake remains a local microphone-ready cue: uploaded audio does not tell the
 server when a client started listening.

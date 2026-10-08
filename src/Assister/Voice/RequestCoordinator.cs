@@ -127,9 +127,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             if (LanguageModel is null) { return Result("I cannot handle that request yet.", "unmatched", "unhandled"); }
             try
             {
-                await VoiceFeedback.EmitAsync("ai-think", CancellationToken);
                 var Response = await LanguageModel.RespondAsync(Request, History, CancellationToken, TraceId, OnText, DeviceContext);
-                await VoiceFeedback.EmitAsync("ai-thought", CancellationToken);
                 return Result(Response, "succeeded", "language-model");
             }
             catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }

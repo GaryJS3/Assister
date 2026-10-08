@@ -114,6 +114,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
             using var ModelOutput = Round.ModelOutput(Index + 1, CancellationToken);
             LlmResponse Response;
             var CanSpeak = OnText is not null && (RoundTools.Length == 0 || Choice == "none") && (!Control || ControlConfirmed);
+            await Assister.Voice.VoiceFeedback.EmitAsync("ai-think", Timeout.Token);
             if (OnText is null) { Response = await Model.CompleteAsync(ModelRequest, Timeout.Token); }
             else
             {
@@ -129,6 +130,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                 Response = Completed ?? throw new InvalidOperationException("Model stream did not complete.");
                 if (CanSpeak && Response.ToolCalls.Count > 0) { throw new InvalidOperationException("Unexpected tool call in a speech-only round."); }
             }
+            await Assister.Voice.VoiceFeedback.EmitAsync("ai-thought", Timeout.Token);
             if (OnText is null && Response.Reasoning is { } Reasoning) Thinking.Delta(Reasoning);
             if (OnText is null && Response.Content is { } CompletedText) ModelOutput.Delta(CompletedText);
             Thinking.Complete("completed");
