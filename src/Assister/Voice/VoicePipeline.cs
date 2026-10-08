@@ -279,6 +279,8 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             if (Satellite is not EchoMuseConnection.Turn) { await Feedback("goodbye", Timeout.Token); }
             await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Complete);
+            if (Coordinator is Assister.Conversations.ConversationCoordinator Conversations && Result.ConversationId is { } CompletedConversation)
+                await Conversations.MarkResponseFinishedAsync(CompletedConversation, Timeout.Token);
             Run.Complete(Result.Outcome);
             return new(Session, Result, Result.Outcome);
         }

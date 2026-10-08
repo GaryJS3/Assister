@@ -1,7 +1,7 @@
 namespace Assister.Contracts;
 
 public sealed record UserRequest(string Message, string SatelliteId = "test", string? Area = null, Guid? ConversationId = null, bool NewConversation = false,
-    IReadOnlyList<InputDocument>? Documents = null);
+    IReadOnlyList<InputDocument>? Documents = null, string? DeviceId = null);
 
 public sealed record RequestResult(string Response, Guid? ConversationId, string HandledBy, Guid RunId,
     string Outcome, IReadOnlyList<string> EntityIds, double? ResolutionConfidence, double DurationMilliseconds, string? SpokenResponse = null)

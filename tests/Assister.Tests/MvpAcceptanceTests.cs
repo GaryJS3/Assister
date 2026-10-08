@@ -71,7 +71,6 @@ public sealed class MvpAcceptanceTests
         App.Model.Responses.Enqueue(Call("daily", "weather_forecast", new { type = "daily" }));
         App.Model.Responses.Enqueue(new("The forecast is sunny, around 75 degrees Fahrenheit.", [], "stop"));
         var First = await App.VoiceAsync("What is the weather this weekend?");
-        App.Model.Responses.Enqueue(Call("prior", "chat_history", new { limit = 2 }));
         App.Model.Responses.Enqueue(Call("night", "weather_forecast", new { type = "twice_daily" }));
         App.Model.Responses.Enqueue(new("Sunday night is forecast to be clear, around 60 degrees Fahrenheit.", [], "stop"));
         var Next = await App.VoiceAsync("What about Sunday night?");
@@ -80,10 +79,9 @@ public sealed class MvpAcceptanceTests
         Assert.Equal(First.Session.ConversationId, Next.Session.ConversationId);
         Assert.Equal(2, App.HttpHandler.ForecastTypes.Count);
         Assert.Equal(["daily", "twice_daily"], App.HttpHandler.ForecastTypes);
-        Assert.DoesNotContain(App.Model.Requests[2].Messages, Message => Message.Content == "What is the weather this weekend?");
-        Assert.Contains(App.Model.Requests[2].Tools!, Tool => Tool.Function.Name == "chat_history");
-        Assert.Contains(App.Model.Requests[3].Tools!, Tool => Tool.Function.Name == "weather_forecast");
-        Assert.Contains(App.Model.Requests[4].Messages, Message => Message.Role == "tool" && Message.Content!.Contains("is_daytime"));
+        Assert.Contains(App.Model.Requests[2].Messages, Message => Message.Content == "What is the weather this weekend?");
+        Assert.Contains(App.Model.Requests[2].Tools!, Tool => Tool.Function.Name == "weather_forecast");
+        Assert.Contains(App.Model.Requests[3].Messages, Message => Message.Role == "tool" && Message.Content!.Contains("is_daytime"));
         Assert.Empty(App.Actions.Calls);
     }
 
@@ -110,7 +108,7 @@ public sealed class MvpAcceptanceTests
                 var Result = await App.Coordinator.ProcessAsync(new("continue our discussion", "first"), CancellationToken.None);
                 Assert.Equal(Conversation, Result.ConversationId);
                 var History = App.Model.Requests.Single().Messages.Skip(1).SkipLast(1).ToArray();
-                Assert.Empty(History);
+                Assert.InRange(History.Sum(Message => Message.Content?.Length ?? 0), 1, 12000);
                 Assert.DoesNotContain(History, Message => Message.Role == "tool");
                 var Rejected = await App.Coordinator.ProcessAsync(new("continue", "second", ConversationId: Conversation), CancellationToken.None);
                 Assert.Equal("invalid-request", Rejected.Outcome);
@@ -123,6 +121,38 @@ public sealed class MvpAcceptanceTests
 
     private static LlmResponse Call(string Id, string Name, object Arguments) => new(null, [new(Id, new(Name, JsonSerializer.Serialize(Arguments)))], "tool_calls");
 
+    [Fact]
+    public async Task ConversationReuseRequiresSameDeviceWithinThirtySecondsOfCompletion()
+    {
+        var Clock = new ConversationClock();
+        await using var App = await Fixture.CreateAsync(Clock: Clock);
+        
+        var First = await App.Coordinator.ProcessClientStreamingAsync(new("what is the temperature in the office", "device"),
+            (_, _) => { Clock.Advance(TimeSpan.FromMinutes(2)); return Task.CompletedTask; }, default);
+        Clock.Advance(TimeSpan.FromSeconds(30));
+        var Within = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device"), default);
+        Assert.Equal(First.ConversationId, Within.ConversationId);
+        Clock.Advance(TimeSpan.FromSeconds(30.001));
+        var Expired = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device", ConversationId: Within.ConversationId), default);
+        Assert.NotEqual(Within.ConversationId, Expired.ConversationId);
+        var OtherDevice = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device", ConversationId: Expired.ConversationId, DeviceId: "other-device"), default);
+        Assert.NotEqual(Expired.ConversationId, OtherDevice.ConversationId);
+        var NewChat = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device", NewConversation: true), default);
+        Assert.NotEqual(Expired.ConversationId, NewChat.ConversationId);
+        Clock.Advance(TimeSpan.FromMinutes(1));
+        await App.Coordinator.MarkResponseFinishedAsync(NewChat.ConversationId!.Value, default);
+        Clock.Advance(TimeSpan.FromSeconds(29));
+        var AfterPlayback = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device"), default);
+        Assert.Equal(NewChat.ConversationId, AfterPlayback.ConversationId);
+    }
+
+    private sealed class ConversationClock : TimeProvider
+    {
+        private DateTimeOffset Now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
+        public void Advance(TimeSpan Duration) => Now += Duration;
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         public required AssisterDbContext Database { get; init; }
@@ -133,7 +163,7 @@ public sealed class MvpAcceptanceTests
         public HttpClient Http { get; private set; } = null!;
         public Satellite Satellite { get; } = new();
         public SatelliteManager Manager { get; } = new();
-        public static async Task<Fixture> CreateAsync(string? FileName = null)
+        public static async Task<Fixture> CreateAsync(string? FileName = null, TimeProvider? Clock = null)
         {
             var Database = new AssisterDbContext(new DbContextOptionsBuilder<AssisterDbContext>().UseSqlite("Data Source=" + (FileName ?? ":memory:")).Options);
             await Database.Database.OpenConnectionAsync();
@@ -162,7 +192,7 @@ public sealed class MvpAcceptanceTests
             await Intents.InitializeAsync(CancellationToken.None);
             var Requests = new RequestCoordinator(new IntentEngine(Intents, new(), IntentActionRegistry.Default), new HomeAssistantEntityResolver(),
                 new(App.Actions), Cache, NullLogger<RequestCoordinator>.Instance, new(App.Model, Registry, new(Registry, Store), Config), new(Store));
-            App.Coordinator = new(Database, Requests, new());
+            App.Coordinator = new(Database, Requests, new(), Clock: Clock);
             App.Manager.Register(App.Satellite);
             return App;
         }

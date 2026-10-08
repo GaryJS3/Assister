@@ -114,7 +114,7 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             RequestResult Result;
             try
             {
-                Result = await Process(new(Input, Satellite, ConversationId: Item.ConversationId, Documents: Store.Documents(Id)), (Text, Token) =>
+                Result = await Process(new(Input, Satellite, ConversationId: Item.ConversationId, Documents: Store.Documents(Id), DeviceId: ClientId), (Text, Token) =>
                 {
                     Token.ThrowIfCancellationRequested();
                     if (!Started) { Cue(Id, "done"); Store.Append(Id, "response.started", new { }, "responding"); Started = true; }
@@ -126,13 +126,15 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             Source.Token.ThrowIfCancellationRequested();
             if (!Started) Cue(Id, "done");
             // The complete authoritative text also corrects any provisional stream on fallback/error paths.
-            Store.Append(Id, "response.completed", new { text = Result.Response, spokenText = Result.SpokenResponse }, Response: Result.Response);
+            Store.Append(Id, "response.completed", new { text = Result.Response, spokenText = Result.SpokenResponse, routingConversationId = Result.ConversationId }, Response: Result.Response);
             var Failed = Result.Outcome is "failed" or "unavailable" or "invalid-request" or "unmatched";
             if (Failed) Cue(Id, Result.Outcome == "failed" ? "error" : "issue");
             if (Options.Speak) await Scope.ServiceProvider.GetRequiredService<RichSpeech>().SynthesizeAsync(Id,
                 Result.SpokenResponse ?? Assister.Voice.VoiceFormatter.Format(Result.Response), Source.Token);
             Source.Token.ThrowIfCancellationRequested();
             Cue(Id, "goodbye", Options.Speak && Store.Audio(Id) is not null ? "after-response-audio" : "immediate");
+            if (Coordinator is Assister.Conversations.ConversationCoordinator FinishedCoordinator && Result.ConversationId is { } FinishedConversation)
+                await FinishedCoordinator.MarkResponseFinishedAsync(FinishedConversation, Source.Token);
             Store.Append(Id, Failed ? "interaction.failed" : "interaction.completed",
                 new { code = Failed ? Result.Outcome.Replace('-', '_') : null, message = Failed ? Result.Response : null,
                     recoverable = Failed, outcome = Result.Outcome, handledBy = Result.HandledBy }, Failed ? "failed" : "completed");

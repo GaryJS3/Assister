@@ -39,7 +39,7 @@ public sealed class ToolLoopTests
         using var Observer = InteractionFeedback.Observe((Type, Data) => { if (Data is ContextSelection Context) Captured.Add(Context); });
         await new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build()).RespondAsync(new("Find the desk"), [new("user", "Earlier topic")], CancellationToken.None);
         Assert.Equal(Model.Requests.Sum(Request => Request.Messages.Count), Captured.Count);
-        Assert.DoesNotContain(Captured, Item => Item.Content == "Earlier topic");
+        Assert.Contains(Captured, Item => Item.Type == "conversation_message" && Item.ModelRound == 1 && Item.Content == "Earlier topic");
         var Result = Assert.Single(Captured, Item => Item.Type == "tool_result");
         Assert.Equal(2, Result.ModelRound);
         var Provenance = JsonSerializer.SerializeToElement(Result.Provenance);

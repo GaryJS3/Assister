@@ -85,10 +85,21 @@ public static class InteractionEndpoints
         Group.MapGet("/interactions/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) => Store.Get(Id, Owner(Http)) is { } Item ? Results.Ok(Item) : Results.NotFound());
         Group.MapGet("/interactions/{id:guid}/audio", (Guid Id, InteractionStore Store, HttpContext Http) =>
             Store.Get(Id, Owner(Http)) is not null && Store.Audio(Id) is { } Audio ? Results.File(Audio, "audio/wav", enableRangeProcessing: true) : Results.NotFound());
-        Group.MapPost("/interactions/{id:guid}/playback", (Guid Id, PlaybackReport Report, InteractionStore Store, HttpContext Http) =>
+        Group.MapPost("/interactions/{id:guid}/playback", async (Guid Id, PlaybackReport Report, InteractionStore Store, IRequestCoordinator Coordinator, HttpContext Http) =>
         {
             if (Store.Get(Id, Owner(Http)) is null) return Results.NotFound();
-            return Store.Playback(Id, (string)Http.Items["ClientId"]!, Report) ? Results.Ok() : Results.Conflict(new ProtocolError("invalid_playback_state", "The playback transition or audio is unavailable."));
+            var ClientId = (string)Http.Items["ClientId"]!;
+            var Events = Store.Events(Id, 0);
+            var AlreadyCompleted = Events.Any(Event => Event.Type == "playback.completed" && Event.Data.TryGetProperty("playbackId", out var Playback)
+                && Playback.GetGuid() == Report.PlaybackId);
+            if (!Store.Playback(Id, ClientId, Report)) return Results.Conflict(new ProtocolError("invalid_playback_state", "The playback transition or audio is unavailable."));
+            if (Report.State == "completed" && !AlreadyCompleted && Coordinator is Assister.Conversations.ConversationCoordinator Conversations)
+            {
+                var Response = Events.LastOrDefault(Event => Event.Type == "response.completed");
+                if (Response?.Data.TryGetProperty("routingConversationId", out var RoutingId) == true && RoutingId.TryGetGuid(out var ConversationId))
+                    await Conversations.MarkResponseFinishedAsync(ConversationId, Http.RequestAborted, ClientId);
+            }
+            return Results.Ok();
         });
         Group.MapGet("/interactions/{id:guid}/context", (Guid Id, InteractionStore Store, HttpContext Http) =>
             Store.Get(Id, Owner(Http)) is not null ? Results.Ok(Store.Context(Id)) : Results.NotFound());
