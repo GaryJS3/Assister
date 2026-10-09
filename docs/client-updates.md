@@ -19,6 +19,11 @@ Versions use `major.minor[.build[.revision]]`, compared numerically and normaliz
 to four components. Prerelease labels are not supported. There are no automatic
 downgrades. An older upload does not become latest when a newer version exists.
 
+The host keeps only the two highest numeric versions for each app/platform pair.
+At startup and after each successful upload, older release directories (including
+their packages) are automatically deleted from the data volume. Uploading a version
+older than the retained two succeeds but its package is immediately pruned.
+
 ## HTTP API
 
 - `GET /api/updates`: public release archive, newest version first per app/platform.

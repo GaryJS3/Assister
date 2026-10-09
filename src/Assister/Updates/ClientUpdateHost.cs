@@ -20,6 +20,7 @@ public sealed partial class ClientUpdateHost
         Root = Path.Combine(Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data"), "client-releases");
         UploadToken = Configuration["ClientUpdates:UploadToken"] ?? (Environment.IsDevelopment() ? "dev" : null);
         Directory.CreateDirectory(Root);
+        PruneReleases();
     }
 
     public static bool ValidKey(string Value) => KeyPattern().IsMatch(Value);
@@ -34,11 +35,26 @@ public sealed partial class ClientUpdateHost
         return true;
     }
 
-    public ClientRelease[] List() => Directory.EnumerateDirectories(Root)
+    public ClientRelease[] List()
+    {
+        PublishLock.Wait();
+        try { return ReadReleases(); }
+        finally { PublishLock.Release(); }
+    }
+
+    private ClientRelease[] ReadReleases() => Directory.EnumerateDirectories(Root)
         .Where(Directory => !Path.GetFileName(Directory).StartsWith('.'))
         .Select(Directory => JsonSerializer.Deserialize<ClientRelease>(File.ReadAllText(Path.Combine(Directory, "release.json")), Json)!)
         .OrderBy(Release => Release.AppId).ThenBy(Release => Release.Platform)
         .ThenByDescending(Release => System.Version.Parse(Release.Version)).ToArray();
+
+    // Call during construction or while holding PublishLock.
+    private void PruneReleases()
+    {
+        foreach (var Group in ReadReleases().GroupBy(Release => (Release.AppId, Release.Platform)))
+            foreach (var Release in Group.Skip(2))
+                Directory.Delete(ReleasePath(Release.AppId, Release.Platform, Release.Version), recursive: true);
+    }
 
     private string ReleasePath(string AppId, string Platform, string Version) => Path.Combine(Root, $"{AppId}_{Platform}_{Version}");
 
@@ -101,6 +117,7 @@ public sealed partial class ClientUpdateHost
             {
                 if (Directory.Exists(Destination)) return Results.Conflict(new { Error = "This version is already published." });
                 Directory.Move(Temporary, Destination);
+                PruneReleases();
             }
             finally { PublishLock.Release(); }
             return Results.Created(Url, Release);
@@ -113,6 +130,7 @@ public static class ClientUpdateEndpoints
 {
     public static void MapClientUpdates(this WebApplication App)
     {
+        _ = App.Services.GetRequiredService<ClientUpdateHost>();
         App.MapGet("/api/updates", (ClientUpdateHost Host) => Results.Ok(Host.List()));
         App.MapGet("/api/updates/{appId}/{platform}/check", (string AppId, string Platform, string CurrentVersion, ClientUpdateHost Host, HttpContext Http) =>
         {

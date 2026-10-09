@@ -13,6 +13,46 @@ namespace Assister.IntegrationTests;
 public sealed class ClientUpdateTests
 {
     [Fact]
+    public async Task RetentionKeepsTwoHighestVersionsPerAppAndPlatformAndPrunesOnStartup()
+    {
+        var Data = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString());
+        await using (var Factory = new UpdateApplication(Data))
+        {
+            using var Http = Factory.CreateClient();
+            foreach (var Version in new[] { "1.9", "1.10", "1.2", "2.0" })
+                Assert.Equal(HttpStatusCode.Created, (await Publish(Http, Version, [1, 2])).StatusCode);
+            var Releases = (await Http.GetFromJsonAsync<ClientRelease[]>("/api/updates"))!;
+            Assert.Equal(new[] { "2.0.0.0", "1.10.0.0" }, Releases.Select(Release => Release.Version));
+            Assert.Equal(2, Directory.GetDirectories(Path.Combine(Data, "client-releases")).Length);
+            Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync("/api/updates/assister/android-arm64/1.9/download")).StatusCode);
+            foreach (var Release in Releases)
+                Assert.Equal(new byte[] { 1, 2 }, await Http.GetByteArrayAsync(Release.DownloadUrl));
+        }
+
+        // Simulate a pre-retention archive with multiple apps and platforms.
+        var Root = Path.Combine(Data, "client-releases");
+        foreach (var AppId in new[] { "assister", "other" })
+            foreach (var Platform in new[] { "android-arm64", "windows-x64" })
+                foreach (var Version in new[] { "1.0.0.0", "1.1.0.0", "1.2.0.0" })
+                {
+                    var Folder = Path.Combine(Root, $"{AppId}_{Platform}_{Version}");
+                    Directory.CreateDirectory(Folder);
+                    var Release = new ClientRelease(AppId, Platform, Version, "client.apk", 1, "hash", DateTimeOffset.UtcNow, null,
+                        $"/api/updates/{AppId}/{Platform}/{Version}/download");
+                    await File.WriteAllTextAsync(Path.Combine(Folder, "release.json"), System.Text.Json.JsonSerializer.Serialize(Release, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+                    await File.WriteAllBytesAsync(Path.Combine(Folder, "package"), [1]);
+                }
+        await using var Restarted = new UpdateApplication(Data);
+        using var Public = Restarted.CreateClient();
+        // Startup cleans the volume before any update endpoint is requested.
+        Assert.Equal(8, Directory.GetDirectories(Root).Length);
+        var Remaining = (await Public.GetFromJsonAsync<ClientRelease[]>("/api/updates"))!;
+        Assert.Equal(4, Remaining.GroupBy(Release => (Release.AppId, Release.Platform)).Count());
+        Assert.All(Remaining.GroupBy(Release => (Release.AppId, Release.Platform)), Group => Assert.Equal(2, Group.Count()));
+        Assert.DoesNotContain(Remaining, Release => Release.Version == "1.0.0.0");
+    }
+
+    [Fact]
     public async Task AuthenticatedPublishPublicCheckDownloadAndPersistence()
     {
         var Data = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString());
