@@ -11,7 +11,8 @@ namespace Assister.Voice;
 
 public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
     HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
-    IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null, Assister.Satellites.SatelliteManager? Satellites = null) : IRequestCoordinator
+    IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null, Assister.Satellites.SatelliteManager? Satellites = null,
+    DeviceNameRecovery? NameRecovery = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -196,6 +197,27 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Resolution.Entities.Count == 0)
         {
+            if (Resolution.Alternatives.Count == 0 && NameRecovery is not null
+                && await NameRecovery.SuggestAsync(Request, Intent, Snapshot, CancellationToken) is { } Recovered)
+            {
+                var Entity = Recovered.Entities.Single();
+                if (DeviceContext is not null && CurrentControl is not null)
+                {
+                    DeviceContext.References = [new(Entity.EntityId, Entity.Name)];
+                    DeviceContext.Pending = CurrentControl with { Target = Entity.EntityId };
+                    DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+                var Proposed = Intent.Kind switch
+                {
+                    DirectIntentKind.TurnOn => "turn on " + Entity.Name,
+                    DirectIntentKind.TurnOff => "turn off " + Entity.Name,
+                    DirectIntentKind.SetBrightness => "set " + Entity.Name + " to " + Intent.BrightnessPercent + " percent brightness",
+                    DirectIntentKind.SetFanSpeed => "set " + Entity.Name + " to " + Intent.SpeedPercent + " percent speed",
+                    _ => Entity.Name
+                };
+                return Result("Did you mean " + Proposed + "?" + (DeviceContext is null || CurrentControl is null ? " Please repeat the command using that name." : ""),
+                    "ambiguous", "clarification");
+            }
             var SpeechArtifact = System.Text.RegularExpressions.Regex.Match(Intent.Target, @"^[a-z],\s+(?<target>.+)$",
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
             if (Resolution.Alternatives.Count == 0 && SpeechArtifact.Success)

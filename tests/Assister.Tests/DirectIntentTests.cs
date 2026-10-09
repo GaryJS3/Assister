@@ -9,6 +9,110 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Theory]
+    [InlineData("Turn on DenLite.", "Den Light", "turn_on", null)]
+    [InlineData("Set the sync light to 10%", "Sink Light", "set_brightness", 10)]
+    [InlineData("Set hallway length to 50%.", "Hallway Lights", "set_brightness", 50)]
+    public async Task MisheardNamesRequireConfirmationBeforeExecuting(string Message, string Name, string Action, int? Percent)
+    {
+        var (_, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json(JsonSerializer.Serialize(new { entity_id = "light.recovery", new_state = new {
+            entity_id = "light.recovery", state = "off", attributes = new { friendly_name = Name, supported_color_modes = new[] { "brightness" } } } })));
+        var Model = new RecoveryModel(JsonSerializer.Serialize(new { target = Name }));
+        var Resolver = new HomeAssistantEntityResolver();
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), Resolver, new(Fake), Cache,
+            NullLogger<RequestCoordinator>.Instance, NameRecovery: new(Model, Resolver));
+        var Context = new Assister.Tools.DeviceConversationContext();
+        var Suggestion = await Coordinator.ProcessWithHistoryAsync(new(Message), [], default, DeviceContext: Context);
+        Assert.Equal("ambiguous", Suggestion.Outcome);
+        Assert.Contains(Name, Suggestion.Response);
+        Assert.Empty(Fake.Calls);
+        Assert.Equal(Action, Context.Pending!.Action);
+        Assert.Equal(Percent, Context.Pending.Brightness);
+        Assert.Equal("none", Model.Request!.ToolChoice);
+        Assert.Null(Model.Request.Tools);
+        var Confirmed = await Coordinator.ProcessWithHistoryAsync(new("yes"), [], default, DeviceContext: Context);
+        Assert.Equal("succeeded", Confirmed.Outcome);
+        Assert.Equal(["light.recovery"], Assert.Single(Fake.Calls).EntityIds);
+        Assert.Equal(Percent, Fake.Calls[0].BrightnessPercent);
+        Assert.Null(Context.Pending);
+        Assert.Equal(1, Model.Calls);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("{\"target\":null}")]
+    [InlineData("{\"target\":\"Invented Light\"}")]
+    [InlineData("{\"target\":\"Desk light\"}")]
+    [InlineData("[]")]
+    public async Task InvalidOrAmbiguousRecoveryNeverStoresAnAction(string Reply)
+    {
+        var (_, Fake, Cache) = Create();
+        var Resolver = new HomeAssistantEntityResolver();
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), Resolver, new(Fake), Cache,
+            NullLogger<RequestCoordinator>.Instance, NameRecovery: new(new RecoveryModel(Reply), Resolver));
+        var Context = new Assister.Tools.DeviceConversationContext();
+        var Result = await Coordinator.ProcessWithHistoryAsync(new("turn on DenLite"), [], default, DeviceContext: Context);
+        Assert.Equal("not-found", Result.Outcome);
+        Assert.Null(Context.Pending);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Fact]
+    public async Task OfflineDeviceDoesNotInvokeNameRecovery()
+    {
+        var (_, Fake, Cache) = Create();
+        Cache.ApplyEvent(Json("""{"entity_id":"light.kitchen_counter","new_state":{"entity_id":"light.kitchen_counter","state":"unavailable","attributes":{"friendly_name":"Kitchen counter"}}}"""));
+        var Model = new RecoveryModel("{}");
+        var Resolver = new HomeAssistantEntityResolver();
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), Resolver, new(Fake), Cache,
+            NullLogger<RequestCoordinator>.Instance, NameRecovery: new(Model, Resolver));
+        Assert.Equal("unavailable", (await Coordinator.ProcessAsync(new("turn on kitchen counter"), default)).Outcome);
+        Assert.Equal(0, Model.Calls);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Theory]
+    [InlineData("no")]
+    [InlineData("What time is it?")]
+    [InlineData("expired")]
+    public async Task RejectedUnrelatedOrExpiredSuggestionCannotExecuteLater(string FollowUp)
+    {
+        var (_, Fake, Cache) = Create();
+        var Resolver = new HomeAssistantEntityResolver();
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), Resolver, new(Fake), Cache,
+            NullLogger<RequestCoordinator>.Instance, NameRecovery: new(new RecoveryModel("{\"target\":\"Kitchen counter\"}"), Resolver));
+        var Context = new Assister.Tools.DeviceConversationContext();
+        await Coordinator.ProcessWithHistoryAsync(new("turn on kitchen countr"), [], default, DeviceContext: Context);
+        Assert.NotNull(Context.Pending);
+        if (FollowUp == "expired") { Context.UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-6); }
+        else { await Coordinator.ProcessWithHistoryAsync(new(FollowUp), [], default, DeviceContext: Context); }
+        await Coordinator.ProcessWithHistoryAsync(new("yes"), [], default, DeviceContext: Context);
+        Assert.Null(Context.Pending);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Fact]
+    public async Task RecoveryCannotOverrideExplicitArea()
+    {
+        var (_, Fake, Cache) = Create();
+        var Resolver = new HomeAssistantEntityResolver();
+        var Recovery = new DeviceNameRecovery(new RecoveryModel("{\"target\":\"Kitchen counter\"}"), Resolver);
+        var Result = await Recovery.SuggestAsync(new("turn on countr in office"),
+            new(DirectIntentKind.TurnOn, "countr", ExplicitArea: "office"), Cache.Snapshot(), default);
+        Assert.Null(Result);
+        Assert.Empty(Fake.Calls);
+    }
+
+    private sealed class RecoveryModel(string Reply) : ILanguageModel
+    {
+        public int Calls { get; private set; }
+        public LlmRequest? Request { get; private set; }
+        public Task<LlmResponse> CompleteAsync(LlmRequest Input, CancellationToken Token)
+        { Calls++; Request = Input; return Task.FromResult(new LlmResponse(Reply, [], "stop")); }
+        public IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Input, CancellationToken Token) => throw new NotSupportedException();
+    }
+
     [Fact]
     public void FanQueryDoesNotMatchLightsSharingItsHomeAssistantDeviceName()
     {

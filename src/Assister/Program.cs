@@ -53,6 +53,7 @@ Builder.Services.AddScoped<IIntentEngine, IntentEngine>();
 Builder.Services.AddScoped<IntentWorkbench>();
 Builder.Services.AddSingleton<IEntityResolver, HomeAssistantEntityResolver>();
 Builder.Services.AddTransient<DirectIntentHandler>();
+Builder.Services.AddTransient<DeviceNameRecovery>();
 Builder.Services.AddTransient<RequestCoordinator>();
 Builder.Services.AddSingleton<ConversationLocks>();
 Builder.Services.AddScoped<IRequestCoordinator, ConversationCoordinator>();

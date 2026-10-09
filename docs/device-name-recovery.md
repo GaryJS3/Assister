@@ -1,0 +1,9 @@
+# Device name recovery
+
+When a deterministic Home Assistant intent matches but resolves no devices and no alternatives, a bounded, tool-free model request proposes a transcription correction. It receives the transcript, failed target, original action and amount, area, and up to 128 eligible cached device names and aliases, prioritized by shared target words. The existing resolver validates the proposed name while preserving domain and explicit area. Only a single resolved device from the supplied catalog qualifies.
+
+The assistant asks, for example, “Did you mean set Sink Light to 10 percent brightness?” No action is sent at this stage. In an active conversation the device reference and original action are saved as structured pending clarification. “Yes” or the selected device name follows the existing deterministic execution path and rechecks current availability. Rejection, an unrelated request, or expiry consumes the pending action. Without conversation context, the response asks the user to repeat the command with the suggested name.
+
+Offline devices, stale Home Assistant data, existing ambiguous matches, and execution failures do not enter name recovery. Model failure, invalid JSON, invented names, unresolved or ambiguous suggestions retain the normal not-found response. Recovery has a 15-second timeout and records the attempted correction and validated device in diagnostics.
+
+The October 8 voice traces motivating this change had six successes, three resolution misses (`DenLite`, `sync light`, `hallway length`), and one correctly reported unavailable device. C# regression tests cover these phrases, confirmation, rejected/expired suggestions, invalid responses, explicit area preservation, and offline-device handling. Model behavior on the running service and physical voice confirmation require deployment validation.
