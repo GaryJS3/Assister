@@ -9,6 +9,24 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Fact]
+    public void RoomOnlyEntityIdDoesNotHideOtherRoomLights()
+    {
+        var Yellow = new HomeAssistantEntity("light.master_bedroom", "Master Bedroom Fan Yellow Light", "master_bedroom", "Master Bedroom",
+            Json("""{"state":"off","attributes":{}}"""));
+        var White = Yellow with { EntityId = "light.master_bedroom_light_2", Name = "Master Bedroom Fan White Light" };
+        var Snapshot = new HomeAssistantSnapshot(false, [Yellow, White], Json("{}"));
+        var Resolver = new HomeAssistantEntityResolver();
+        var Singular = Resolver.Resolve(new IntentClassifier().Classify("turn off the master bedroom light")!, null, Snapshot);
+        Assert.Empty(Singular.Entities);
+        Assert.Equal(2, Singular.Alternatives.Count);
+        var All = Resolver.Resolve(new IntentClassifier().Classify("turn off all lights in the master bedroom")!, null, Snapshot);
+        Assert.Equal(2, All.Entities.Count);
+        Assert.Equal(2, HomeAssistantEntitySearch.Find(Snapshot.Entities, "master bedroom light", "master bedroom").Length);
+        Assert.Equal(Yellow.EntityId, Assert.Single(HomeAssistantEntitySearch.Find(Snapshot.Entities, Yellow.EntityId)).EntityId);
+        Assert.Equal(White.EntityId, Assert.Single(HomeAssistantEntitySearch.Find(Snapshot.Entities, White.Name)).EntityId);
+    }
+
     [Theory]
     [InlineData("Turn off that light.")]
     [InlineData("The light we were just talking about, can you go ahead and turn it off?")]

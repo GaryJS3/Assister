@@ -37,8 +37,12 @@ public static class HomeAssistantEntitySearch
             Found = Candidates.Where(Entity => string.IsNullOrWhiteSpace(Entity.AreaId) && Matches(Entity)
                 && RoomWords.All(Word => Words(SearchText(Entity)).Contains(Word))).ToArray();
         }
-        var Exact = Found.Where(Entity => new[] { Entity.Name, Entity.EntityId }.Concat(Entity.Aliases)
+        // A room-only entity ID (light.master_bedroom) must not hide sibling lights.
+        // IDs remain exact matches when explicitly requested as IDs.
+        var Exact = Found.Where(Entity => new[] { Entity.Name }.Concat(Entity.Aliases)
             .Any(Name => Words(Name).Order().SequenceEqual(Terms.Order()))).ToArray();
+        var ExplicitId = Found.Where(Entity => string.Equals(Entity.EntityId, Query.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (ExplicitId.Length > 0) { return ExplicitId; }
         return (Exact.Length > 0 ? Exact : Found).OrderBy(Entity => Entity.IsUnavailable)
             .ThenBy(Entity => Entity.EntityId, StringComparer.Ordinal).ToArray();
     }
