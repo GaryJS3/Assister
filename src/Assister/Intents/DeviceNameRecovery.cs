@@ -5,6 +5,8 @@ using Assister.Modules.HomeAssistant;
 
 namespace Assister.Intents;
 
+public sealed class DeviceNameRecoveryUnavailableException : InvalidOperationException;
+
 // The model proposes a name only. The existing resolver still owns device selection.
 public sealed class DeviceNameRecovery(ILanguageModel Model, IEntityResolver Resolver)
 {
@@ -12,15 +14,16 @@ public sealed class DeviceNameRecovery(ILanguageModel Model, IEntityResolver Res
         HomeAssistantSnapshot Snapshot, CancellationToken CancellationToken)
     {
         using var Step = RunTracing.Start("Device name recovery", "Suggest a likely speech transcription correction without executing an action.");
-        var Candidates = Snapshot.Entities.Where(Entity => Intent.Kind switch
+        var Eligible = Snapshot.Entities.Where(Entity => Intent.Kind switch
         {
             DirectIntentKind.SetBrightness => Entity.Domain == "light",
             DirectIntentKind.SetFanSpeed => Entity.Domain == "fan",
             DirectIntentKind.QueryTemperature => Entity.IsTemperature,
             DirectIntentKind.QueryState => Entity.Domain is "light" or "switch" or "fan" or "sensor",
             _ => Entity.Domain is "light" or "switch" or "fan"
-        }).OrderByDescending(Entity => HomeAssistantEntitySearch.Words(Entity.Name)
-            .Intersect(HomeAssistantEntitySearch.Words(Intent.Target)).Count()).Take(128).ToArray();
+        }).ToArray();
+        var Candidates = Eligible.OrderByDescending(Entity => Score(Intent.Target, Entity)).Take(12).ToArray();
+        Step.Metadata(new { eligibleCount = Eligible.Length, candidateCount = Candidates.Length });
         if (Snapshot.IsStale || Candidates.Length == 0) { Step.Complete("not-found"); return null; }
         var Input = new { transcript = Request.Message, attemptedIntent = Intent.Kind.ToString(), failedTarget = Intent.Target,
             Intent.BrightnessPercent, Intent.SpeedPercent, Intent.ExplicitArea, satelliteArea = Request.Area,
@@ -36,7 +39,7 @@ public sealed class DeviceNameRecovery(ILanguageModel Model, IEntityResolver Res
             if (Response.ToolCalls.Count > 0 || Response.FinishReason != "stop" || Response.Content?.Length is not (> 0 and <= 1024))
             { Step.Complete("invalid-response"); return null; }
             using var Json = JsonDocument.Parse(Response.Content);
-            if (!Json.RootElement.TryGetProperty("target", out var Target) || Target.ValueKind != JsonValueKind.String
+            if (Json.RootElement.ValueKind != JsonValueKind.Object || !Json.RootElement.TryGetProperty("target", out var Target) || Target.ValueKind != JsonValueKind.String
                 || Target.GetString() is not { Length: > 0 and <= 256 } Name)
             { Step.Complete("not-found"); return null; }
             var Suggested = Resolver.Resolve(Intent with { Target = Name }, Request.Area, Snapshot);
@@ -47,11 +50,38 @@ public sealed class DeviceNameRecovery(ILanguageModel Model, IEntityResolver Res
             return Suggested;
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
+        catch (JsonException)
+        {
+            Step.Complete("invalid-response");
+            throw new DeviceNameRecoveryUnavailableException();
+        }
         catch (Exception Error) when (Error is HttpRequestException or IOException or InvalidOperationException or JsonException or OperationCanceledException)
         {
             Step.Metadata(new { failureCategory = Error.GetType().Name });
             Step.Complete("unavailable");
-            return null;
+            throw new DeviceNameRecoveryUnavailableException();
         }
+    }
+
+    private static double Score(string Target, HomeAssistantEntity Entity)
+    {
+        var Words = HomeAssistantEntitySearch.Words(Target);
+        var Names = new[] { Entity.Name, Entity.EntityId.Replace('_', ' '), Entity.AreaName + " " + Entity.Name }.Concat(Entity.Aliases);
+        return Names.Max(Name =>
+        {
+            var Terms = HomeAssistantEntitySearch.Words(Name);
+            var Left = string.Concat(Words);
+            var Right = string.Concat(Terms);
+            var Previous = Enumerable.Range(0, Right.Length + 1).ToArray();
+            for (var I = 1; I <= Left.Length; I++)
+            {
+                var Current = new int[Right.Length + 1];
+                Current[0] = I;
+                for (var J = 1; J <= Right.Length; J++)
+                    Current[J] = Math.Min(Math.Min(Current[J - 1] + 1, Previous[J] + 1), Previous[J - 1] + (Left[I - 1] == Right[J - 1] ? 0 : 1));
+                Previous = Current;
+            }
+            return Words.Intersect(Terms).Count() + 1.0 - Previous[^1] / (double)Math.Max(1, Math.Max(Left.Length, Right.Length));
+        });
     }
 }

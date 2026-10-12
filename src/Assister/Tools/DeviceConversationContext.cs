@@ -33,12 +33,26 @@ public sealed record ControlRequest(string Action, string Target, int? Brightnes
     public static bool IsSelection(string Text) => Match(LanguageParser.Noun(Text),
         @"^(?:both(?: of them)?|all(?: of them)?|them|it|yes|that one)$").Success;
     public static bool IsReference(string Text) => Match(LanguageParser.Noun(Text),
-        @"^(?:both(?: of them)?|all(?: of them)?|them|it|those(?: lights)?|these(?: lights)?|that one|yes)$").Success;
+        @"^(?:both(?: of them)?|all(?: of them)?|them|it|those(?: lights)?|these(?: lights)?|that (?:one|light|fan|switch|device)|this (?:light|fan|switch|device)|(?:light|fan|switch|device|one) we were just talking about|yes)$").Success;
+
+    public static bool IsSingularReference(string Text) => IsReference(Text)
+        && !Match(LanguageParser.Noun(Text), @"^(?:both|all|them|those|these)\b").Success;
+
+    public static string NormalizeTargetList(string Text)
+    {
+        var Target = Regex.Replace(Text, @"\s+(?:as well|too)$", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        return Regex.Replace(Target, @"\s*,\s*(?:and\s+)?(?:the\s+)?|\s+(?:as well as|and also)\s+(?:the\s+)?", " and ",
+            RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+    }
 
     public static ControlRequest? Parse(string Text, DeviceConversationContext? Conversation = null)
     {
         Conversation?.Expire();
         var Normalized = LanguageParser.Normalize(Text);
+        var FollowUp = Match(Normalized, @"^(?<reference>(?:the )?(?:light|fan|switch|device|one) we were just talking about),? (?:can|could|would) you (?:go ahead and )?(?<command>turn (?:it|that|them) (?:on|off))$");
+        if (FollowUp.Success)
+            Normalized = FollowUp.Groups["command"].Value.Replace(" it ", " " + FollowUp.Groups["reference"].Value + " ", StringComparison.Ordinal)
+                .Replace(" that ", " " + FollowUp.Groups["reference"].Value + " ", StringComparison.Ordinal);
         if (Conversation is { References.Length: > 0 })
         {
             if (Normalized is "on" or "off" && (Conversation.References.Length == 1 || Conversation.AwaitingAction))
@@ -86,12 +100,16 @@ public sealed record ControlRequest(string Action, string Target, int? Brightnes
         if (IsReference(Target))
         {
             var References = Conversation?.References ?? [];
-            if (References.Length == 0 || Target is "it" or "that one" or "yes" && References.Length != 1) { return []; }
+            if (References.Length == 0 || IsSingularReference(Target) && References.Length != 1) { return []; }
             if (Target.StartsWith("both", StringComparison.Ordinal) && References.Length != 2) { return []; }
             var Resolved = References.Select(Reference => Snapshot.Entities.FirstOrDefault(Entity => Entity.EntityId == Reference.EntityId))
                 .OfType<HomeAssistantEntity>().Where(Entity => Entity.Domain is "light" or "switch" or "fan")
                 .Where(Entity => Action != "set_fan_speed" || Entity.Domain == "fan")
                 .Where(Entity => Action != "set_brightness" || Entity.Domain == "light").ToArray();
+            var ReferenceWords = HomeAssistantEntitySearch.Words(Target);
+            if (ReferenceWords.Contains("light")) { Resolved = Resolved.Where(Entity => Entity.Domain == "light").ToArray(); }
+            if (ReferenceWords.Contains("fan")) { Resolved = Resolved.Where(Entity => Entity.Domain == "fan").ToArray(); }
+            if (ReferenceWords.Contains("switch")) { Resolved = Resolved.Where(Entity => Entity.Domain == "switch").ToArray(); }
             return Resolved.Length == References.Length ? Resolved : [];
         }
         var NamedTarget = Regex.Replace(Target, @"^(?:both|all)\s+", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
@@ -100,12 +118,15 @@ public sealed record ControlRequest(string Action, string Target, int? Brightnes
         var Generic = Domain is not null && HomeAssistantEntitySearch.Words(NamedTarget).SequenceEqual([Domain]);
         var EffectiveArea = Area ?? (Generic ? SatelliteArea : null);
         if (Generic && EffectiveArea is null && !Target.StartsWith("all ", StringComparison.Ordinal)) { return []; }
-        var Parts = NamedTarget.Split(" and ", StringSplitOptions.None);
+        var Parts = NormalizeTargetList(NamedTarget).Split(" and ", StringSplitOptions.None);
         var Whole = HomeAssistantEntitySearch.Find(Snapshot.Entities.Where(Entity => Entity.Domain is "light" or "switch" or "fan"), NamedTarget,
             EffectiveArea, Domain is null ? null : [Domain]);
         if (Parts.Length == 1 || Whole.Length > 0) { return Whole; }
-        var Groups = Parts.Select(Part => HomeAssistantEntitySearch.Find(Snapshot.Entities.Where(Entity => Entity.Domain is "light" or "switch" or "fan"), Part,
-            EffectiveArea, Domain is null ? null : [Domain])).ToArray();
-        return Groups.All(Group => Group.Length == 1) ? Groups.SelectMany(Group => Group).DistinctBy(Entity => Entity.EntityId).ToArray() : [];
+        var Compound = new HomeAssistantEntityResolver().Resolve(new(Action switch
+        {
+            "turn_on" => DirectIntentKind.TurnOn, "turn_off" => DirectIntentKind.TurnOff,
+            "set_fan_speed" => DirectIntentKind.SetFanSpeed, _ => DirectIntentKind.SetBrightness
+        }, string.Join(" and ", Parts), Brightness, Area, Domain, SpeedPercent), SatelliteArea, Snapshot);
+        return Compound.Entities.ToArray();
     }
 }

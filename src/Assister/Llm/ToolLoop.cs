@@ -11,6 +11,7 @@ public sealed class ControlNotConfirmedException(string? Response = null) : Inva
     public string? Response { get; } = Response;
 }
 public sealed class DeviceSearchFailedException : InvalidOperationException;
+public sealed class DeviceClarificationRequiredException(string Response) : InvalidOperationException(Response);
 
 public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBroker Broker, IConfiguration Configuration)
 {
@@ -156,6 +157,13 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                     // Names/IDs come only from successful tool data, never model prose.
                     DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
                     DeviceContext.Pending = Control && !ControlAttempted && Answer.Contains('?') ? CurrentControl : null;
+                }
+                if (Control && !ControlConfirmed)
+                {
+                    if (ControlPrecondition && Context.CompletedControls.Count == 0 && DeviceContext is { References.Length: > 0 })
+                        Answer = "I found " + string.Join(" and ", DeviceContext.References.Select(Item => Item.Name))
+                            + ". Which device do you want me to " + CurrentControl!.Action.Replace('_', ' ') + "?";
+                    throw new DeviceClarificationRequiredException(Answer);
                 }
                 if (OnText is not null && !CanSpeak) { await OnText(Answer, Timeout.Token); }
                 return Answer;

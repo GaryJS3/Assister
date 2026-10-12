@@ -158,6 +158,10 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             {
                 return Result(Error.Response ?? "I could not confirm the command completed. Please check the device or use its full name.", "failed", "language-model");
             }
+            catch (DeviceClarificationRequiredException Error)
+            {
+                return Result(Error.Message, "ambiguous", "clarification");
+            }
             catch (DeviceSearchFailedException)
             {
                 return Result("I couldn't complete the device search. That does not mean the devices are missing. Please try again.", "unavailable", "language-model");
@@ -197,8 +201,16 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Resolution.Entities.Count == 0)
         {
-            if (Resolution.Alternatives.Count == 0 && NameRecovery is not null
-                && await NameRecovery.SuggestAsync(Request, Intent, Snapshot, CancellationToken) is { } Recovered)
+            EntityResolutionResult? Recovered = null;
+            if (Resolution.Alternatives.Count == 0 && NameRecovery is not null)
+            {
+                try { Recovered = await NameRecovery.SuggestAsync(Request, Intent, Snapshot, CancellationToken); }
+                catch (DeviceNameRecoveryUnavailableException)
+                {
+                    return Result("I couldn't check a possible device-name correction. Please repeat the command using the device's name.", "unavailable", "clarification");
+                }
+            }
+            if (Recovered is not null)
             {
                 var Entity = Recovered.Entities.Single();
                 if (DeviceContext is not null && CurrentControl is not null)

@@ -91,7 +91,7 @@ public sealed class TextRequestTests
         Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest(""));
         Assert.Equal(HttpStatusCode.BadRequest, Response.StatusCode);
         Response = await Http.PostAsJsonAsync("/api/test/message", new UserRequest("turn the kitchen light off", Area: "office"));
-        Assert.Equal("not-found", (await Response.Content.ReadFromJsonAsync<RequestResult>())!.Outcome);
+        Assert.Equal("unavailable", (await Response.Content.ReadFromJsonAsync<RequestResult>())!.Outcome);
         Assert.Single(Factory.Fake.Calls);
         var Runs = JsonDocument.Parse(await Http.GetStringAsync("/api/diagnostics/runs"));
         Assert.Equal(7, Runs.RootElement.GetArrayLength());

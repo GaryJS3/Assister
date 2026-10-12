@@ -10,6 +10,49 @@ namespace Assister.Tests;
 public sealed class DirectIntentTests
 {
     [Theory]
+    [InlineData("Turn off that light.")]
+    [InlineData("The light we were just talking about, can you go ahead and turn it off?")]
+    public async Task ConversationalReferencesUseCurrentEntityIdAfterRename(string Message)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        var Context = new Assister.Tools.DeviceConversationContext
+        { References = [new("light.desk", "Old desk name")], UpdatedAt = DateTimeOffset.UtcNow };
+        Cache.ApplyEvent(Json("""{"entity_id":"light.desk","new_state":{"entity_id":"light.desk","state":"on","attributes":{"friendly_name":"Renamed Office Light"}}}"""));
+        var Result = await Coordinator.ProcessWithHistoryAsync(new(Message), [], default, DeviceContext: Context);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal(["light.desk"], Assert.Single(Fake.Calls).EntityIds);
+        Assert.Equal("Renamed Office Light", Assert.Single(Context.References).Name);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SingularReferenceNeverChangesMultipleOrExpiredTargets(bool Multiple)
+    {
+        var (Coordinator, Fake, _) = Create();
+        var Context = new Assister.Tools.DeviceConversationContext
+        { References = Multiple ? [new("light.desk", "Desk"), new("light.kitchen_counter", "Counter")] : [new("light.desk", "Desk")],
+            UpdatedAt = Multiple ? DateTimeOffset.UtcNow : DateTimeOffset.UtcNow.AddMinutes(-6) };
+        var Result = await Coordinator.ProcessWithHistoryAsync(new("Turn off that light"), [], default, DeviceContext: Context);
+        Assert.Equal("ambiguous", Result.Outcome);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Theory]
+    [InlineData("Turn off reading lamp, kitchen counter as well.")]
+    [InlineData("Turn off reading lamp as well as kitchen counter.")]
+    [InlineData("Turn off reading lamp and also kitchen counter.")]
+    public async Task CompoundPhrasingResolvesEveryTargetBeforeExecution(string Message)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        var Result = await Coordinator.ProcessAsync(new(Message), default);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal(["light.desk", "light.kitchen_counter"], Assert.Single(Fake.Calls).EntityIds);
+        var Control = Assister.Tools.ControlRequest.Parse(Message)!;
+        Assert.Equal(["light.desk", "light.kitchen_counter"], Control.Resolve(Cache.Snapshot(), null).Select(Entity => Entity.EntityId));
+    }
+
+    [Theory]
     [InlineData("Turn on DenLite.", "Den Light", "turn_on", null)]
     [InlineData("Set the sync light to 10%", "Sink Light", "set_brightness", 10)]
     [InlineData("Set hallway length to 50%.", "Hallway Lights", "set_brightness", 50)]
@@ -53,7 +96,7 @@ public sealed class DirectIntentTests
             NullLogger<RequestCoordinator>.Instance, NameRecovery: new(new RecoveryModel(Reply), Resolver));
         var Context = new Assister.Tools.DeviceConversationContext();
         var Result = await Coordinator.ProcessWithHistoryAsync(new("turn on DenLite"), [], default, DeviceContext: Context);
-        Assert.Equal("not-found", Result.Outcome);
+        Assert.Equal(Reply == "not json" ? "unavailable" : "not-found", Result.Outcome);
         Assert.Null(Context.Pending);
         Assert.Empty(Fake.Calls);
     }
@@ -104,12 +147,42 @@ public sealed class DirectIntentTests
         Assert.Empty(Fake.Calls);
     }
 
-    private sealed class RecoveryModel(string Reply) : ILanguageModel
+    [Fact]
+    public async Task RecoveryShortlistIncludesMisheardNameAmongInfrastructureNoise()
+    {
+        var (_, _, Cache) = Create();
+        for (var I = 0; I < 40; I++)
+            Cache.ApplyEvent(Json(JsonSerializer.Serialize(new { entity_id = "switch.utility_" + I, new_state = new {
+                entity_id = "switch.utility_" + I, state = "on", attributes = new { friendly_name = "Infrastructure relay " + I } } })));
+        Cache.ApplyEvent(Json("""{"entity_id":"light.den","new_state":{"entity_id":"light.den","state":"off","attributes":{"friendly_name":"Den Light"}}}"""));
+        var Model = new RecoveryModel("{\"target\":\"Den Light\"}");
+        var Recovery = new DeviceNameRecovery(Model, new HomeAssistantEntityResolver());
+        var Result = await Recovery.SuggestAsync(new("Turn on DenLite"), new(DirectIntentKind.TurnOn, "denlite"), Cache.Snapshot(), default);
+        Assert.Equal("light.den", Assert.Single(Result!.Entities).EntityId);
+        var Input = Json(Model.Request!.Messages.Last().Content!);
+        Assert.Equal(12, Input.GetProperty("devices").GetArrayLength());
+        Assert.Equal("light.den", Input.GetProperty("devices")[0].GetProperty("EntityId").GetString());
+    }
+
+    [Fact]
+    public async Task RecoveryTimeoutReportsUnavailableRatherThanMissingDevice()
+    {
+        var (_, Fake, Cache) = Create();
+        var Resolver = new HomeAssistantEntityResolver();
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), Resolver, new(Fake), Cache,
+            NullLogger<RequestCoordinator>.Instance, NameRecovery: new(new RecoveryModel("", new OperationCanceledException()), Resolver));
+        var Result = await Coordinator.ProcessAsync(new("Turn on DenLite"), default);
+        Assert.Equal("unavailable", Result.Outcome);
+        Assert.DoesNotContain("not find", Result.Response);
+        Assert.Empty(Fake.Calls);
+    }
+
+    private sealed class RecoveryModel(string Reply, Exception? Failure = null) : ILanguageModel
     {
         public int Calls { get; private set; }
         public LlmRequest? Request { get; private set; }
         public Task<LlmResponse> CompleteAsync(LlmRequest Input, CancellationToken Token)
-        { Calls++; Request = Input; return Task.FromResult(new LlmResponse(Reply, [], "stop")); }
+        { Calls++; Request = Input; return Failure is null ? Task.FromResult(new LlmResponse(Reply, [], "stop")) : Task.FromException<LlmResponse>(Failure); }
         public IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Input, CancellationToken Token) => throw new NotSupportedException();
     }
 

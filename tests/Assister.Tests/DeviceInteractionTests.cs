@@ -18,6 +18,24 @@ namespace Assister.Tests;
 public sealed class DeviceInteractionTests
 {
     [Fact]
+    public async Task FoundDeviceWithUnresolvedControlIsClarificationNotSuccessOrMissingDevice()
+    {
+        await using var App = await Fixture.Create();
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"Kitchen Main Lights"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"turn_off"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new("I could not find Kitchen Main Lights. Which device?", [], "stop"));
+        var Context = new DeviceConversationContext { UpdatedAt = DateTimeOffset.UtcNow };
+        var Coordinator = new RequestCoordinator(new IntentClassifier(), new HomeAssistantEntityResolver(), new(App.Actions),
+            App.Cache, NullLogger<RequestCoordinator>.Instance, App.Loop);
+        // Wording recognized by authorization, but the literal target cannot resolve.
+        var Result = await Coordinator.ProcessWithHistoryAsync(new("switch the thing off"), [], default, DeviceContext: Context);
+        Assert.Equal("ambiguous", Result.Outcome);
+        Assert.Contains("I found Kitchen Main Lights", Result.Response);
+        Assert.DoesNotContain("could not find", Result.Response);
+        Assert.Empty(App.Actions.Calls);
+    }
+
+    [Fact]
     public async Task ModelFanControlUsesAuthorizedPercentageAndNeverLightBrightness()
     {
         await using var App = await Fixture.Create();
@@ -47,8 +65,8 @@ public sealed class DeviceInteractionTests
         App.Model.Responses.Enqueue(new("Done.", [], "stop"));
         if (Target.StartsWith("light.", StringComparison.Ordinal))
         {
-            var Answer = await App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None);
-            Assert.Contains("Which fan", Answer);
+            var Error = await Assert.ThrowsAsync<DeviceClarificationRequiredException>(() => App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None));
+            Assert.Contains("Which fan", Error.Message);
         }
         else
         {

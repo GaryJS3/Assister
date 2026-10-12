@@ -69,26 +69,33 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             {
                 using var Capture = RunTracing.Start("Input", "Microphone audio", "Receive PCM microphone audio; only format, byte count and duration are retained.");
                 Capture.Metadata(new { Session.SatelliteId, Session.Area, voiceSessionId = Session.Id, Session.ConversationId });
-                await foreach (var Chunk in Input.WithCancellation(Token))
+                try
                 {
-                    if (FirstAudioAt is null)
+                    await foreach (var Chunk in Input.WithCancellation(Token))
                     {
-                        FirstAudioAt = DateTimeOffset.UtcNow;
-                        Satellites.Record(Satellite.SatelliteId, "Microphone started", SessionId: Session.Id);
+                        if (FirstAudioAt is null)
+                        {
+                            FirstAudioAt = DateTimeOffset.UtcNow;
+                            Satellites.Record(Satellite.SatelliteId, "Microphone started", SessionId: Session.Id);
+                        }
+                        Format ??= Chunk;
+                        PcmBytes += Chunk.Pcm.Length;
+                        if (Chunk.SampleRate > 0 && Chunk.Channels > 0 && Chunk.SampleWidth > 0)
+                            AudioMilliseconds += 1000.0 * Chunk.Pcm.Length / (Chunk.SampleRate * Chunk.Channels * Chunk.SampleWidth);
+                        yield return Chunk;
                     }
-                    Format ??= Chunk;
-                    PcmBytes += Chunk.Pcm.Length;
-                    if (Chunk.SampleRate > 0 && Chunk.Channels > 0 && Chunk.SampleWidth > 0)
-                        AudioMilliseconds += 1000.0 * Chunk.Pcm.Length / (Chunk.SampleRate * Chunk.Channels * Chunk.SampleWidth);
-                    yield return Chunk;
+                    AudioEnded = DateTimeOffset.UtcNow;
+                    Satellites.Record(Satellite.SatelliteId, "Microphone stopped", SessionId: Session.Id);
+                    Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Transcribing);
                 }
-                AudioEnded = DateTimeOffset.UtcNow;
-                Satellites.Record(Satellite.SatelliteId, "Microphone stopped", SessionId: Session.Id);
-                Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Transcribing);
-                Capture.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
-                    pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, firstAudioReceivedAt = FirstAudioAt,
-                    sourceChannels = Satellites.State(Satellite.SatelliteId).MicrophoneSourceChannels, audioInputCompletedAt = AudioEnded });
-                Capture.Complete();
+                finally
+                {
+                    Capture.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
+                        pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, firstAudioReceivedAt = FirstAudioAt,
+                        sourceChannels = Satellites.State(Satellite.SatelliteId).MicrophoneSourceChannels, audioInputCompletedAt = AudioEnded,
+                        partial = AudioEnded is null, terminationReason = (Satellite as EchoMuseConnection.Turn)?.InputEndReason });
+                    if (AudioEnded is not null) { Capture.Complete(); }
+                }
             }
             TranscriptionResult Transcript;
             using (var Recognition = RunTracing.Start("SpeechToText", "Speech to text", "Stream microphone input to STT and measure finalization separately from audio capture."))
@@ -286,10 +293,16 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested || Satellites.IsStopRequested(Session.Id))
         {
-            Run.Complete("cancelled");
+            var Outcome = Satellite is EchoMuseConnection.Turn { InputEndReason: "no_speech_timeout" } ? "no-speech" : "cancelled";
+            using (var End = RunTracing.Start("Input", "Input termination", "Record why input ended before a response was produced."))
+            {
+                End.Metadata(new { reason = (Satellite as EchoMuseConnection.Turn)?.InputEndReason, outcome = Outcome });
+                End.Complete(Outcome);
+            }
+            Run.Complete(Outcome);
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Cancelled);
-            if (CancellationToken.IsCancellationRequested) { throw; }
-            return new(Session, Result, "cancelled");
+            if (CancellationToken.IsCancellationRequested && Outcome != "no-speech") { throw; }
+            return new(Session, Result, Outcome);
         }
         catch (Exception Error) when (Error is IOException or System.Net.Sockets.SocketException or OperationCanceledException or InvalidOperationException)
         {

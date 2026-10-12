@@ -16,12 +16,12 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     {
         var Target = LanguageParser.Noun(Intent.Target);
         if (Intent.Kind is DirectIntentKind.SetBrightness or DirectIntentKind.SetFanSpeed or DirectIntentKind.TurnOn or DirectIntentKind.TurnOff
-            && Target.Contains(" and ", StringComparison.Ordinal))
+            && Assister.Tools.ControlRequest.NormalizeTargetList(Target).Contains(" and ", StringComparison.Ordinal))
         {
             // Preserve real names containing "and" before interpreting a target list.
             var Whole = ResolveSingle(Intent, SatelliteArea, Snapshot);
             if (Whole.Entities.Count > 0) { return Whole; }
-            var Parts = Target.Split(" and ", StringSplitOptions.None);
+            var Parts = Assister.Tools.ControlRequest.NormalizeTargetList(Target).Split(" and ", StringSplitOptions.None);
             if (Parts.Length > 8 || Parts.Any(string.IsNullOrWhiteSpace)) { return new([], 0, []); }
             if (Parts.Any(Part => System.Text.RegularExpressions.Regex.IsMatch(Part, @"\b(?:on|off)\b"))) { return new([], 0, []); }
             var Resolved = Parts.Select(Part => ResolveSingle(Intent with { Target = LanguageParser.Noun(Part) }, SatelliteArea, Snapshot)).ToArray();

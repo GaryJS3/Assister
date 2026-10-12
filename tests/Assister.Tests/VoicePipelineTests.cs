@@ -29,6 +29,9 @@ public sealed class VoicePipelineTests
     [InlineData("Stop.")]
     [InlineData("please cancel!")]
     [InlineData("stop talking")]
+    [InlineData("What? Canceled.")]
+    [InlineData("Actually, cancel please.")]
+    [InlineData("Cancelled.")]
     public async Task SpokenStopIsSilentAndNeverRoutes(string Transcript)
     {
         var Satellite = new FakeSatellite();
@@ -49,6 +52,9 @@ public sealed class VoicePipelineTests
     [InlineData("cancel the tea timer")]
     [InlineData("stop the kitchen fan")]
     [InlineData("when does the rain stop?")]
+    [InlineData("What timers were canceled?")]
+    [InlineData("cancel the kitchen timer please")]
+    [InlineData("Do not stop talking")]
     public void StopMatchingDoesNotConsumeOtherRequests(string Text) => Assert.False(StopCommands.IsStop(Text));
 
     [Fact]

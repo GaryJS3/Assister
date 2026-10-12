@@ -196,6 +196,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         public bool IsCancelled => Lifetime.IsCancellationRequested;
         public bool PipelineFinished { get; private set; }
         public bool NoReply { get; private set; }
+        public string? InputEndReason { get; private set; }
         public bool ControllerEnded { get; private set; }
         public Task<string> InputEnded => End.Task;
         public bool Handle(JsonElement Message)
@@ -216,6 +217,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
                 case "audio_end":
                     var Reason = Text(Message, "reason") ?? "unknown";
                     if (!End.TrySetResult(Reason)) { return false; }
+                    InputEndReason = Reason;
                     Owner.StateManager.Record(SatelliteId, "Audio input ended", Reason, VoiceSessionId, RunId);
                     if (Reason != "speech_end") { NoReply = true; Cancel(); }
                     else { Input.Writer.TryComplete(); }

@@ -136,10 +136,17 @@ public sealed class EchoMuseTests
         var Device = new EchoMuseConnection("device", "logical", "Bedroom", null, (Value, _) => { Messages.Add(Value); return Task.CompletedTask; }, Audio, Config, Manager);
         Manager.Register(Device); using var Turn = Device.Start("session", null, CancellationToken.None)!;
         var Coordinator = new Coordinator();
-        var Work = new VoicePipeline(new Stt(), new Tts(), Coordinator, Manager, Config).RunAsync(Turn, null, Turn.Token);
+        var Store = new Assister.Diagnostics.RunStore();
+        var Work = new VoicePipeline(new Stt(), new Tts(), Coordinator, Manager, Config, Store).RunAsync(Turn, null, Turn.Token);
         Device.Handle(Message(new { type = Kind, sessionId = "session", deviceId = "device", reason = "no_speech_timeout" }));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Work);
+        if (Kind == "audio_end") { Assert.Equal("no-speech", (await Work).Outcome); }
+        else { await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await Work); }
         Assert.Equal(0, Coordinator.Calls); Assert.Empty(Messages); Assert.Equal(0, Manager.ActiveSessionCount);
+        var Trace = Store.Get(Assert.Single(Store.Snapshot()).RunId)!;
+        Assert.Equal(Kind == "audio_end" ? "no-speech" : "cancelled", Trace.Outcome);
+        var Capture = Trace.Steps.Single(Step => Step.Name == "Microphone audio");
+        Assert.True(Capture.Output!.Value.GetProperty("partial").GetBoolean());
+        Assert.Equal(0, Capture.Output.Value.GetProperty("pcmByteCount").GetInt64());
     }
     [Fact]
     public async Task AnnouncementsHaveSeparateRequestIdsAndStopOnlyMatchingOutput()
