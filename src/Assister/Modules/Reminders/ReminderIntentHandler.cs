@@ -31,7 +31,7 @@ public sealed partial class ReminderIntentHandler(LocalStore Store, IConfigurati
     public static bool Recognizes(string Text) => Text.Trim().StartsWith("remind me", StringComparison.OrdinalIgnoreCase)
         || Regex.IsMatch(Text.Trim(), @"^(?:(?:list|show)(?: me)?(?: my)? reminders|what are my reminders|cancel (?:my )?reminder .+)[.!?]?$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
 
-    public async Task<string?> TryHandleAsync(UserRequest Request, CancellationToken Token)
+    public async Task<string?> TryHandleAsync(UserRequest Request, CancellationToken Token, bool AllowModelFallback = false)
     {
         var Text = Request.Message.Trim();
         if (!Recognizes(Text)) { return null; }
@@ -50,6 +50,7 @@ public sealed partial class ReminderIntentHandler(LocalStore Store, IConfigurati
             return Rows.Count == 0 ? "There are no active reminders on this satellite." : string.Join(" ", Rows.Select(Row => $"{Row[1]} (ID {Row[0]}), next at {LocalTime(long.Parse(Row[2], CultureInfo.InvariantCulture))}."));
         }
         var Match = CreatePattern().Match(Text);
+        if (!Match.Success && AllowModelFallback) { return null; }
         if (!Match.Success) { return "Try: remind me to take my vitamin every night at 8, or remind me to take out the trash every Sunday night at 6. Include AM or PM when the time is ambiguous."; }
         var Hour = int.Parse(Match.Groups["hour"].Value, CultureInfo.InvariantCulture);
         var Minute = Match.Groups["minute"].Success ? int.Parse(Match.Groups["minute"].Value, CultureInfo.InvariantCulture) : 0;

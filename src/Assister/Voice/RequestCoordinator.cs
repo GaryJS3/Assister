@@ -50,7 +50,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             var Stopped = Satellites is not null && await Satellites.StopAsync(Request.SatelliteId, CancellationToken);
             return Result(Stopped ? "Stopped." : "There is no connected satellite to stop.", Stopped ? "succeeded" : "unavailable", "satellite-stop");
         }
-        if (Reminders is not null && await Reminders.TryHandleAsync(Request, CancellationToken) is { } ReminderResponse)
+        if (Reminders is not null && await Reminders.TryHandleAsync(Request, CancellationToken, AllowModelFallback: LanguageModel is not null) is { } ReminderResponse)
         {
             return Result(ReminderResponse, "succeeded", "reminder");
         }

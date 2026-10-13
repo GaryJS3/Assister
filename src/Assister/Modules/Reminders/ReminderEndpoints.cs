@@ -49,11 +49,11 @@ public static class ReminderEndpoints
             await Store.ExecuteAsync("UPDATE Reminders SET Status='cancelled' WHERE Id=$p0 AND Status='active'", Token, Id.ToString()) == 0 ? Results.NotFound() : Results.NoContent());
     }
 
-    private static ReminderItem Item(string[] Row) => new(Row[0], Row[1], Row[2], Row[3], int.Parse(Row[4], CultureInfo.InvariantCulture),
+    internal static ReminderItem Item(string[] Row) => new(Row[0], Row[1], Row[2], Row[3], int.Parse(Row[4], CultureInfo.InvariantCulture),
         int.Parse(Row[5], CultureInfo.InvariantCulture), Row[6] == "" ? null : int.Parse(Row[6], CultureInfo.InvariantCulture),
         DateTimeOffset.FromUnixTimeSeconds(long.Parse(Row[7], CultureInfo.InvariantCulture)));
 
-    private static string? Validate(ReminderInput Input, IConfiguration Config, out TimeZoneInfo? Zone)
+    internal static string? Validate(ReminderInput Input, IConfiguration Config, out TimeZoneInfo? Zone)
     {
         Zone = null;
         if (string.IsNullOrWhiteSpace(Input.Message) || Input.Message.Trim().Length > 500) { return "Enter a reminder message of 1 to 500 characters."; }

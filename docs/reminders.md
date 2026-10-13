@@ -40,3 +40,16 @@ Registered satellites are suggested; a manual satellite ID also works. The page 
 GET/POST /api/reminders and PUT/DELETE /api/reminders/{id}. GET supports an offset for
 100-item pages. Removal cancels the stored reminder rather than deleting its history.
 Message-only edits preserve the next due time; schedule edits compute a new future occurrence.
+
+## AI tools
+
+The model can use reminder_create, reminder_get, reminder_edit, and reminder_cancel.
+Tools are offered only when the current request contains scheduling vocabulary:
+schedule/scheduling, remind/reminder, calendar, or calander (including common plural forms).
+Follow-up edits should include a word such as "reminder"; unrelated requests receive no reminder tools.
+All tool operations are scoped to the current satellite. Get returns up to ten active
+reminders per page and their stable IDs. Edit accepts only the fields to change; omitted
+fields stay unchanged. weekday -1 means daily; 0 through 6 mean Sunday through Saturday.
+Creation defaults to the configured time zone. Unsupported native reminder phrasing can
+fall through to the AI, while native supported phrases continue to bypass the model.
+The tool broker validates arguments, audits results, and bounds execution and response size.
