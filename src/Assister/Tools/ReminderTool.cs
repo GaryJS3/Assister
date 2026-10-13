@@ -12,6 +12,15 @@ public sealed class ReminderTool(string Name, LocalStore Store, IConfiguration C
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(100));
 
+    public static string? RequestedMutation(string Text)
+    {
+        if (!Relevant(Text)) { return null; }
+        bool Has(string Pattern) => System.Text.RegularExpressions.Regex.IsMatch(Text, Pattern,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
+        return Has(@"\b(?:cancel|delete|remove|stop)\b") ? "reminder_cancel"
+            : Has(@"\b(?:edit|change|move|update|reschedule|adjust)\b") ? "reminder_edit"
+            : Has(@"\b(?:create|add|set|schedule)\b|\bremind me\b") ? "reminder_create" : null;
+    }
     public bool StateChanging => Name is "reminder_create" or "reminder_edit" or "reminder_cancel";
     public LlmTool Definition => new(new(Name, Name switch
     {

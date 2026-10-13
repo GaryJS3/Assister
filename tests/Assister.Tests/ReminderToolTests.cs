@@ -10,6 +10,18 @@ namespace Assister.Tests;
 
 public sealed class ReminderToolTests
 {
+    [Fact]
+    public async Task ModelCannotClaimReminderCancellationWithoutExecutingTool()
+    {
+        var Config = new ConfigurationBuilder().Build();
+        var Registry = new ToolRegistry([new ReminderTool("reminder_cancel", null!, Config), new ReminderTool("reminder_get", null!, Config)]);
+        var Model = new CapturingModel();
+        var Answer = await new ToolLoop(Model, Registry, new(Registry), Config).RespondAsync(new("Cancel my reminder"), [], default);
+        Assert.Contains("could not confirm", Answer);
+        Assert.DoesNotContain("Done", Answer);
+        Assert.Equal("required", Model.Request!.ToolChoice);
+    }
+
     [Theory]
     [InlineData("Please schedule a nudge", true)]
     [InlineData("Change the reminder to 9 PM", true)]
@@ -23,7 +35,7 @@ public sealed class ReminderToolTests
         var Registry = new ToolRegistry(new[] { "reminder_get", "reminder_create", "reminder_edit", "reminder_cancel" }.Select(Name => new ReminderTool(Name, null!, Config)));
         var Model = new CapturingModel();
         await new ToolLoop(Model, Registry, new(Registry), Config).RespondAsync(new(Text), [], default);
-        Assert.Equal(Expected ? 4 : 0, Model.Request!.Tools!.Count);
+        Assert.Equal(Expected ? ReminderTool.RequestedMutation(Text) is null ? 4 : 2 : 0, Model.Request!.Tools!.Count);
     }
 
     [Fact]

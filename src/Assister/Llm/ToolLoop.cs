@@ -67,6 +67,10 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
         var Iterations = Math.Clamp(Configuration.GetValue("LanguageModel:MaxToolIterations", 8), 1, 8);
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         Timeout.CancelAfter(TimeSpan.FromSeconds(90));
+        var ReminderMutation = ReminderTool.RequestedMutation(Request.Message);
+        if (ReminderMutation is not null && !Selected.Contains(ReminderMutation)) { ReminderMutation = null; }
+        var ReminderConfirmed = false;
+        var ReminderCorrection = false;
         var ControlAttempted = false;
         var ControlConfirmed = false;
         var DataConfirmed = false;
@@ -77,7 +81,9 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
         var SuccessfulSearches = new HashSet<string>();
         for (var Index = 0; Index <= Iterations; Index++)
         {
-            var RoundTools = Control && !ControlConfirmed && !ControlPrecondition
+            var RoundTools = ReminderMutation is not null && !ReminderConfirmed
+                ? Tools.Where(Tool => Tool.Function.Name is "reminder_get" || Tool.Function.Name == ReminderMutation).ToArray()
+                : Control && !ControlConfirmed && !ControlPrecondition
                 ? Tools.Where(Tool => Tool.Function.Name == "ha_search"
                     || Tool.Function.Name == "ha_control" && (Context.ObservedEntities.Count > 0 || !Selected.Contains("ha_search"))).ToArray()
                 : RequiredDataTool is not null && !DataConfirmed && !DataUnavailable
@@ -85,7 +91,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                         || Tool.Function.Name == "ha_search" && RequiredDataTool != "weather_forecast").ToArray()
                 : Tools;
             var Choice = Index == Iterations || ControlConfirmed || DataConfirmed || DataUnavailable ? "none"
-                : (Control && !ControlPrecondition || RequiredDataTool is not null) && RoundTools.Length > 0 ? "required" : "auto";
+                : (ReminderMutation is not null && !ReminderConfirmed || Control && !ControlPrecondition || RequiredDataTool is not null) && RoundTools.Length > 0 ? "required" : "auto";
             var ModelRequest = new LlmRequest(Messages, RoundTools, Choice);
             // Capture exactly the messages selected for this model call, not every result retrieved by a tool.
             for (var MessageIndex = 0; MessageIndex < Messages.Count; MessageIndex++)
@@ -107,7 +113,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
             using var Thinking = Round.Thinking(Index + 1, CancellationToken);
             using var ModelOutput = Round.ModelOutput(Index + 1, CancellationToken);
             LlmResponse Response;
-            var CanSpeak = OnText is not null && (RoundTools.Length == 0 || Choice == "none") && (!Control || ControlConfirmed);
+            var CanSpeak = OnText is not null && (RoundTools.Length == 0 || Choice == "none") && (!Control || ControlConfirmed) && (ReminderMutation is null || ReminderConfirmed);
             await Assister.Voice.VoiceFeedback.EmitAsync("ai-think", Timeout.Token);
             if (OnText is null) { Response = await Model.CompleteAsync(ModelRequest, Timeout.Token); }
             else
@@ -132,6 +138,16 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
             LlmDiagnostics.Output(Round, Response);
             if (Response.ToolCalls.Count == 0)
             {
+                if (ReminderMutation is not null && !ReminderConfirmed && Response.Content?.Contains('?') != true)
+                {
+                    if (!ReminderCorrection && Index < Iterations)
+                    {
+                        ReminderCorrection = true;
+                        Messages.Add(new("system", "The requested reminder change has not been executed. Use reminder_get to resolve the ID when needed, then call " + ReminderMutation + ". Do not claim success without its successful result. Ask a question if required details are missing."));
+                        continue;
+                    }
+                    return "I could not confirm the reminder change. Please check your reminders before trying again.";
+                }
                 // Model prose cannot establish that a requested device action happened.
                 if ((Control || ControlAttempted) && !ControlConfirmed && Response.Content?.Contains('?') != true && !ControlPrecondition)
                     throw new ControlNotConfirmedException(Context.CompletedControls.Count == 0 ? null
@@ -184,6 +200,12 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                     Result = "{\"error\":\"Repeated control blocked.\"}";
                 }
                 else { Result = await Broker.ExecuteAsync(Call, Selected, Context, Timeout.Token); }
+                if (Call.Function.Name == ReminderMutation)
+                {
+                    using var ReminderResult = JsonDocument.Parse(Result);
+                    ReminderConfirmed = ReminderResult.RootElement.TryGetProperty("status", out var ReminderStatus)
+                        && ReminderStatus.GetString() == (ReminderMutation == "reminder_create" ? "created" : ReminderMutation == "reminder_edit" ? "updated" : "cancelled");
+                }
                 if (Call.Function.Name == "chat_history")
                 {
                     using var Prior = JsonDocument.Parse(Result);
