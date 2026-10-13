@@ -1,10 +1,26 @@
 # Assister progress
 
-Updated: October 5, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) contains durable architectural decisions.
+Updated: October 12, 2026. This file records completed work and verification; [roadmap.md](roadmap.md) records planned work. [PROJECT.md](PROJECT.md) contains durable architectural decisions.
 
 ## Current state
 
-### Latest deployed baseline — October 5, 2026
+### Latest deployed baseline — October 12, 2026
+
+Runtime 691874134e93acb4d759dc8004748f46cbfb173b adds daily/weekly reminders,
+dashboard management, and gated AI create/get/edit/cancel tools. All 391 tests pass
+(352 unit/component, 39 integration). Live model creation, retrieval, editing, and
+cancellation were checked against persisted state and tool traces. False cancellation
+prose discovered during release verification was fixed with confirmed-tool enforcement
+and a regression test. Test reminders were cancelled. Physical announcements remain
+unverified.
+
+Dockhand synced stack 10 on Automation (8); only Assister was updated from an exact
+Git archive build. Running image revision/digest, healthy state, zero restarts,
+unchanged environment, and preserved data volume were verified. EchoMuse and bridge
+containers were unchanged. See [reminders](docs/reminders.md) for the complete reference,
+code map, constraints, and future work.
+
+### Earlier deployed baseline — October 5, 2026
 
 Assister runs image revision `c48745f41f025bb6c33d6b1762b7f743ed783d4b`; Dockhand Git sync
 and one-container deployment succeeded. Running image digest matches the exact-revision build.

@@ -1,14 +1,23 @@
 # Assister roadmap
 
-Updated: October 5, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
+Updated: October 12, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
 
 ## Architectural rules
 
 Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use native C# for Wyoming and SQLite/EF Core for persistence. Prefer deterministic intents over LLM calls. Retrieve only relevant context and expose only relevant tools. Home Assistant remains an external automation/data platform. Separate voice sessions, conversations and trace IDs.
 
+## Reminder follow-up
+
+Daily/weekly reminders, dashboard CRUD, and gated AI tools are deployed at 6918741
+(October 12). See [reminder reference](docs/reminders.md) and [progress](progress.md)
+for current behavior and validation. Next reminder work: physical announcement acceptance,
+one-time/relative schedules, snooze/acknowledgement, pause/resume, delivery selection,
+all-satellite announcement/notification, and command replay. External calendar integration
+remains deferred.
+
 ## Next: reliability and latency acceptance
 
-Current production baseline is `c48745f` (October 5): 207 tests pass. Assister was
+The October 5 production checkpoint was `c48745f` (October 5): 207 tests pass. Assister was
 redeployed with environment and data mounts preserved; EchoMuse and the bridge were unchanged.
 Spoken office/kitchen/living-room power controls have trace evidence. The user confirmed
 brightness, clarification/follow-ups and cancellation/recovery checks. Updated HA areas appear

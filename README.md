@@ -7,9 +7,13 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 ## Current implementation
 
-Latest deployed baseline: `c48745f` (October 5, 2026), with 207 passing tests. Assister,
-ESPHome bridge and EchoMuse have prior deployment evidence; the latest update changed only Assister. Native timer remaining-time queries and timer persistence across redeployment pass live.
-See [progress.md](progress.md) for verification boundaries and remaining physical acceptance.
+Latest deployed runtime: 6918741 (October 12, 2026), with 391 passing tests
+(352 unit/component, 39 integration). Daily/weekly reminders support native voice/text
+creation, dashboard CRUD, and gated AI create/get/edit/cancel tools. Live model operations
+and persisted state were verified; physical reminder announcements remain unverified.
+See [reminder reference](docs/reminders.md) for behavior, API/tool contracts, source pointers,
+limitations, and deployment evidence. Environment/data were preserved; only Assister was
+updated. See [progress.md](progress.md) for historical verification.
 
 Milestone 1 is implemented and deployed: ASP.NET Core, EF Core SQLite startup migrations, structured console logs, health/status endpoints, Docker packaging, and persistence/API tests.
 
