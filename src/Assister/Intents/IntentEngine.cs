@@ -70,6 +70,10 @@ public static class IntentMatching
         {
             return new("timer-route", Normalized, [], "The existing native timer module handles this before the intent engine. Use Debug Chat to exercise timers.");
         }
+        if (Assister.Modules.Reminders.ReminderIntentHandler.Recognizes(Text))
+        {
+            return new("reminder-route", Normalized, [], "The reminder module handles this request. Use Debug Chat to exercise reminders.");
+        }
         var Candidates = new List<IntentCandidate>();
         var NativeMatch = Native.Classify(Text);
         if (NativeMatch is not null && Definitions.SingleOrDefault(Row => Row.Id == IntentCatalog.NativeId(NativeMatch.Kind) && Row.Enabled) is { } BuiltIn)

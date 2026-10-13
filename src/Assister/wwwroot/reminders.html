@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Reminders</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/app-shell.css"><link rel="stylesheet" href="/reminders.css"></head>
+<body><header data-app-shell></header><main>
+<div class="heading"><div><p class="eyebrow">SCHEDULE / DAILY RHYTHMS</p><h1>A little nudge.</h1><p>Keep the small things on schedule.</p></div><button id="refresh" type="button">Refresh reminders</button></div>
+<p id="notice" role="status" aria-live="polite"></p>
+<div class="reminder-layout"><section aria-labelledby="list-title"><div class="list-heading"><h2 id="list-title">Your reminders</h2><span id="count"></span></div><div id="reminders">Loading reminders…</div></section>
+<section class="editor" aria-labelledby="editor-title"><p class="eyebrow">MAKE TIME FOR IT</p><h2 id="editor-title">Add a reminder</h2>
+<form id="reminder-form">
+<label for="message">Remind me to<textarea id="message" required maxlength="500" rows="3" placeholder="Take my vitamin"></textarea></label>
+<div class="schedule-fields"><label for="weekday">Repeat<select id="weekday"><option value="">Every day</option><option value="0">Every Sunday</option><option value="1">Every Monday</option><option value="2">Every Tuesday</option><option value="3">Every Wednesday</option><option value="4">Every Thursday</option><option value="5">Every Friday</option><option value="6">Every Saturday</option></select></label><label for="time">At<input id="time" type="time" value="20:00" required></label></div>
+<label for="zone">Time zone<input id="zone" required maxlength="100" placeholder="America/New_York"></label>
+<label for="satellite">Announce on satellite<input id="satellite" list="satellite-options" required maxlength="128" placeholder="Satellite ID"><datalist id="satellite-options"></datalist></label>
+<p class="hint">Announcements wait while the satellite is busy or offline. Times follow the selected time zone.</p>
+<div class="form-actions"><button id="save" type="submit">Add reminder</button><button id="cancel" type="button" hidden>Cancel edit</button></div>
+</form></section></div>
+</main><script src="/app-shell.js"></script><script src="/reminders.js"></script></body></html>

@@ -62,6 +62,8 @@ Builder.Services.AddTransient<ToolBroker>();
 Builder.Services.AddTransient<ToolRegistry>();
 Builder.Services.AddScoped<LocalStore>();
 Builder.Services.AddScoped<TimerIntentHandler>();
+Builder.Services.AddScoped<Assister.Modules.Reminders.ReminderIntentHandler>();
+Builder.Services.AddHostedService<Assister.Modules.Reminders.ReminderScheduler>();
 Builder.Services.AddSingleton<SatelliteManager>();
 Builder.Services.AddScoped<SatelliteConfiguration>();
 Builder.Services.AddSingleton<Assister.Voice.ToneCatalog>();
@@ -117,6 +119,7 @@ App.UseStaticFiles();
 App.UseWebSockets();
 App.MapRichClients();
 App.MapDashboard();
+Assister.Modules.Reminders.ReminderEndpoints.MapReminders(App);
 App.MapSatellites();
 App.MapGet("/api/voice/tones", () => Assister.Voice.ToneCatalog.Names);
 App.MapGet("/api/voice/tones/{name}.wav", async (string Name, Assister.Voice.ToneCatalog Tones, CancellationToken Token) =>
