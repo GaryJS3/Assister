@@ -110,15 +110,19 @@ public sealed class SatelliteManager
         Update(Id, State => State with { CurrentVoiceSessionId = Session, Activity = Stage, ConversationId = Conversation ?? State.ConversationId });
         Record(Id, Stage.ToString(), SessionId: Session);
     }
-    public async Task<bool> AnnounceAsync(string Id, string Text, ITextToSpeechProvider Tts, CancellationToken Token)
+    public async Task<bool> AnnounceAsync(string Id, string Text, ITextToSpeechProvider Tts, CancellationToken Token, bool RequireVolume = false)
     {
         if (!State(Id).Capabilities.AnnouncementPlayback || !TryGet(Id, out var Connection)) { return false; }
+        if (RequireVolume && (!State(Id).Capabilities.VolumeControl || State(Id).CurrentVolume is null)) { return false; }
         var Session = Guid.NewGuid();
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
         if (!BeginSession(Id, Session, Timeout)) { return false; }
+        var PreviousVolume = State(Id).Capabilities.VolumeControl ? State(Id).CurrentVolume : null;
         try
         {
             Timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            if (PreviousVolume is not null)
+                await Connection!.SendEventAsync(new("set-volume", "0.9"), Timeout.Token);
             await Connection!.SendEventAsync(new("announcement", Text, Session), Timeout.Token);
             await Connection.SendAudioAsync(Tts.SynthesizeAsync(Text, new(), Timeout.Token), Timeout.Token);
             Record(Id, "Announcement completed", SessionId: Session);
@@ -136,6 +140,17 @@ public sealed class SatelliteManager
             Record(Id, "Announcement failed", SessionId: Session);
             throw;
         }
-        finally { EndSession(Id, Session); }
+        finally
+        {
+            try
+            {
+                if (PreviousVolume is not null)
+                {
+                    using var Restore = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                    await Connection!.SendEventAsync(new("set-volume", PreviousVolume.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), Restore.Token);
+                }
+            }
+            finally { EndSession(Id, Session); }
+        }
     }
 }

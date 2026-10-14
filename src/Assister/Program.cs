@@ -83,6 +83,10 @@ Builder.Services.AddTransient<ITextToSpeechProvider>(Services =>
 Builder.Services.AddHostedService<TimerExpiryService>();
 Builder.Services.AddTransient<IAssisterTool, ChatHistoryTool>();
 Builder.Services.AddTransient<IAssisterTool, SatelliteVolumeTool>();
+Builder.Services.AddScoped<AnnouncementHandler>();
+Builder.Services.AddSingleton<AnnouncementQueue>();
+Builder.Services.AddHostedService(Services => Services.GetRequiredService<AnnouncementQueue>());
+Builder.Services.AddTransient<IAssisterTool, SatelliteAnnouncementTool>();
 foreach (var Name in new[] { "reminder_get", "reminder_create", "reminder_edit", "reminder_cancel" })
 {
     Builder.Services.AddTransient<IAssisterTool>(Services => new ReminderTool(Name, Services.GetRequiredService<LocalStore>(), Services.GetRequiredService<IConfiguration>()));

@@ -9,6 +9,7 @@ public sealed record ControlReceipt(string Action, string[] EntityIds, DateTimeO
 public sealed record ControlAttempt(string Action, string[] EntityIds, string Outcome, DateTimeOffset AttemptedAt, int? BrightnessPercent = null, int? SpeedPercent = null);
 public sealed class DeviceConversationContext
 {
+    public Assister.Satellites.PendingAnnouncement? Announcement { get; set; }
     public string? SourceDeviceId { get; set; }
     public DateTimeOffset? ResponseFinishedAt { get; set; }
     public DeviceReference[] References { get; set; } = [];

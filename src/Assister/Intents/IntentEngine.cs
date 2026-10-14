@@ -66,6 +66,8 @@ public static class IntentMatching
     {
         if (string.IsNullOrWhiteSpace(Text) || Text.Length > 1000) { return new("invalid-request", "", [], "Enter a request of 1 to 1000 characters."); }
         var Normalized = IntentClassifier.Normalize(Text);
+        if (Assister.Satellites.AnnouncementHandler.Recognizes(Text))
+            return new("announcement-route", Normalized, [], "The native announcement handler handles this request. Use Debug Chat to exercise announcements.");
         if (Assister.Modules.Timers.TimerIntentHandler.Recognizes(Text))
         {
             return new("timer-route", Normalized, [], "The existing native timer module handles this before the intent engine. Use Debug Chat to exercise timers.");

@@ -87,7 +87,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, 
             }
             await Audit("started");
             using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-            Timeout.CancelAfter(TimeSpan.FromSeconds(12));
+            Timeout.CancelAfter(TimeSpan.FromSeconds(Call.Function.Name == "satellite_announce" ? 75 : 12));
             var Result = await Tool.ExecuteAsync(Arguments.RootElement, Context, Timeout.Token);
             if (Encoding.UTF8.GetByteCount(Result) > 16384)
             {

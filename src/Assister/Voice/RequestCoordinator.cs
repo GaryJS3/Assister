@@ -12,7 +12,8 @@ namespace Assister.Voice;
 public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver Resolver, DirectIntentHandler Handler,
     HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
     IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null, Assister.Satellites.SatelliteManager? Satellites = null,
-    DeviceNameRecovery? NameRecovery = null, Assister.Modules.Reminders.ReminderIntentHandler? Reminders = null) : IRequestCoordinator
+    DeviceNameRecovery? NameRecovery = null, Assister.Modules.Reminders.ReminderIntentHandler? Reminders = null,
+    Assister.Satellites.AnnouncementHandler? Announcements = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -45,6 +46,11 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
+        if (Announcements is not null && await Announcements.TryHandleAsync(Request, DeviceContext, CancellationToken) is { } AnnouncementResponse)
+            return Result(AnnouncementResponse,
+                AnnouncementResponse.Contains("Which satellite") || AnnouncementResponse.Contains("What would you like") ? "ambiguous"
+                : AnnouncementResponse.Contains("Could not announce") ? "failed"
+                : AnnouncementResponse.Contains("no connected satellites") ? "unavailable" : "succeeded", "satellite-announcement");
         if (StopCommands.IsStop(Request.Message))
         {
             var Stopped = Satellites is not null && await Satellites.StopAsync(Request.SatelliteId, CancellationToken);
