@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Assister.Contracts;
 using Assister.Diagnostics;
+using Assister.Voice;
+using System.Runtime.CompilerServices;
 
 namespace Assister.Satellites;
 
@@ -29,7 +31,12 @@ public interface IStreamingAudioPlayback
 public sealed class SatelliteManager
 {
     private readonly DiagnosticSanitizer Sanitizer;
-    public SatelliteManager(IConfiguration? Configuration = null) => Sanitizer = new(Configuration);
+    private readonly ToneCatalog? Tones;
+    public SatelliteManager(IConfiguration? Configuration = null, ToneCatalog? Tones = null)
+    {
+        Sanitizer = new(Configuration);
+        this.Tones = Tones;
+    }
     private readonly ConcurrentDictionary<string, ISatelliteConnection> Connections = new();
     private readonly ConcurrentDictionary<string, Guid> Sessions = new();
     private sealed class SessionCancellation(CancellationTokenSource Source)
@@ -124,7 +131,7 @@ public sealed class SatelliteManager
             if (PreviousVolume is not null)
                 await Connection!.SendEventAsync(new("set-volume", "0.9"), Timeout.Token);
             await Connection!.SendEventAsync(new("announcement", Text, Session), Timeout.Token);
-            await Connection.SendAudioAsync(Tts.SynthesizeAsync(Text, new(), Timeout.Token), Timeout.Token);
+            await Connection.SendAudioAsync(AnnouncementAudio(Text, Tts, Timeout.Token), Timeout.Token);
             Record(Id, "Announcement completed", SessionId: Session);
             return true;
         }
@@ -151,6 +158,29 @@ public sealed class SatelliteManager
                 }
             }
             finally { EndSession(Id, Session); }
+        }
+    }
+
+    private async IAsyncEnumerable<AudioChunk> AnnouncementAudio(string Text, ITextToSpeechProvider Tts,
+        [EnumeratorCancellation] CancellationToken Token)
+    {
+        AudioChunk? Format = null;
+        await foreach (var Chunk in Tts.SynthesizeAsync(Text, new(), Token).WithCancellation(Token))
+        {
+            if (Format is null)
+            {
+                Format = Chunk;
+                if (Tone("awake", Chunk) is { } Hello) yield return Hello;
+            }
+            yield return Chunk;
+        }
+        if (Format is not null && Tone("goodbye", Format) is { } Goodbye) yield return Goodbye;
+
+        AudioChunk? Tone(string Name, AudioChunk Output)
+        {
+            // Tone previews already contain their requested cue.
+            if (Tones is not { Enabled: true } || Tts is TonePreviewSpeech) return null;
+            return Tones.RenderFor(Name, Output);
         }
     }
 }

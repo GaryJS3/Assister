@@ -4,11 +4,37 @@ using Assister.Tools;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.FileProviders;
+using Assister.Voice;
 
 namespace Assister.Tests;
 
 public sealed class AnnouncementTests
 {
+    [Fact]
+    public async Task AnnouncementIncludesHelloSpeechAndGoodbyeInOnePlayback()
+    {
+        var Tones = new ToneCatalog(new ToneEnvironment(), new ConfigurationBuilder().Build());
+        var Manager = new SatelliteManager(Tones: Tones);
+        var Speaker = new Speaker("test", "Test");
+        Manager.Register(Speaker);
+        Manager.Update("test", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        Assert.True(await Manager.AnnounceAsync("test", "Hello", new Speech(), default));
+        Assert.Equal(3, Speaker.Audio.Count);
+        Assert.Equal(Tones.RenderFor("awake", Speaker.Audio[1]).Pcm.ToArray(), Speaker.Audio[0].Pcm.ToArray());
+        Assert.Equal(2, Speaker.Audio[1].Pcm.Length);
+        Assert.Equal(Tones.RenderFor("goodbye", Speaker.Audio[1]).Pcm.ToArray(), Speaker.Audio[2].Pcm.ToArray());
+    }
+
+    private sealed class ToneEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Testing";
+        public string ApplicationName { get; set; } = "Assister";
+        public string ContentRootPath { get; set; } = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
     [Fact]
     public async Task RequestingSatelliteQueuesUntilVoiceSessionEnds()
     {
@@ -142,10 +168,11 @@ public sealed class AnnouncementTests
         public string? Area => null;
         public bool Fail { get; set; }
         public List<SatelliteEvent> Events { get; } = [];
+        public List<AudioChunk> Audio { get; } = [];
         public TaskCompletionSource Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new NotSupportedException();
-        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token)
-        { await foreach (var _ in Audio.WithCancellation(Token)) { } if (Fail) throw new IOException(); }
+        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
+        { await foreach (var Chunk in Chunks.WithCancellation(Token)) { Audio.Add(Chunk); } if (Fail) throw new IOException(); }
         public Task SendEventAsync(SatelliteEvent Event, CancellationToken Token)
         {
             Events.Add(Event);
