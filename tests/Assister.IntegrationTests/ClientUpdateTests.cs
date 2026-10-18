@@ -12,6 +12,56 @@ namespace Assister.IntegrationTests;
 
 public sealed class ClientUpdateTests
 {
+    [Theory]
+    [InlineData("missing-manifest")]
+    [InlineData("invalid-json")]
+    [InlineData("null")]
+    [InlineData("invalid-version")]
+    [InlineData("invalid-hash")]
+    [InlineData("wrong-identity")]
+    [InlineData("missing-package")]
+    [InlineData("truncated-package")]
+    public async Task DamagedReleasesDoNotPreventStartupChecksOrPublishing(string Damage)
+    {
+        var Data = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString());
+        ClientRelease Release;
+        await using (var Factory = new UpdateApplication(Data))
+        {
+            using var Http = Factory.CreateClient();
+            using var Published = await Publish(Http, "1.0", [1, 2]);
+            Release = (await Published.Content.ReadFromJsonAsync<ClientRelease>())!;
+        }
+        var Folder = Path.Combine(Data, "client-releases", "assister_android-arm64_1.0.0.0");
+        var Manifest = Path.Combine(Folder, "release.json");
+        switch (Damage)
+        {
+            case "missing-manifest": File.Delete(Manifest); break;
+            case "invalid-json": await File.WriteAllTextAsync(Manifest, "{bad"); break;
+            case "null": await File.WriteAllTextAsync(Manifest, "null"); break;
+            case "missing-package": File.Delete(Path.Combine(Folder, "package")); break;
+            case "truncated-package": await File.WriteAllBytesAsync(Path.Combine(Folder, "package"), [1]); break;
+            default:
+                Release = Damage switch
+                {
+                    "invalid-version" => Release with { Version = "invalid" },
+                    "invalid-hash" => Release with { Sha256 = "bad" },
+                    "wrong-identity" => Release with { AppId = "other" },
+                    _ => throw new InvalidOperationException()
+                };
+                await File.WriteAllTextAsync(Manifest, System.Text.Json.JsonSerializer.Serialize(Release,
+                    new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+                break;
+        }
+        await using var Restarted = new UpdateApplication(Data);
+        using var Client = Restarted.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await Client.GetAsync("/health")).StatusCode);
+        Assert.Empty((await Client.GetFromJsonAsync<ClientRelease[]>("/api/updates"))!);
+        Assert.False((await new ClientUpdateClient(Client).CheckAsync("assister", "android-arm64", "0.1")).UpdateAvailable);
+        Assert.Equal(HttpStatusCode.NotFound, (await Client.GetAsync("/api/updates/assister/android-arm64/1.0/download")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Publish(Client, "2.0", [1, 2, 3])).StatusCode);
+        Assert.Single((await Client.GetFromJsonAsync<ClientRelease[]>("/api/updates"))!);
+    }
+
     [Fact]
     public async Task RetentionKeepsTwoHighestVersionsPerAppAndPlatformAndPrunesOnStartup()
     {
@@ -37,7 +87,7 @@ public sealed class ClientUpdateTests
                 {
                     var Folder = Path.Combine(Root, $"{AppId}_{Platform}_{Version}");
                     Directory.CreateDirectory(Folder);
-                    var Release = new ClientRelease(AppId, Platform, Version, "client.apk", 1, "hash", DateTimeOffset.UtcNow, null,
+                    var Release = new ClientRelease(AppId, Platform, Version, "client.apk", 1, Convert.ToHexStringLower(SHA256.HashData(new byte[] { 1 })), DateTimeOffset.UtcNow, null,
                         $"/api/updates/{AppId}/{Platform}/{Version}/download");
                     await File.WriteAllTextAsync(Path.Combine(Folder, "release.json"), System.Text.Json.JsonSerializer.Serialize(Release, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
                     await File.WriteAllBytesAsync(Path.Combine(Folder, "package"), [1]);

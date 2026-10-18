@@ -25,6 +25,7 @@ public static class InteractionEndpoints
             Http.Items["ClientOwner"] = Auth.Owner(ClientId);
             return await Next(Context);
         });
+        Assister.Diagnostics.RunAudioEndpoints.MapClientRunAudio(Group);
         Group.MapPost("/session", (ClientLogin Login, ClientAuthentication Auth, HttpContext Http) =>
         {
             if (Login.Token is null || Auth.Identify(Login.Token) is not { } Owner) return Results.Unauthorized();
@@ -37,6 +38,12 @@ public static class InteractionEndpoints
             inputAudioFormat = "pcm_s16le_16000_mono", outputAudioFormat = "wav", voiceInputMode = "buffered_upload",
             features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "audio.tones", "client.capabilities", "device.requests" } });
         Group.MapPost("/attachments", AttachmentUpload.ReceiveAsync);
+        Group.MapDelete("/attachments/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) =>
+        {
+            if (Store.Attachment(Id, Owner(Http)) is null) return Results.NotFound();
+            return Store.DeleteAttachment(Id, Owner(Http)) ? Results.NoContent()
+                : Results.Conflict(new ProtocolError("attachment_in_use", "Attachments used by an interaction expire with its history."));
+        });
         Group.MapPost("/clients/register", (ClientRegistration Request, ClientSignals Signals, HttpContext Http) =>
             Signals.Register((string)Http.Items["ClientId"]!, Owner(Http), Request) ? Results.Ok() : Results.BadRequest(new ProtocolError("invalid_capabilities", "Supply a device name and at most 32 canonical capability names.")));
         Group.MapGet("/clients", (ClientSignals Signals, HttpContext Http) => Signals.Clients(Owner(Http)));
@@ -89,14 +96,10 @@ public static class InteractionEndpoints
         {
             if (Store.Get(Id, Owner(Http)) is null) return Results.NotFound();
             var ClientId = (string)Http.Items["ClientId"]!;
-            var Events = Store.Events(Id, 0);
-            var AlreadyCompleted = Events.Any(Event => Event.Type == "playback.completed" && Event.Data.TryGetProperty("playbackId", out var Playback)
-                && Playback.GetGuid() == Report.PlaybackId);
-            if (!Store.Playback(Id, ClientId, Report)) return Results.Conflict(new ProtocolError("invalid_playback_state", "The playback transition or audio is unavailable."));
-            if (Report.State == "completed" && !AlreadyCompleted && Coordinator is Assister.Conversations.ConversationCoordinator Conversations)
+            if (!Store.Playback(Id, ClientId, Report, out var Changed)) return Results.Conflict(new ProtocolError("invalid_playback_state", "The playback transition or audio is unavailable."));
+            if (Report.State == "completed" && Changed && Coordinator is Assister.Conversations.ConversationCoordinator Conversations)
             {
-                var Response = Events.LastOrDefault(Event => Event.Type == "response.completed");
-                if (Response?.Data.TryGetProperty("routingConversationId", out var RoutingId) == true && RoutingId.TryGetGuid(out var ConversationId))
+                if (Store.RoutingConversation(Id) is { } ConversationId)
                     await Conversations.MarkResponseFinishedAsync(ConversationId, Http.RequestAborted, ClientId);
             }
             return Results.Ok();
@@ -148,7 +151,8 @@ public static class InteractionEndpoints
                     await SendAsync(Socket, Event, Lifetime.Token);
                     Cursor = Event.Sequence;
                 }
-                var Item = Store.Get(Id)!;
+                var Item = Store.Get(Id);
+                if (Item is null) { await Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Interaction expired", Lifetime.Token); break; }
                 if (FollowPlayback != true && Cursor >= Item.LastSequence && Item.Status is "completed" or "failed" or "cancelled")
                 { await Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Interaction complete", Lifetime.Token); break; }
                 if (DateTimeOffset.UtcNow - Heartbeat > TimeSpan.FromSeconds(15))

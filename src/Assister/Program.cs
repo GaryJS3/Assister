@@ -1,3 +1,4 @@
+using Assister;
 using Assister.Diagnostics;
 using Assister.Interactions;
 using Assister.Persistence;
@@ -5,17 +6,14 @@ using Assister.Modules.HomeAssistant;
 using Assister.Contracts;
 using Assister.Intents;
 using Assister.Voice;
-using Assister.Llm;
-using Assister.Tools;
-using Assister.Conversations;
-using Assister.Modules.Timers;
-using Assister.Speech.Wyoming;
 using Assister.Satellites;
 using Microsoft.EntityFrameworkCore;
 using Assister.Updates;
 
 var Builder = WebApplication.CreateBuilder(args);
-Builder.Services.AddSingleton<ClientUpdateHost>();
+Builder.Logging.ClearProviders();
+Builder.Logging.AddJsonConsole();
+Builder.Services.AddAssisterServices();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
 {
     Builder.WebHost.ConfigureKestrel(Options =>
@@ -24,99 +22,6 @@ if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
         Options.ListenAnyIP(8082, Listener => Listener.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2);
     });
 }
-Builder.Services.AddGrpc(Options => Options.MaxReceiveMessageSize = 128 * 1024);
-Builder.Services.AddSingleton<VoiceAudioStore>();
-Builder.Logging.ClearProviders();
-Builder.Logging.AddJsonConsole();
-Builder.Services.AddDbContext<AssisterDbContext>((Services, Options) =>
-{
-    var Configuration = Services.GetRequiredService<IConfiguration>();
-    var DataPath = Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data");
-    Directory.CreateDirectory(DataPath);
-    Options.UseSqlite($"Data Source={Path.Combine(DataPath, "assister.db")}");
-});
-Builder.Services.AddSingleton<HomeAssistantStateCache>();
-Builder.Services.AddSingleton<Func<IHomeAssistantConnection>>(_ => () => new HomeAssistantConnection());
-Builder.Services.AddSingleton<HomeAssistantClient>();
-Builder.Services.AddHostedService(Services => Services.GetRequiredService<HomeAssistantClient>());
-Builder.Services.AddHttpClient<IHomeAssistantClient, HomeAssistantActionClient>()
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-Builder.Services.AddSingleton<IntentClassifier>();
-Builder.Services.AddSingleton<IIntentActionProvider, HomeAssistantIntentActions>();
-Builder.Services.AddSingleton<IIntentActionProvider, AssisterIntentActions>();
-Builder.Services.AddSingleton<IntentActionRegistry>();
-Builder.Services.AddTransient<IIntegrationIntentExecutor, HomeAssistantIntentExecutor>();
-Builder.Services.AddTransient<IIntegrationIntentExecutor, AssisterIntentExecutor>();
-Builder.Services.AddTransient<IntegrationActionDispatcher>();
-Builder.Services.AddScoped<IntentStore>();
-Builder.Services.AddScoped<IIntentEngine, IntentEngine>();
-Builder.Services.AddScoped<IntentWorkbench>();
-Builder.Services.AddSingleton<IEntityResolver, HomeAssistantEntityResolver>();
-Builder.Services.AddTransient<DirectIntentHandler>();
-Builder.Services.AddTransient<DeviceNameRecovery>();
-Builder.Services.AddTransient<RequestCoordinator>();
-Builder.Services.AddSingleton<ConversationLocks>();
-Builder.Services.AddScoped<IRequestCoordinator, ConversationCoordinator>();
-Builder.Services.AddTransient<ToolLoop>();
-Builder.Services.AddTransient<ToolBroker>();
-Builder.Services.AddTransient<ToolRegistry>();
-Builder.Services.AddScoped<LocalStore>();
-Builder.Services.AddScoped<TimerIntentHandler>();
-Builder.Services.AddScoped<Assister.Modules.Reminders.ReminderIntentHandler>();
-Builder.Services.AddHostedService<Assister.Modules.Reminders.ReminderScheduler>();
-Builder.Services.AddSingleton<SatelliteManager>();
-Builder.Services.AddScoped<SatelliteConfiguration>();
-Builder.Services.AddSingleton<Assister.Voice.ToneCatalog>();
-Builder.Services.AddScoped<VoicePipeline>();
-Builder.Services.AddHttpClient("echomuse").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-Builder.Services.AddHostedService<EchoMuseProvider>();
-Builder.Services.AddTransient<ISpeechToTextProvider>(Services =>
-{
-    var Config = Services.GetRequiredService<IConfiguration>();
-    return new WyomingSpeechToTextProvider(new(Config["SpeechToText:Host"] ?? "", Config.GetValue("SpeechToText:Port", 10300)));
-});
-Builder.Services.AddTransient<ITextToSpeechProvider>(Services =>
-{
-    var Config = Services.GetRequiredService<IConfiguration>();
-    return new WyomingTextToSpeechProvider(new(Config["TextToSpeech:Host"] ?? "", Config.GetValue("TextToSpeech:Port", 10200)));
-});
-Builder.Services.AddHostedService<TimerExpiryService>();
-Builder.Services.AddTransient<IAssisterTool, ChatHistoryTool>();
-Builder.Services.AddTransient<IAssisterTool, SatelliteVolumeTool>();
-Builder.Services.AddScoped<AnnouncementHandler>();
-Builder.Services.AddSingleton<AnnouncementQueue>();
-Builder.Services.AddHostedService(Services => Services.GetRequiredService<AnnouncementQueue>());
-Builder.Services.AddTransient<IAssisterTool, SatelliteAnnouncementTool>();
-foreach (var Name in new[] { "reminder_get", "reminder_create", "reminder_edit", "reminder_cancel" })
-{
-    Builder.Services.AddTransient<IAssisterTool>(Services => new ReminderTool(Name, Services.GetRequiredService<LocalStore>(), Services.GetRequiredService<IConfiguration>()));
-}
-foreach (var Name in new[] { "memory_store", "memory_search", "memory_delete" })
-{
-    Builder.Services.AddTransient<IAssisterTool>(Services => new MemoryTool(Name, Services.GetRequiredService<LocalStore>()));
-}
-Builder.Services.AddHttpClient("homeassistant-tools").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-Builder.Services.AddTransient<IAssisterTool>(Services => new WeatherTool(Services.GetRequiredService<HomeAssistantStateCache>(),
-    Services.GetRequiredService<IHttpClientFactory>().CreateClient("homeassistant-tools"), Services.GetRequiredService<IConfiguration>()));
-foreach (var Name in new[] { "ha_search", "ha_get_state", "ha_control", "ha_get_history" })
-{
-    Builder.Services.AddTransient<IAssisterTool>(Services => new HomeAssistantTool(Name,
-        Services.GetRequiredService<HomeAssistantStateCache>(), Services.GetRequiredService<IHomeAssistantClient>(),
-        Services.GetRequiredService<IHttpClientFactory>().CreateClient("homeassistant-tools"), Services.GetRequiredService<IConfiguration>()));
-}
-Builder.Services.AddHttpClient<ILanguageModel, OpenAiCompatibleLanguageModel>()
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-Builder.Services.AddSingleton<RunStore>();
-Builder.Services.AddDataProtection();
-Builder.Services.AddSingleton<ClientAuthentication>();
-Builder.Services.AddSingleton<ClientSignals>();
-Builder.Services.AddSingleton<InteractionStore>();
-Builder.Services.AddSingleton<InteractionRunner>();
-Builder.Services.AddScoped<RichSpeech>();
-Builder.Services.AddHostedService(Services => Services.GetRequiredService<InteractionRunner>());
-Builder.Services.AddHttpClient("diagnostics").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-Builder.Services.AddSingleton<ComponentHealth>();
-Builder.Services.AddHostedService(Services => Services.GetRequiredService<ComponentHealth>());
 var App = Builder.Build();
 App.MapClientUpdates();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }
@@ -172,16 +77,20 @@ App.MapGet("/api/status", async (AssisterDbContext Database, HomeAssistantClient
     ComponentHealth Components, SatelliteManager Satellites, CancellationToken CancellationToken) =>
 {
     var Cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 300;
+    var DatabaseHealthy = await Database.Database.CanConnectAsync(CancellationToken);
+    var CacheStatus = Cache.Status();
+    var ComponentStatuses = Components.Snapshot();
+    var HomeAssistantStatus = HomeAssistant.Status;
     return Results.Ok(new
     {
-        Status = "Degraded",
-        Database = await Database.Database.CanConnectAsync(CancellationToken) ? "Healthy" : "Unavailable",
-        HomeAssistant = HomeAssistant.Status,
-        HomeAssistantCache = Cache.Status(),
-        Components = Components.Snapshot(),
+        Status = ServiceStatus.Overall(DatabaseHealthy, HomeAssistantStatus, CacheStatus.IsStale, ComponentStatuses),
+        Database = DatabaseHealthy ? "Healthy" : "Unavailable",
+        HomeAssistant = HomeAssistantStatus,
+        HomeAssistantCache = CacheStatus,
+        Components = ComponentStatuses,
         SatelliteCount = Satellites.Count,
         ActiveVoiceSessions = Satellites.ActiveSessionCount,
-        ActiveConversations = await Database.Conversations.CountAsync(Row => Row.UpdatedAt > Cutoff, CancellationToken),
+        ActiveConversations = DatabaseHealthy ? await Database.Conversations.CountAsync(Row => Row.UpdatedAt > Cutoff, CancellationToken) : 0,
         ImplementationMilestone = 6
     });
 });

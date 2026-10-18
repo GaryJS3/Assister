@@ -7,6 +7,25 @@ namespace Assister.Tests;
 
 public sealed class VoicePipelineTests
 {
+    [Fact]
+    public async Task BufferedVoiceRetainsInputAndOutputUnderTheExactRun()
+    {
+        var Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "assister-capture-" + Guid.NewGuid());
+        var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = Path }).Build();
+        using var Runs = new Assister.Diagnostics.RunStore();
+        using var Audio = new Assister.Diagnostics.RunAudioStore(Config, Microsoft.Extensions.Logging.Abstractions.NullLogger<Assister.Diagnostics.RunAudioStore>.Instance);
+        var Satellite = new FakeSatellite();
+        var Manager = new SatelliteManager(); Manager.Register(Satellite);
+        var Result = await new VoicePipeline(new FakeStt(), new FakeTts(), new FakeCoordinator(), Manager, Config, Runs, RunAudio: Audio)
+            .RunAsync(Satellite, null, default);
+        Assert.Equal("succeeded", Result.Outcome);
+        var Run = Assert.Single(Runs.Snapshot());
+        Assert.Equal("available", Audio.Info(Run.RunId, "input").State);
+        Assert.Equal("available", Audio.Info(Run.RunId, "output").State);
+        Assert.NotNull(Audio.Get(Run.RunId, "input"));
+        Assert.NotNull(Audio.Get(Run.RunId, "output"));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

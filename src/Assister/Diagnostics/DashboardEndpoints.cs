@@ -10,6 +10,7 @@ public static class DashboardEndpoints
     public static void MapDashboard(this WebApplication App)
     {
         App.Services.GetRequiredService<RunStore>();
+        App.MapRunAudio();
         App.MapGet("/api/diagnostics/runs", (RunStore Store) => Results.Ok(Store.Snapshot()));
         App.MapGet("/api/diagnostics/runs/{id}", (string Id, RunStore Store) =>
             Guid.TryParse(Id, out var RunId) && Store.Get(RunId) is { } Run ? Results.Ok(Run) : Results.NotFound());

@@ -50,7 +50,11 @@ public sealed class StreamingVoiceTests
         var Satellite = new OutputSatellite(BufferedPlayback);
         var Manager = new SatelliteManager();
         Manager.Register(Satellite);
-        var Work = new VoicePipeline(new Stt(), Tts, Coordinator, Manager, Config()).RunAsync(Satellite, null, Timeout.Token);
+        var AudioConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            { ["Assister:DataPath"] = Path.Combine(Path.GetTempPath(), "assister-stream-audio-" + Guid.NewGuid()) }).Build();
+        using var Runs = new Assister.Diagnostics.RunStore();
+        using var Audio = new Assister.Diagnostics.RunAudioStore(AudioConfig, Microsoft.Extensions.Logging.Abstractions.NullLogger<Assister.Diagnostics.RunAudioStore>.Instance);
+        var Work = new VoicePipeline(new Stt(), Tts, Coordinator, Manager, Config(), Runs, RunAudio: Audio).RunAsync(Satellite, null, Timeout.Token);
         await Tts.Started.Task.WaitAsync(Timeout.Token);
         Assert.False(Coordinator.Finished);
         if (!BufferedPlayback) { await Satellite.FirstAudio.Task.WaitAsync(Timeout.Token); }
@@ -62,6 +66,9 @@ public sealed class StreamingVoiceTests
         Assert.Equal(0, Manager.ActiveSessionCount);
         Assert.Single(Satellite.Events, Event => Event.Type == "response");
         Assert.Equal(Result.Request!.ConversationId, Result.Session.ConversationId);
+        var Run = Assert.Single(Runs.Snapshot());
+        Assert.Equal(48, Audio.Get(Run.RunId, "output")!.Length); // Two distinct 16-bit synthesized chunks.
+        Assert.Equal("available", Audio.Info(Run.RunId, "input").State);
     }
 
     [Fact]
@@ -106,8 +113,11 @@ public sealed class StreamingVoiceTests
         { ["Voice:StreamingEnabled"] = "true" }).Build();
     private sealed class Stt : ISpeechToTextProvider
     {
-        public Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio, SpeechToTextOptions Options, CancellationToken Token)
-            => Task.FromResult(new TranscriptionResult("hello", "en"));
+        public async Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio, SpeechToTextOptions Options, CancellationToken Token)
+        {
+            await foreach (var _ in Audio.WithCancellation(Token)) { }
+            return new("hello", "en");
+        }
     }
     private sealed class StreamingCoordinator(bool Fails = false) : IStreamingRequestCoordinator
     {

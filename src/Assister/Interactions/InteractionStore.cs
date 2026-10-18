@@ -11,9 +11,19 @@ public sealed class InteractionStore : IDisposable
     private readonly object Gate = new();
     private readonly SqliteConnection Database;
     private readonly Assister.Diagnostics.DiagnosticSanitizer Sanitizer;
+    private readonly TimeProvider Clock;
+    private readonly int RetentionDays;
+    private readonly int MaxInteractions;
+    private readonly int AudioRetentionHours;
+    private readonly long MaxAttachmentBytes;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    public InteractionStore(IConfiguration Configuration)
+    public InteractionStore(IConfiguration Configuration, TimeProvider? Clock = null)
     {
+        this.Clock = Clock ?? TimeProvider.System;
+        RetentionDays = Math.Clamp(Configuration.GetValue("RichClients:RetentionDays", 30), 1, 365);
+        MaxInteractions = Math.Clamp(Configuration.GetValue("RichClients:MaxInteractions", 10000), 1, 100000);
+        AudioRetentionHours = Math.Clamp(Configuration.GetValue("RichClients:AudioRetentionHours", 24), 1, 168);
+        MaxAttachmentBytes = Math.Clamp(Configuration.GetValue("RichClients:MaxAttachmentMiB", 100), 1, 1024) * 1024L * 1024;
         Sanitizer = new(Configuration);
         var Path = System.IO.Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data");
         Directory.CreateDirectory(Path);
@@ -31,9 +41,11 @@ public sealed class InteractionStore : IDisposable
             CREATE TABLE IF NOT EXISTS InteractionEvents(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), Sequence INTEGER NOT NULL, Payload TEXT NOT NULL,
                 PRIMARY KEY(InteractionId,Sequence));
             CREATE INDEX IF NOT EXISTS IX_Interactions_Conversation ON Interactions(ConversationId,CreatedAt);
+            CREATE INDEX IF NOT EXISTS IX_Interactions_RunId ON Interactions(RunId);
             CREATE TABLE IF NOT EXISTS ClientAttachments(Id TEXT PRIMARY KEY, Owner TEXT NOT NULL, Metadata TEXT NOT NULL, Content BLOB NOT NULL, ExtractedText TEXT);
             CREATE TABLE IF NOT EXISTS InteractionAttachments(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), AttachmentId TEXT NOT NULL REFERENCES ClientAttachments(Id), Position INTEGER NOT NULL,
                 PRIMARY KEY(InteractionId,AttachmentId));
+            CREATE INDEX IF NOT EXISTS IX_InteractionAttachments_Attachment ON InteractionAttachments(AttachmentId);
             CREATE TABLE IF NOT EXISTS InteractionContexts(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), ContextId TEXT NOT NULL, Payload TEXT NOT NULL,
                 PRIMARY KEY(InteractionId,ContextId));
             CREATE TABLE IF NOT EXISTS InteractionOptions(InteractionId TEXT PRIMARY KEY REFERENCES Interactions(Id), Payload TEXT NOT NULL);
@@ -41,6 +53,52 @@ public sealed class InteractionStore : IDisposable
             CREATE TABLE IF NOT EXISTS PlaybackReports(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), ClientId TEXT NOT NULL, PlaybackId TEXT NOT NULL, State TEXT NOT NULL, PRIMARY KEY(InteractionId,ClientId,PlaybackId));
             """;
         Command.ExecuteNonQuery();
+    }
+
+    // Active work and its uploads are never expired. SQLite reuses the freed pages.
+    public void Prune()
+    {
+        lock (Gate)
+        {
+            var Now = Clock.GetUtcNow();
+            using var Transaction = Database.BeginTransaction();
+            void Execute(string Sql, params (string, object?)[] Values)
+            {
+                using var Cleanup = Command(Sql, Values);
+                Cleanup.Transaction = Transaction;
+                Cleanup.ExecuteNonQuery();
+            }
+            Execute("CREATE TEMP TABLE IF NOT EXISTS ExpiredInteractions(Id TEXT PRIMARY KEY); DELETE FROM ExpiredInteractions;");
+            Execute("""
+                INSERT INTO ExpiredInteractions
+                SELECT Id FROM (
+                    SELECT Id, CreatedAt, ROW_NUMBER() OVER (ORDER BY CreatedAt DESC, Id DESC) AS Position
+                    FROM Interactions WHERE Status IN ('completed','failed','cancelled')
+                ) WHERE julianday(CreatedAt) < julianday($cutoff) OR Position > $maximum
+                """, ("$cutoff", Now.AddDays(-RetentionDays).ToString("O")), ("$maximum", MaxInteractions));
+            foreach (var Table in new[] { "InteractionEvents", "InteractionAttachments", "InteractionContexts", "InteractionOptions", "InteractionAudio", "PlaybackReports" })
+                Execute($"DELETE FROM {Table} WHERE InteractionId IN (SELECT Id FROM ExpiredInteractions)");
+            Execute("DELETE FROM Interactions WHERE Id IN (SELECT Id FROM ExpiredInteractions)");
+            Execute("""
+                DELETE FROM InteractionAudio WHERE InteractionId IN (
+                    SELECT Id FROM Interactions WHERE Status IN ('completed','failed','cancelled') AND julianday(CreatedAt) < julianday($cutoff))
+                """, ("$cutoff", Now.AddHours(-AudioRetentionHours).ToString("O")));
+            Execute("""
+                DELETE FROM ClientAttachments
+                WHERE julianday(json_extract(Metadata,'$.createdAt')) < julianday($cutoff)
+                    AND NOT EXISTS (SELECT 1 FROM InteractionAttachments WHERE AttachmentId=ClientAttachments.Id)
+                    AND Id NOT IN (
+                        SELECT json_extract(O.Payload,'$.audioAttachmentId') FROM InteractionOptions O JOIN Interactions I ON I.Id=O.InteractionId
+                        WHERE I.Status NOT IN ('completed','failed','cancelled')
+                            AND json_extract(O.Payload,'$.audioAttachmentId') IS NOT NULL)
+                """, ("$cutoff", Now.AddHours(-AudioRetentionHours).ToString("O")));
+            Execute("""
+                DELETE FROM ClientConversations WHERE julianday(CreatedAt) < julianday($cutoff)
+                    AND NOT EXISTS (SELECT 1 FROM Interactions WHERE ConversationId=ClientConversations.Id)
+                """, ("$cutoff", Now.AddDays(-RetentionDays).ToString("O")));
+            Execute("DELETE FROM ExpiredInteractions");
+            Transaction.Commit();
+        }
     }
     private SqliteCommand Command(string Sql, params (string, object?)[] Values)
     {
@@ -53,7 +111,7 @@ public sealed class InteractionStore : IDisposable
     {
         lock (Gate)
         {
-            var Item = new ClientConversation(Guid.NewGuid(), "New conversation", DateTimeOffset.UtcNow);
+            var Item = new ClientConversation(Guid.NewGuid(), "New conversation", Clock.GetUtcNow());
             using var Insert = Command("INSERT INTO ClientConversations VALUES($id,$owner,$title,$created)",
                 ("$id", Item.Id.ToString()), ("$owner", Owner), ("$title", Item.Title), ("$created", Item.CreatedAt.ToString("O")));
             Insert.ExecuteNonQuery();
@@ -114,7 +172,7 @@ public sealed class InteractionStore : IDisposable
             var Id = Guid.NewGuid();
             using var Transaction = Database.BeginTransaction();
             using var Insert = Command("INSERT INTO Interactions(Id,ConversationId,Owner,IdempotencyKey,Input,Status,CreatedAt) VALUES($id,$conversation,$owner,$key,$input,'created',$created)",
-                ("$id", Id.ToString()), ("$conversation", ConversationId.ToString()), ("$owner", Owner), ("$key", Request.IdempotencyKey), ("$input", Request.Message), ("$created", DateTimeOffset.UtcNow.ToString("O")));
+                ("$id", Id.ToString()), ("$conversation", ConversationId.ToString()), ("$owner", Owner), ("$key", Request.IdempotencyKey), ("$input", Request.Message), ("$created", Clock.GetUtcNow().ToString("O")));
             Insert.Transaction = Transaction;
             Insert.ExecuteNonQuery();
             using var SaveOptions = Command("INSERT INTO InteractionOptions VALUES($id,$payload)", ("$id", Id.ToString()), ("$payload", JsonSerializer.Serialize(Request, Json)));
@@ -144,6 +202,29 @@ public sealed class InteractionStore : IDisposable
             return Reader.Read() ? new(Guid.Parse(Reader.GetString(0)), Guid.Parse(Reader.GetString(1)), Reader.GetString(2), Reader.GetString(3), Reader.GetString(4), DateTimeOffset.Parse(Reader.GetString(5)), Reader.GetInt64(6), Reader.IsDBNull(7) ? null : Guid.Parse(Reader.GetString(7)), Reader.GetBoolean(8)) : null;
         }
     }
+    public InteractionSnapshot? ForRun(Guid RunId, string Owner)
+    {
+        lock (Gate)
+        {
+            using var Query = Command("SELECT Id FROM Interactions WHERE RunId=$run AND Owner=$owner", ("$run", RunId.ToString()), ("$owner", Owner));
+            return Query.ExecuteScalar() is string Id ? Get(Guid.Parse(Id), Owner) : null;
+        }
+    }
+    public (long? InputSize, long? OutputSize, bool OutputCaptured) AudioSizes(Guid Id)
+    {
+        lock (Gate)
+        {
+            using var Query = Command("""
+                SELECT (SELECT length(A.Content) FROM ClientAttachments A JOIN InteractionOptions O
+                            ON A.Id=json_extract(O.Payload,'$.audioAttachmentId') WHERE O.InteractionId=$id),
+                    (SELECT length(Content) FROM InteractionAudio WHERE InteractionId=$id),
+                    EXISTS(SELECT 1 FROM InteractionEvents WHERE InteractionId=$id AND json_extract(Payload,'$.type')='tts.audio')
+                """, ("$id", Id.ToString()));
+            using var Reader = Query.ExecuteReader();
+            Reader.Read();
+            return (Reader.IsDBNull(0) ? null : Reader.GetInt64(0), Reader.IsDBNull(1) ? null : Reader.GetInt64(1), Reader.GetBoolean(2));
+        }
+    }
     public IReadOnlyList<InteractionSnapshot> History(Guid ConversationId)
     {
         lock (Gate)
@@ -163,6 +244,18 @@ public sealed class InteractionStore : IDisposable
             var Items = new List<InteractionEvent>();
             while (Reader.Read()) Items.Add(JsonSerializer.Deserialize<InteractionEvent>(Reader.GetString(0), Json)!);
             return Items;
+        }
+    }
+    public Guid? RoutingConversation(Guid Id)
+    {
+        lock (Gate)
+        {
+            using var Query = Command("""
+                SELECT json_extract(Payload,'$.data.routingConversationId') FROM InteractionEvents
+                WHERE InteractionId=$id AND json_extract(Payload,'$.type')='response.completed'
+                ORDER BY Sequence DESC LIMIT 1
+                """, ("$id", Id.ToString()));
+            return Query.ExecuteScalar() is string Value && Guid.TryParse(Value, out var Conversation) ? Conversation : null;
         }
     }
     private void AppendCore(Guid Id, string Type, object Data, SqliteTransaction Transaction, string? Status = null, string? Response = null, Guid? RunId = null)
@@ -311,10 +404,13 @@ public sealed class InteractionStore : IDisposable
             return Query.ExecuteScalar() as byte[];
         }
     }
-    public bool Playback(Guid Id, string ClientId, PlaybackReport Report)
+    public bool Playback(Guid Id, string ClientId, PlaybackReport Report) => Playback(Id, ClientId, Report, out _);
+
+    public bool Playback(Guid Id, string ClientId, PlaybackReport Report, out bool Changed)
     {
         lock (Gate)
         {
+            Changed = false;
             if (Audio(Id) is null || Report.PlaybackId == Guid.Empty || Report.State is not ("started" or "completed" or "stopped" or "failed")) return false;
             using var Query = Command("SELECT State FROM PlaybackReports WHERE InteractionId=$id AND ClientId=$client AND PlaybackId=$playback", ("$id", Id.ToString()), ("$client", ClientId), ("$playback", Report.PlaybackId.ToString()));
             var Previous = Query.ExecuteScalar() as string;
@@ -326,6 +422,7 @@ public sealed class InteractionStore : IDisposable
             Write.ExecuteNonQuery();
             AppendCore(Id, "playback." + Report.State, new { clientId = ClientId, playbackId = Report.PlaybackId }, Transaction);
             Transaction.Commit();
+            Changed = true;
             return true;
         }
     }
@@ -334,13 +431,29 @@ public sealed class InteractionStore : IDisposable
     {
         lock (Gate)
         {
-            using var Count = Command("SELECT COUNT(*) FROM ClientAttachments WHERE Owner=$owner", ("$owner", Owner));
-            if ((long)Count.ExecuteScalar()! >= 100) throw new InvalidOperationException("attachment_quota_exceeded");
-            var Item = new ClientAttachment(Guid.NewGuid(), Name, MimeType, Content.Length, Source, DateTimeOffset.UtcNow, Text is null ? "stored_only" : "ready", ClientId);
+            using var Count = Command("SELECT COALESCE(SUM(length(Content)),0) FROM ClientAttachments WHERE Owner=$owner", ("$owner", Owner));
+            if ((long)Count.ExecuteScalar()! + Content.LongLength > MaxAttachmentBytes)
+            {
+                Prune();
+                if ((long)Count.ExecuteScalar()! + Content.LongLength > MaxAttachmentBytes) throw new InvalidOperationException("attachment_quota_exceeded");
+            }
+            var Item = new ClientAttachment(Guid.NewGuid(), Name, MimeType, Content.Length, Source, Clock.GetUtcNow(), Text is null ? "stored_only" : "ready", ClientId);
             using var Insert = Command("INSERT INTO ClientAttachments VALUES($id,$owner,$metadata,$content,$text)", ("$id", Item.Id.ToString()), ("$owner", Owner),
                 ("$metadata", JsonSerializer.Serialize(Item, Json)), ("$content", Content), ("$text", Text));
             Insert.ExecuteNonQuery();
             return Item;
+        }
+    }
+    public bool DeleteAttachment(Guid Id, string Owner)
+    {
+        lock (Gate)
+        {
+            using var Delete = Command("""
+                DELETE FROM ClientAttachments WHERE Id=$id AND Owner=$owner
+                    AND NOT EXISTS (SELECT 1 FROM InteractionAttachments WHERE AttachmentId=$id)
+                    AND NOT EXISTS (SELECT 1 FROM InteractionOptions WHERE json_extract(Payload,'$.audioAttachmentId')=$id)
+                """, ("$id", Id.ToString()), ("$owner", Owner));
+            return Delete.ExecuteNonQuery() > 0;
         }
     }
     public (ClientAttachment Metadata, byte[] Content, string? Text)? Attachment(Guid Id, string Owner)

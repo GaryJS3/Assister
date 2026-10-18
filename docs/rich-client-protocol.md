@@ -53,6 +53,7 @@ All routes except login require an authenticated client. Browser Origin headers 
 | POST | `/attachments?name=notes.txt&source=user` | Raw bytes with an allowed Content-Type; returns metadata and stable ID |
 | GET | `/attachments/{id}` | Owned download with nosniff and attachment disposition |
 | GET | `/attachments/{id}/metadata` | Owned upload metadata and processing status |
+| DELETE | `/attachments/{id}` | Delete an owned unused upload; 409 if bound to an interaction |
 | GET | `/interactions/{id}/audio` | Owned WAV output; supports range requests |
 | POST | `/interactions/{id}/playback` | `{ "state": "started", "playbackId": "guid" }` acknowledgement |
 | POST | `/clients/register` | Device name, informational client type and canonical capabilities |
@@ -66,7 +67,22 @@ All routes except login require an authenticated client. Browser Origin headers 
 
 Idempotency keys are scoped to the owner. Repeating the same key/input/conversation returns the original interaction; reusing a key for different input returns 409. Input is limited to 1,000 characters. Conversation history and listing pagination beyond 100 items are future work.
 
-Submissions optionally include `attachmentIds`, with at most eight distinct IDs owned by the conversation owner. Idempotency also compares ordered attachment IDs, `audioAttachmentId` and `speak`. Combined extracted attachment text is limited to 12,000 characters. Uploaded text must be valid UTF-8 without NUL bytes, at most 12,000 characters per file. Uploads are limited to 1 MiB each and 100 files per owner. Supported types are text/plain, text/markdown, application/json, image/png, image/jpeg and fixed-format audio/pcm; images receive signature checks and `stored_only` processing status. Submitting stored-only images returns `attachment_processing_unsupported` rather than silently ignoring them. PDF/Office extraction, image decoding/vision, orphan deletion and configurable retention are not implemented yet.
+Submissions optionally include `attachmentIds`, with at most eight distinct IDs owned by the conversation owner. Idempotency also compares ordered attachment IDs, `audioAttachmentId` and `speak`. Combined extracted attachment text is limited to 12,000 characters. Uploaded text must be valid UTF-8 without NUL bytes, at most 12,000 characters per file. Uploads are limited to 1 MiB each and a configurable total byte quota per owner, rather than a lifetime upload count. Supported types are text/plain, text/markdown, application/json, image/png, image/jpeg and fixed-format audio/pcm; images receive signature checks and `stored_only` processing status. Submitting stored-only images returns `attachment_processing_unsupported` rather than silently ignoring them. PDF/Office extraction and image decoding/vision remain future work.
+
+### Storage retention
+
+Cleanup runs at startup and every five minutes. Configuration is under `RichClients`:
+
+| Setting | Default | Allowed range | Behavior |
+|---|---|---|---|
+| `RetentionDays` | 30 | 1–365 | Expire completed, failed and cancelled interactions by creation time |
+| `MaxInteractions` | 10000 | 1–100000 | Retain at most this many terminal interactions globally after each sweep, newest first |
+| `AudioRetentionHours` | 24 | 1–168 | Expire generated audio and unused uploads by creation time |
+| `MaxAttachmentMiB` | 100 | 1–1024 | Total retained upload bytes per owner; exhausted quota returns 409 |
+
+Environment variables use double underscores, for example `RichClients__RetentionDays=60`. Active interactions and their input uploads are protected. Text attachments bound to retained interactions remain available with their history; input recordings and generated audio expire sooner after work becomes terminal. Expiring an interaction removes its events, context, options, attachment bindings, output audio and playback reports. Old empty conversations also expire. SQLite reuses freed pages; cleanup does not shrink the database file immediately.
+
+Idempotency applies while an interaction is retained; clients must not retry expired requests expecting deduplication. After audio expiry, the download returns 404 even if older replay events still reference it. Unused uploads can be deleted immediately through `DELETE /attachments/{id}` or the .NET client's `DeleteAttachmentAsync`; the web attachment Remove button also releases the stored upload. If an upload quota is full, upload retries run cleanup before rejecting the request.
 
 ## Voice and playback
 
@@ -178,16 +194,16 @@ The SDK also supports optional connection-state callbacks, `UploadAttachmentAsyn
 
 Local C# tests exercise SQLite reopen, concurrent sequence allocation, idempotency conflicts, interrupted-work recovery, early deltas, WebSocket disconnect/replay, cancellation, browser login/logout, origin checks, ownership and two devices sharing an owner. A fake streaming execution backend avoids performing real Home Assistant controls. This is protocol verification, not live LLM/STT/TTS or physical-device acceptance.
 
-The real coordinator is also tested with unavailable Home Assistant, proving intent-classification feedback and authoritative response delivery without issuing a device control. An isolated local server completed a native timer request through the new HTTP endpoints and returned events plus its diagnostic trace. Attachment integration uses real coordinators and a capturing fake model to verify that uploaded content reaches model assembly and produces persisted provenance. Storage tests verify context reopen, redaction and bounded inspection; tool-loop tests verify round-specific message/tool provenance. Voice tests cover partial/final transcripts, text-before-TTS ordering, WAV output, TTS failure, synthesis cancellation and playback idempotency. A fake Wyoming TCP server verifies actual provider chunk callbacks. Device tests cover native/server WebSocket delivery, targeting, success and permission errors, withdrawal, timeout, cancellation and restart recovery. The full solution has 233 passing C# tests. Three Node recorder tests verify 48/44.1 kHz conversion, PCM sample encoding and the recording limit. Physical microphone/speaker and real device permissions remain unverified; browser visual verification was unavailable because tab creation was restricted in the sidebar session. No deployment was performed.
+The real coordinator is also tested with unavailable Home Assistant, proving intent-classification feedback and authoritative response delivery without issuing a device control. An isolated local server completed a native timer request through the new HTTP endpoints and returned events plus its diagnostic trace. Attachment integration uses real coordinators and a capturing fake model to verify that uploaded content reaches model assembly and produces persisted provenance. Storage tests verify context reopen, redaction and bounded inspection; tool-loop tests verify round-specific message/tool provenance. Voice tests cover partial/final transcripts, text-before-TTS ordering, WAV output, TTS failure, synthesis cancellation and playback idempotency. A fake Wyoming TCP server verifies actual provider chunk callbacks. Device tests cover native/server WebSocket delivery, targeting, success and permission errors, withdrawal, timeout, cancellation and restart recovery. The initial protocol verification recorded 233 passing C# tests; see README.md for the current suite count. Three Node recorder tests verify 48/44.1 kHz conversion, PCM sample encoding and the recording limit. Physical microphone/speaker and real device permissions remain unverified; browser visual verification was unavailable because tab creation was restricted in the sidebar session. No deployment was performed.
 
 Next increments:
 
 1. Streaming microphone framing and early TTS audio delivery, with live-provider and physical-browser acceptance.
 2. Execution tools that deliberately consume device capabilities, plus platform-specific permissions and durable execution ledgers in future native clients.
-3. Vision-capable image processing and additional document formats, plus attachment cleanup/retention.
-4. Conversation/event pagination, retention and expired-cursor snapshot recovery.
+3. Vision-capable image processing and additional document formats.
+4. Conversation/event pagination and expired-cursor snapshot recovery.
 5. Richer protocol negotiation, multiplexed subscriptions, SDK connection-state signaling, retry/regenerate with side-effect policy and whole-application authentication hardening.
 
-SQLite schema is currently additive startup SQL, matching the diagnostics store pattern; future protocol schema changes need explicit versioned upgrades. Protocol event retention is not enabled yet. Detailed trace retains its existing independent limits and expiry.
+SQLite schema is currently additive startup SQL, matching the diagnostics store pattern; future protocol schema changes need explicit versioned upgrades. Protocol events expire with their interaction under the storage retention policy above. Detailed trace retains its existing independent limits and expiry.
 
-Run one server replica: active execution cancellation and client presence are process-local, while interactions, events, audio and device outcomes persist in SQLite. Audio and device-outcome retention are not enabled yet.
+Run one server replica: active execution cancellation and client presence are process-local, while interactions, events, audio and device outcomes persist in SQLite. Audio has configurable retention; device-outcome retention remains future work.

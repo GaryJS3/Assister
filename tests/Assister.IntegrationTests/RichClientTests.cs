@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Assister.IntegrationTests;
 
@@ -15,6 +16,60 @@ public sealed class RichClientTests
 {
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    [Fact]
+    public async Task UnusedUploadsCanBeDeletedThroughSdkWithOwnerIsolation()
+    {
+        using var App = new TestApplication();
+        using var Http = App.CreateClient();
+        Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Upload = await Client.UploadAttachmentAsync("notes"u8.ToArray(), "notes.txt", "text/plain");
+        using var Other = App.CreateClient();
+        Other.DefaultRequestHeaders.Authorization = new("Bearer", "other-client-test-credential-123456789");
+        Assert.Equal(HttpStatusCode.NotFound, (await Other.DeleteAsync($"/api/client/attachments/{Upload.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync($"/api/client/attachments/{Upload.Id}/metadata")).StatusCode);
+        await Client.DeleteAttachmentAsync(Upload.Id);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"/api/client/attachments/{Upload.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task PlaybackAfterLongStreamRefreshesContinuationOnce()
+    {
+        using var App = new TestApplication(UseFake: false).WithWebHostBuilder(Builder => Builder.ConfigureServices(Services =>
+            Services.RemoveAll<Microsoft.Extensions.Hosting.IHostedService>()));
+        using var Http = App.CreateClient();
+        Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Store = App.Services.GetRequiredService<Assister.Interactions.InteractionStore>();
+        var Conversation = Store.CreateConversation("local");
+        var Item = Store.Submit(Conversation.Id, "local", new("hello", "long-playback"));
+        var RoutingId = Guid.NewGuid();
+        var Before = DateTimeOffset.UtcNow.AddMinutes(-2);
+        using var Scope = App.Services.CreateScope();
+        var Database = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.AssisterDbContext>();
+        var Context = new Assister.Tools.DeviceConversationContext { SourceDeviceId = "local", ResponseFinishedAt = Before };
+        var Routing = new Assister.Persistence.Conversation { Id = RoutingId, SatelliteId = "client-conversation-" + Conversation.Id.ToString("N"),
+            UpdatedAt = Before.ToUnixTimeSeconds(), DeviceContextJson = JsonSerializer.Serialize(Context) };
+        Database.Conversations.Add(Routing);
+        await Database.SaveChangesAsync();
+        for (var Index = 0; Index < 300; Index++) Store.Append(Item.Id, "response.delta", new { text = "a" });
+        Store.Append(Item.Id, "response.completed", new { routingConversationId = RoutingId });
+        Store.SaveAudio(Item.Id, new byte[44]);
+        Store.Append(Item.Id, "interaction.completed", new { }, "completed");
+        var Client = new Assister.Client.AssisterClient(Http);
+        var PlaybackId = Guid.NewGuid();
+        await Client.ReportPlaybackAsync(Item.Id, new("started", PlaybackId));
+        await Client.ReportPlaybackAsync(Item.Id, new("completed", PlaybackId));
+        await Database.Entry(Routing).ReloadAsync();
+        Assert.True(JsonSerializer.Deserialize<Assister.Tools.DeviceConversationContext>(Routing.DeviceContextJson)!.ResponseFinishedAt > Before);
+        // A duplicate acknowledgement must not reopen the continuation window.
+        Routing.DeviceContextJson = JsonSerializer.Serialize(Context);
+        Routing.UpdatedAt = Before.ToUnixTimeSeconds();
+        await Database.SaveChangesAsync();
+        await Client.ReportPlaybackAsync(Item.Id, new("completed", PlaybackId));
+        await Database.Entry(Routing).ReloadAsync();
+        Assert.Equal(Before, JsonSerializer.Deserialize<Assister.Tools.DeviceConversationContext>(Routing.DeviceContextJson)!.ResponseFinishedAt);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -11,12 +11,15 @@ public sealed record VoiceSession(Guid Id, string SatelliteId, string? Area, Gui
 public sealed record VoiceResult(VoiceSession Session, RequestResult? Request, string Outcome);
 
 public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvider Tts, IRequestCoordinator Coordinator,
-    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null, ToneCatalog? Tones = null)
+    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null, ToneCatalog? Tones = null, RunAudioStore? RunAudio = null)
 {
     public async Task<VoiceResult> RunAsync(ISatelliteConnection Satellite, Guid? ConversationId, CancellationToken CancellationToken)
     {
         var Session = new VoiceSession(Guid.NewGuid(), Satellite.SatelliteId, Satellite.Area, ConversationId, DateTimeOffset.UtcNow);
         using var Run = RunTracing.BeginRun(Diagnostics ?? new RunStore(), "voice", Satellite.SatelliteId, Satellite.Area, Session.Id, ConversationId);
+        var RunId = RunTracing.RunId;
+        IAsyncEnumerable<AudioChunk> Capture(string Direction, IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token)
+            => RunAudio?.ObserveAsync(RunId, Direction, Audio, Token) ?? Audio;
         using (var Activation = RunTracing.Start("Input", "Voice activation", "Create a voice session from a provider activation; a missing wake word may indicate a button or another device trigger."))
         {
             var Observed = (Satellite as IVoiceActivationContext)?.Activation;
@@ -67,11 +70,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             AudioChunk? Format = null;
             async IAsyncEnumerable<AudioChunk> ObserveAudio([EnumeratorCancellation] CancellationToken Token)
             {
-                using var Capture = RunTracing.Start("Input", "Microphone audio", "Receive PCM microphone audio; only format, byte count and duration are retained.");
-                Capture.Metadata(new { Session.SatelliteId, Session.Area, voiceSessionId = Session.Id, Session.ConversationId });
+                using var CaptureStep = RunTracing.Start("Input", "Microphone audio", "Receive PCM microphone audio; recordings have a separate short retention policy.");
+                CaptureStep.Metadata(new { Session.SatelliteId, Session.Area, voiceSessionId = Session.Id, Session.ConversationId });
                 try
                 {
-                    await foreach (var Chunk in Input.WithCancellation(Token))
+                    await foreach (var Chunk in Capture("input", Input, Token).WithCancellation(Token))
                     {
                         if (FirstAudioAt is null)
                         {
@@ -90,11 +93,11 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 }
                 finally
                 {
-                    Capture.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
+                    CaptureStep.Output(new { encoding = "PCM", Format?.SampleRate, Format?.Channels, Format?.SampleWidth,
                         pcmByteCount = PcmBytes, audioDurationMilliseconds = AudioMilliseconds, firstAudioReceivedAt = FirstAudioAt,
                         sourceChannels = Satellites.State(Satellite.SatelliteId).MicrophoneSourceChannels, audioInputCompletedAt = AudioEnded,
                         partial = AudioEnded is null, terminationReason = (Satellite as EchoMuseConnection.Turn)?.InputEndReason });
-                    if (AudioEnded is not null) { Capture.Complete(); }
+                    if (AudioEnded is not null) { CaptureStep.Complete(); }
                 }
             }
             TranscriptionResult Transcript;
@@ -186,7 +189,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     try
                     {
                         using var Playback = RunTracing.Start("Playback", "Streaming delivery", "Overlap sentence synthesis with response generation; the provider controls audio buffering.");
-                        await Satellite.SendAudioAsync(Audio(OutputLifetime.Token), OutputLifetime.Token);
+                        await Satellite.SendAudioAsync(Capture("output", Audio(OutputLifetime.Token), OutputLifetime.Token), OutputLifetime.Token);
                         Playback.Complete();
                     }
                     catch { OutputLifetime.Cancel(); throw; }
@@ -279,7 +282,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             }
             using (var Playback = RunTracing.Start("Playback", "Playback delivery", "Deliver synthesized audio and wait for satellite playback completion."))
             {
-                await Satellite.SendAudioAsync(Synthesize(Timeout.Token), Timeout.Token);
+                await Satellite.SendAudioAsync(Capture("output", Synthesize(Timeout.Token), Timeout.Token), Timeout.Token);
                 Playback.Output(new { deliveryCompleted = true });
                 Playback.Complete();
             }

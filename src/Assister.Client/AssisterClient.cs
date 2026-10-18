@@ -57,6 +57,12 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
         return (await Response.Content.ReadFromJsonAsync<ClientAttachment>(Token))!;
     }
 
+    public async Task DeleteAttachmentAsync(Guid AttachmentId, CancellationToken Token = default)
+    {
+        using var Response = await Http.DeleteAsync($"api/client/attachments/{AttachmentId}", Token);
+        Response.EnsureSuccessStatusCode();
+    }
+
     // Delivery resumes from the last yielded sequence. Consumers persist that cursor with their rendered state.
     public async IAsyncEnumerable<InteractionEvent> ObserveAsync(Guid InteractionId, long AfterSequence = 0,
         [EnumeratorCancellation] CancellationToken Token = default, bool FollowPlayback = false)

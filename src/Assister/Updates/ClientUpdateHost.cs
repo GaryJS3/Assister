@@ -12,11 +12,13 @@ public sealed partial class ClientUpdateHost
     public const long MaximumBytes = 512L * 1024 * 1024;
     private readonly string Root;
     private readonly string? UploadToken;
+    private readonly ILogger<ClientUpdateHost> Logger;
     private readonly SemaphoreSlim PublishLock = new(1, 1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public ClientUpdateHost(IConfiguration Configuration, IHostEnvironment Environment)
+    public ClientUpdateHost(IConfiguration Configuration, IHostEnvironment Environment, ILogger<ClientUpdateHost> Logger)
     {
+        this.Logger = Logger;
         Root = Path.Combine(Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data"), "client-releases");
         UploadToken = Configuration["ClientUpdates:UploadToken"] ?? (Environment.IsDevelopment() ? "dev" : null);
         Directory.CreateDirectory(Root);
@@ -44,16 +46,48 @@ public sealed partial class ClientUpdateHost
 
     private ClientRelease[] ReadReleases() => Directory.EnumerateDirectories(Root)
         .Where(Directory => !Path.GetFileName(Directory).StartsWith('.'))
-        .Select(Directory => JsonSerializer.Deserialize<ClientRelease>(File.ReadAllText(Path.Combine(Directory, "release.json")), Json)!)
+        .Select(ReadRelease).OfType<ClientRelease>()
         .OrderBy(Release => Release.AppId).ThenBy(Release => Release.Platform)
         .ThenByDescending(Release => System.Version.Parse(Release.Version)).ToArray();
+
+    private ClientRelease? ReadRelease(string Directory)
+    {
+        try
+        {
+            var Release = JsonSerializer.Deserialize<ClientRelease>(File.ReadAllText(Path.Combine(Directory, "release.json")), Json);
+            if (Release is null || string.IsNullOrEmpty(Release.AppId) || !ValidKey(Release.AppId)
+                || string.IsNullOrEmpty(Release.Platform) || !ValidKey(Release.Platform)
+                || string.IsNullOrEmpty(Release.Version) || !TryVersion(Release.Version, out var Version)
+                || Release.Version != Version.ToString()
+                || !string.Equals(Directory, ReleasePath(Release.AppId, Release.Platform, Release.Version), StringComparison.Ordinal)
+                || !ValidFileName(Release.FileName) || Release.Size is <= 0 or > MaximumBytes
+                || Release.Sha256 is not { Length: 64 } || !Release.Sha256.All(Uri.IsHexDigit)
+                || Release.DownloadUrl != $"/api/updates/{Release.AppId}/{Release.Platform}/{Release.Version}/download"
+                || new FileInfo(Path.Combine(Directory, "package")).Length != Release.Size)
+                throw new InvalidDataException("Release metadata or package is invalid.");
+            return Release;
+        }
+        catch (Exception Error) when (Error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException)
+        {
+            Logger.LogWarning("Ignoring damaged client release in {Directory} ({FailureType}). Repair or remove this release directory.", Directory, Error.GetType().Name);
+            return null;
+        }
+    }
+
+    private static bool ValidFileName(string? Name) => Name is { Length: >= 5 and <= 128 }
+        && !Name.Any(Character => char.IsControl(Character) || "/\\:<>\"|?*".Contains(Character))
+        && (Name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) || Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
 
     // Call during construction or while holding PublishLock.
     private void PruneReleases()
     {
         foreach (var Group in ReadReleases().GroupBy(Release => (Release.AppId, Release.Platform)))
             foreach (var Release in Group.Skip(2))
-                Directory.Delete(ReleasePath(Release.AppId, Release.Platform, Release.Version), recursive: true);
+            {
+                try { Directory.Delete(ReleasePath(Release.AppId, Release.Platform, Release.Version), recursive: true); }
+                catch (Exception Error) when (Error is IOException or UnauthorizedAccessException)
+                { Logger.LogWarning("Could not prune client release {AppId}/{Platform}/{Version} ({FailureType}).", Release.AppId, Release.Platform, Release.Version, Error.GetType().Name); }
+            }
     }
 
     private string ReleasePath(string AppId, string Platform, string Version) => Path.Combine(Root, $"{AppId}_{Platform}_{Version}");
@@ -62,9 +96,9 @@ public sealed partial class ClientUpdateHost
     {
         if (!ValidKey(AppId) || !ValidKey(Platform) || !TryVersion(Version, out var Parsed)) return Results.BadRequest();
         var Directory = ReleasePath(AppId, Platform, Parsed.ToString());
-        var Manifest = Path.Combine(Directory, "release.json");
-        if (!File.Exists(Manifest)) return Results.NotFound();
-        var Release = JsonSerializer.Deserialize<ClientRelease>(File.ReadAllText(Manifest), Json)!;
+        if (!System.IO.Directory.Exists(Directory)) return Results.NotFound();
+        var Release = ReadRelease(Directory);
+        if (Release is null) return Results.NotFound();
         return Results.File(Path.Combine(Directory, "package"),
             Release.FileName.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ? "application/vnd.android.package-archive" : "application/octet-stream",
             Release.FileName, enableRangeProcessing: true, lastModified: Release.PublishedAt,
@@ -81,8 +115,7 @@ public sealed partial class ClientUpdateHost
         var Name = Http.Request.Query["name"].ToString();
         var Notes = Http.Request.Query["notes"].ToString();
         if (!ValidKey(AppId) || !ValidKey(Platform) || !TryVersion(Version, out var Parsed) ||
-            Name.Length is < 5 or > 128 || Name.Any(Character => char.IsControl(Character) || "/\\:<>\"|?*".Contains(Character)) ||
-            !(Name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) || Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) || Notes.Length > 4000)
+            !ValidFileName(Name) || Notes.Length > 4000)
             return Results.BadRequest(new { Error = "Use lowercase app/platform identifiers, a numeric version (major.minor[.build[.revision]]), and an APK or EXE filename. Notes are limited to 4000 characters." });
         var Limit = Http.Features.Get<IHttpMaxRequestBodySizeFeature>();
         if (Limit is { IsReadOnly: false }) Limit.MaxRequestBodySize = MaximumBytes;

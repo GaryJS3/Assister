@@ -45,7 +45,7 @@ public static class AttachmentUpload
             if (Text.Length > 12000) return Results.BadRequest(new ProtocolError("attachment_context_too_large", "Text attachments are limited to 12,000 characters."));
         }
         try { return Results.Ok(Store.SaveAttachment((string)Http.Items["ClientOwner"]!, Name, MimeType, Source, Bytes, Text, (string)Http.Items["ClientId"]!)); }
-        catch (InvalidOperationException Error) { return Results.Conflict(new ProtocolError(Error.Message, "The attachment quota of 100 uploads has been reached.")); }
+        catch (InvalidOperationException Error) { return Results.Conflict(new ProtocolError(Error.Message, "The attachment storage quota has been reached. Remove unused uploads or wait for retention cleanup.")); }
     }
     private static IResult TooLarge() => Results.Json(new ProtocolError("attachment_too_large", "Attachments are limited to 1 MiB."), statusCode: 413);
 }

@@ -7,8 +7,9 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 ## Current implementation
 
-Latest deployed runtime: 6918741 (October 12, 2026), with 391 passing tests
-(352 unit/component, 39 integration). Daily/weekly reminders support native voice/text
+Latest recorded deployed runtime: 6918741 (October 12, 2026). The local suite now has
+436 passing .NET tests (385 unit/component, 51 integration), plus 10 browser-script tests;
+these local results do not establish the deployed revision. Daily/weekly reminders support native voice/text
 creation, dashboard CRUD, and gated AI create/get/edit/cancel tools. Live model operations
 and persisted state were verified; physical reminder announcements remain unverified.
 See [reminder reference](docs/reminders.md) for behavior, API/tool contracts, source pointers,
@@ -77,7 +78,9 @@ Build with `docker compose build`; start with `docker compose up -d`. The contai
 
 Target: Dockhand **Automation (8)**, host `auto@10.44.0.33`. Git stack: https://github.com/GaryJS3/Assister, branch `main`, compose file `compose.yaml`. Set secrets through Dockhand environment overrides. STT, TTS, LLM and Home Assistant remain external.
 
-`/health` checks the local database; `/api/status` reports degradation while integrations are unconfigured. Neither endpoint exposes configuration or secrets.
+`/health` checks the local database; `/api/status` reports Healthy when the database, Home Assistant connection/cache and all external component probes are healthy, Degraded while integrations are unconfigured/checking/unavailable, and Unavailable when the database connectivity check fails. Connected satellites are reported separately and are not required for text-only operation. Neither endpoint exposes configuration or secrets.
+
+Rich-client history and audio have configurable retention, and attachment quotas count retained bytes rather than lifetime uploads. See [rich-client storage retention](docs/rich-client-protocol.md#storage-retention) for defaults and deletion behavior.
 
 The initial live deployment publishes port **8081** because 8080 is occupied. Dockhand Git stack ID is **10**. The agent currently fails image builds with `mkdir /root/.docker: read-only file system`. Its build-on-deploy setting is temporarily disabled; images were built over SSH, with service creation performed by Dockhand. Future Git syncs alone will not rebuild the image until the agent configuration is repaired or an image is built separately.
 
@@ -99,7 +102,7 @@ Run Explorer has search, source/outcome/handler filters, satellite/conversation/
 
 Debug Chat uses `/api/test/message` and the same `IRequestCoordinator` / `ConversationCoordinator` as voice, including direct intents, tool selection, LLM/tools, memory and timers. It omits microphone/STT/TTS/playback and still returns `spokenResponse`. The UI assigns a browser-session-specific satellite, keeps the returned conversation ID, supports explicit New Conversation, and links each reply to its exact run. Requests can execute real device commands. API clients can use `newConversation: true` to bypass automatic recent-conversation reuse.
 
-`/api/diagnostics/runs` lists lightweight summaries. `/api/diagnostics/runs/{runId}` returns structured steps. Active runs stay in memory; completed bounded traces persist in `/data/diagnostics.db` (or the configured `Assister:DataPath`). Default retention is 1000 runs / 7 days. Configure `Diagnostics:MaxRuns` (1–1000), `RetentionDays` (1–30), `PersistHistory` (default true) and `CapturePayloads` (default true). Disabling payload capture omits detailed prompts/tool payloads while retaining run summaries and semantic metadata. Each run has at most 128 steps, payloads have a 32 KiB per-write and 128 KiB per-run detailed payload budget plus a separate 32 KiB semantic metadata budget, strings have a 4 KiB limit, and nested JSON is bounded. Truncation is explicit. Raw microphone and synthesized audio are never retained in diagnostics. All diagnostic fields pass through centralized credential redaction and bounding before memory, API or SQLite storage.
+`/api/diagnostics/runs` lists lightweight summaries. `/api/diagnostics/runs/{runId}` returns structured steps. Active runs stay in memory; completed bounded traces persist in `/data/diagnostics.db` (or the configured `Assister:DataPath`). Default retention is 1000 runs / 7 days. Configure `Diagnostics:MaxRuns` (1–1000), `RetentionDays` (1–30), `PersistHistory` (default true) and `CapturePayloads` (default true). Disabling payload capture omits detailed prompts/tool payloads while retaining run summaries and semantic metadata. Each run has at most 128 steps, payloads have a 32 KiB per-write and 128 KiB per-run detailed payload budget plus a separate 32 KiB semantic metadata budget, strings have a 4 KiB limit, and nested JSON is bounded. Truncation is explicit. Run Explorer includes input/output audio players. New satellite captures have a separate bounded WAV store (24 hours / 256 MiB by default); rich-client players reuse retained audio and require owner sign-in. See [trace audio](docs/trace-audio.md) for capture limits, access and expiry. Raw audio is kept out of diagnostic JSON. All diagnostic fields pass through centralized credential redaction and bounding before memory, API or SQLite storage.
 
 `/api/diagnostics/health` combines live database connectivity, Home Assistant connection/cache status, connected satellites, and cached external probes. External probes run every 15 seconds with a three-second timeout: the LLM `/models` endpoint and Wyoming `describe` capabilities. LLM settings match the provider; speech uses `SpeechToText:Host` / `Port` (default 10300) and `TextToSpeech:Host` / `Port` (default 10200). Capability health does not prove successful inference, transcription or synthesis.
 

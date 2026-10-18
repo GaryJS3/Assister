@@ -24,6 +24,13 @@ At startup and after each successful upload, older release directories (includin
 their packages) are automatically deleted from the data volume. Uploading a version
 older than the retained two succeeds but its package is immediately pruned.
 
+Each manifest is validated independently against its directory identity, filename,
+version, hash format, download URL and package size. Damaged or missing manifests
+and packages are skipped with a warning; they do not prevent application startup,
+valid update checks or new uploads. Downloads of damaged releases return 404.
+Repair or remove the directory named in the warning before republishing that
+version. A failed deletion of an old release is logged and retried on later pruning.
+
 ## HTTP API
 
 - `GET /api/updates`: public release archive, newest version first per app/platform.

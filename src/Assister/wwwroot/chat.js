@@ -77,7 +77,13 @@
     $('attachments').replaceChildren(...attachments.map(item => {
       const li = document.createElement('li'); li.append(`${item.name} · ${item.processing === 'ready' ? 'ready' : 'stored; processing unavailable'} `);
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
-      remove.onclick = () => { attachments = attachments.filter(a => a.id !== item.id); pendingSubmission = null; renderAttachments(); }; li.append(remove); return li;
+      remove.onclick = async () => {
+        remove.disabled = true;
+        try {
+          await api(`/attachments/${item.id}`, 'DELETE');
+          attachments = attachments.filter(a => a.id !== item.id); pendingSubmission = null; renderAttachments();
+        } catch (e) { error(e); remove.disabled = false; }
+      }; li.append(remove); return li;
     }));
   }
   async function upload(files, source) {
