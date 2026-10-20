@@ -23,6 +23,7 @@ if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
     });
 }
 var App = Builder.Build();
+Assister.Llm.LanguageModelSettingsEndpoints.MapLanguageModelSettings(App, Builder.Configuration);
 App.MapClientUpdates();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }
 App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore Audio) => Audio.Get(Id) is { } Data

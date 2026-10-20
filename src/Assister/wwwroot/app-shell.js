@@ -26,6 +26,11 @@
     nav.append(link);
   }
   const tools = document.createElement('div');
+  const settings = document.createElement('a');
+  settings.href = '/ai-server.html';
+  settings.textContent = 'AI server';
+  if (current === settings.pathname) settings.setAttribute('aria-current', 'page');
+  nav.append(settings);
   tools.className = 'app-header-tools';
   tools.append(nav);
   if (status.some(child => child.nodeType === Node.ELEMENT_NODE)) {

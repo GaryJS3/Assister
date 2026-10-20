@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · AI server</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/app-shell.css"><link rel="stylesheet" href="/ai-server.css"></head>
+<body><header data-app-shell></header><main>
+<div class="heading"><div><p class="eyebrow">CONFIGURATION / LANGUAGE MODEL</p><h1>AI server.</h1><p>The connection and generation settings behind your assistant.</p></div></div>
+<form id="settings"><fieldset disabled id="fields">
+<section class="settings-panel"><h2>Connection</h2><p class="muted">Use an OpenAI-compatible server. Include the API prefix, usually /v1.</p>
+<label for="baseUrl">Base URL</label><input id="baseUrl" name="baseUrl" type="url" placeholder="http://localhost:8080/v1" required>
+<label for="model">Model</label><input id="model" name="model" maxlength="256" required>
+<label for="apiKey">API key</label><input id="apiKey" name="apiKey" type="password" autocomplete="new-password" maxlength="4096" aria-describedby="key-help"><p id="key-help" class="muted">Leave blank to keep the current key.</p>
+<label class="check"><input id="clearApiKey" type="checkbox">Remove the current API key</label>
+</section>
+<section class="settings-panel"><h2>Generation</h2><div class="generation-grid">
+<div><label for="temperature">Temperature</label><input id="temperature" type="number" min="0" max="2" step="any" required></div>
+<div><label for="maxTokens">Maximum tokens</label><input id="maxTokens" type="number" min="1" max="4096" required></div>
+<div><label for="timeoutSeconds">Timeout (seconds)</label><input id="timeoutSeconds" type="number" min="1" max="120" required></div>
+<div><label for="enableThinking">Thinking mode</label><select id="enableThinking"><option value="">Server default</option><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+</div><p class="muted">Explicit thinking settings require a server that supports chat_template_kwargs.enable_thinking.</p></section>
+<div class="actions"><button type="submit" id="save">Save settings</button><span>Applies to subsequent requests. No restart needed.</span></div>
+</fieldset></form><p id="notice" role="status" aria-live="polite">Loading settings…</p>
+<footer>Saved settings override environment and application configuration and persist in the Assister data directory. Manage access to this page as you do the other administration pages.</footer>
+</main><script src="/app-shell.js"></script><script src="/ai-server.js"></script></body></html>

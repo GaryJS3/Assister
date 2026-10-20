@@ -26,6 +26,8 @@ An injectable native C# `ILanguageModel` client supports OpenAI-compatible compl
 
 Configure `LanguageModel:BaseUrl` (including `/v1`), `Model` and optional `ApiKey`. Optional `Temperature`, `MaxTokens` and `TimeoutSeconds` default to 0.2, 500 and 30; tokens are capped at 4096 and timeout at 120 seconds. Each request/response is limited to 256 KiB, with at most 64 messages and 16 tools. Streaming requires a finish reason and `[DONE]`; truncated or filtered responses fail explicitly. Tool arguments remain untrusted strings for broker validation.
 
+The **AI server** management page (`/ai-server.html`) edits these connection and generation settings, including optional thinking mode. Changes apply to subsequent requests without restarting. Saved values override environment variables and application configuration and persist in `language-model-settings.json` under `Assister:DataPath` (default `data`). This file includes the API key when configured; protect the data directory and restrict access to the management UI. The UI never reads back the key: leave its field blank to preserve it, enter a replacement, or select the removal checkbox. “Server default” omits the thinking extension. To return to environment/application settings, stop Assister, remove this settings file, and restart.
+
 ## Text requests
 
 `POST /api/test/message` accepts `message`, `satelliteId` (defaults to `test`), `area` and optional `conversationId`:
