@@ -86,7 +86,9 @@ test('stopped speech discards deferred Goodbye', async () => {
 });
 test('streamed speech suppresses retained-recording autoplay and Goodbye waits for stream playback', async () => {
   const c = client(); c.enableStreaming(); c.send('tts.segment', { index: 0 });
+  c.view.mediaStatus.textContent = 'Speaking';
   c.send('tts.audio', { url: '/retained.wav' }); c.send('tts.completed', { streaming: true, segmentCount: 1 });
+  assert.equal(c.view.mediaStatus.textContent, 'Speaking');
   c.send('tone.play', c.cue('goodbye', 'after-response-audio')); await tick();
   assert.equal(c.played.length, 0); assert.equal(c.view.stream.count, 1);
   c.view.stream.end(); await tick(); assert.equal(c.played.length, 1);

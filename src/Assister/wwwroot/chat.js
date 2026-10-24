@@ -179,7 +179,7 @@
       const audio = document.createElement('audio'); audio.controls = true; audio.src = data.url; v.row.append(audio); v.audio = audio;
       let playbackId;
       const report = state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error);
-      v.mediaStatus.textContent = 'Audio ready';
+      if (!v.stream) v.mediaStatus.textContent = 'Audio ready';
       audio.onplaying = () => { if (v.stream && !v.stream.ended) { v.goodbye = null; v.stream.stop(); } if (!playbackId) { playbackId = newId(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
       audio.onended = () => { if (playbackId) report('completed'); playbackId = null; v.mediaStatus.textContent = 'Playback complete';
         if (v.goodbye) { const cue = v.goodbye; v.goodbye = null; playTone({ ...cue, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id); } };
