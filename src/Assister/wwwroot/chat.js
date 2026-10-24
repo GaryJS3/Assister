@@ -5,6 +5,8 @@
   let attachments = [], uploads = 0, executing = false;
   let recording, pendingAudio, registrationTimer;
   const views = new Map();
+  let speechContext;
+  function stopStreams() { for (const v of views.values()) { v.goodbye = null; v.stream?.stop(); v.audio?.pause(); } }
   let toneQueue = Promise.resolve(), toneEpoch = 0, toneAudio, finishTone;
   function stopTones() { toneEpoch++; toneAudio?.pause(); finishTone?.(); toneQueue = Promise.resolve(); }
   function playTone(data, id) {
@@ -28,12 +30,13 @@
     const text = await response.text(); return text ? JSON.parse(text) : null;
   }
   function closeStream() { generation++; clearTimeout(reconnect); if (socket) { socket.onclose = null; socket.close(); socket = null; } }
-  function signedOut() { stopTones(); closeStream(); clearInterval(registrationTimer); if (recording) stopMic(false).catch(error); $('client').hidden = true; $('login').hidden = false; $('connection').textContent = 'Disconnected'; }
+  function signedOut() { stopStreams(); stopTones(); closeStream(); clearInterval(registrationTimer); if (recording) stopMic(false).catch(error); $('client').hidden = true; $('login').hidden = false; $('connection').textContent = 'Disconnected'; }
   function busy(value) { executing = value; $('send').disabled = value || uploads > 0 || !!recording; $('cancel').hidden = !value; $('files').disabled = value; $('mic').disabled = value || uploads > 0; }
   async function register() {
     const capabilities = ['text.input', 'text.output', 'attachments.file', 'attachments.image'];
     if (window.AudioContext && window.AudioWorkletNode && navigator.mediaDevices?.getUserMedia) capabilities.push('audio.input');
     if (window.HTMLAudioElement) capabilities.push('audio.output');
+    if (window.AudioContext && window.AssisterSpeechPlayer) capabilities.push('audio.output.segments');
     if (window.HTMLAudioElement) capabilities.push('audio.tones');
     await api('/clients/register', 'POST', { clientType: 'web', deviceName: 'Web conversation client', capabilities });
   }
@@ -137,9 +140,10 @@
     if (event.sequence !== v.cursor + 1) throw new Error('Event gap. Reconnect to recover.');
     v.cursor = event.sequence;
     const data = event.data;
+    if (event.type === 'interaction.cancel_requested') { if (item.id === active) stopTones(); v.goodbye = null; v.stream?.stop(); v.audio?.pause(); }
     if (event.type === 'tone.play' && !replaying && item.id === active && $('speak').checked && Date.parse(data.expiresAt) >= Date.now()) {
       if (data.placement === 'after-response-audio') {
-        if (v.audio?.ended) playTone({ ...data, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id);
+        if (v.stream?.ended || (!v.stream && v.audio?.ended)) playTone({ ...data, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id);
         else v.goodbye = data;
       } else playTone(data, item.id);
     }
@@ -147,18 +151,33 @@
     if (event.type === 'stt.started') v.status.textContent = 'Transcribing';
     if (event.type === 'response.started') v.status.textContent = 'Responding';
     if (event.type === 'tts.started') v.mediaStatus.textContent = 'Generating speech';
-    if (event.type === 'tts.failed') v.mediaStatus.textContent = data.message;
+    if (event.type === 'tts.failed') { v.stream?.stop('failed'); v.goodbye = null; v.mediaStatus.textContent = data.message; }
+    if (event.type === 'tts.segment' && !replaying && item.id === active && $('speak').checked && speechContext?.state === 'running') {
+      if (!v.stream) {
+        const playbackId = crypto.randomUUID();
+        v.stream = new window.AssisterSpeechPlayer(speechContext, {
+          ready: toneQueue,
+          report: state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error),
+          status: text => { v.mediaStatus.textContent = text; },
+          done: () => { if (v.goodbye) { const cue = v.goodbye; v.goodbye = null; playTone({ ...cue, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id); } }
+        });
+        const stop = document.createElement('button'); stop.textContent = 'Stop speech'; stop.type = 'button';
+        stop.onclick = () => { v.goodbye = null; v.stream.stop(); }; v.row.append(stop);
+      }
+      v.stream.add(data);
+    }
+    if (event.type === 'tts.completed' && data.streaming) v.stream?.finish(data.segmentCount);
     if (event.type === 'tts.audio' && !v.audio) {
       const audio = document.createElement('audio'); audio.controls = true; audio.src = data.url; v.row.append(audio); v.audio = audio;
       let playbackId;
       const report = state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error);
       v.mediaStatus.textContent = 'Audio ready';
-      audio.onplaying = () => { if (!playbackId) { playbackId = crypto.randomUUID(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
+      audio.onplaying = () => { if (v.stream && !v.stream.ended) { v.goodbye = null; v.stream.stop(); } if (!playbackId) { playbackId = crypto.randomUUID(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
       audio.onended = () => { if (playbackId) report('completed'); playbackId = null; v.mediaStatus.textContent = 'Playback complete';
         if (v.goodbye) { const cue = v.goodbye; v.goodbye = null; playTone({ ...cue, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id); } };
       audio.onpause = () => { if (!audio.ended && playbackId) { v.goodbye = null; report('stopped'); playbackId = null; v.mediaStatus.textContent = 'Playback stopped'; } };
       audio.onerror = () => { playbackId ||= crypto.randomUUID(); report('failed'); playbackId = null; v.mediaStatus.textContent = 'Playback failed; text remains available'; };
-      if (!replaying && item.id === active && $('speak').checked) {
+      if (!replaying && !v.stream && item.id === active && $('speak').checked) {
         const epoch = toneEpoch;
         toneQueue.then(() => { if (epoch === toneEpoch && item.id === active && $('speak').checked) return audio.play(); })
           .catch(() => { v.mediaStatus.textContent = 'Audio ready — press play'; });
@@ -181,7 +200,8 @@
     }
     if (event.type.startsWith('interaction.')) v.status.textContent = event.type.slice(12).replaceAll('_', ' ');
     if (['interaction.completed', 'interaction.failed', 'interaction.cancelled'].includes(event.type)) {
-      if (event.type === 'interaction.cancelled') { if (item.id === active) stopTones(); v.goodbye = null; v.audio?.pause(); }
+      if (event.type === 'interaction.failed') { v.goodbye = null; v.stream?.stop('failed'); }
+      if (event.type === 'interaction.cancelled') { if (item.id === active) stopTones(); v.goodbye = null; v.stream?.stop(); v.audio?.pause(); }
       v.terminal = true;
       if (data.message) v.status.textContent += ` · ${data.message}`;
       if (item.id === active) { busy(false); $('connection').textContent = 'Connected'; }
@@ -218,6 +238,7 @@
     };
   }
   async function open(id) {
+    stopStreams();
     stopTones();
     if (recording) await stopMic(false);
     for (const v of views.values()) v.audio?.pause();
@@ -244,11 +265,21 @@
   $('logout').onclick = async () => { try { await api('/clients/current', 'DELETE'); await api('/session', 'DELETE'); signedOut(); } catch (e) { error(e); } };
   $('new').onclick = async () => { try { const item = await api('/conversations', 'POST'); localStorage.setItem('assister-conversation', item.id); await load(); } catch (e) { error(e); } };
   $('conversations').onchange = async e => { try { await open(e.target.value); } catch (e) { error(e); } };
+  $('speak').onchange = () => { if (!$('speak').checked) { stopStreams(); stopTones(); } };
   $('composer').onsubmit = async e => {
     e.preventDefault(); const message = $('message').value.trim(); if (!message) return;
     busy(true); $('error').textContent = '';
     stopTones();
-    pendingSubmission = pendingSubmission?.message === message ? pendingSubmission : { message, idempotencyKey: crypto.randomUUID(), attachmentIds: attachments.map(a => a.id), audioAttachmentId: pendingAudio, speak: $('speak').checked };
+    stopStreams();
+    let streamSpeech = false;
+    if ($('speak').checked && window.AudioContext && window.AssisterSpeechPlayer) {
+      try {
+        speechContext ||= new window.AudioContext();
+        if (speechContext.state !== 'running') await Promise.race([speechContext.resume(), new Promise(resolve => setTimeout(resolve, 250))]);
+        streamSpeech = speechContext.state === 'running';
+      } catch {}
+    }
+    pendingSubmission = pendingSubmission?.message === message ? pendingSubmission : { message, idempotencyKey: crypto.randomUUID(), attachmentIds: attachments.map(a => a.id), audioAttachmentId: pendingAudio, speak: $('speak').checked, streamSpeech };
     try {
       const item = await api(`/conversations/${conversation}/interactions`, 'POST', pendingSubmission);
       pendingSubmission = null; pendingAudio = null; attachments = []; renderAttachments(); $('message').value = ''; $('activity').replaceChildren(); active = item.id;
@@ -256,7 +287,7 @@
       await replay(item, true); connect(item);
     } catch (e) { busy(false); error(e); }
   };
-  $('cancel').onclick = async () => { try { stopTones(); const v = views.get(active); if (v) v.goodbye = null; v?.audio?.pause(); await api(`/interactions/${active}/cancel`, 'POST'); $('connection').textContent = 'Cancelling'; } catch (e) { error(e); } };
+  $('cancel').onclick = async () => { try { stopStreams(); stopTones(); const v = views.get(active); if (v) v.goodbye = null; v?.audio?.pause(); await api(`/interactions/${active}/cancel`, 'POST'); $('connection').textContent = 'Cancelling'; } catch (e) { error(e); } };
   $('files').onchange = e => upload(Array.from(e.target.files), 'file_picker');
   $('mic').onclick = () => (recording ? stopMic(true) : startMic()).catch(error);
   $('speak').onchange = () => { pendingSubmission = null; if (!$('speak').checked) { stopTones(); for (const v of views.values()) v.goodbye = null; } };

@@ -1,0 +1,14 @@
+{
+  "capturedAt": "2026-10-24T02:59:28.2410634+00:00",
+  "containerId": "c00e0c02eb6de938c763e08656e15753be10ca51662ddf7d3fc9d3856478ffe0",
+  "image": "sha256:3ed7b2c89f11ca89f3498b897195e356ef08bd32cbf87649146264b941f15e01",
+  "envFingerprint": "8226A66C73096C30B00561CC0438F59389F7B6F4FC3DDFE0995F5BF5DC9D7361",
+  "mounts": [
+    {
+      "Name": "assister_assister-data",
+      "Source": "/var/lib/docker/volumes/assister_assister-data/_data",
+      "Destination": "/data"
+    }
+  ],
+  "bridgeContainerId": "e7a5273c0dfaa93913b8b7e6c2f60d3e03f3e05a21d22b2a5e3ed94914d27c19"
+}

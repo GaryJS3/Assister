@@ -105,6 +105,10 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             });
             var Coordinator = (IStreamingRequestCoordinator)Scope.ServiceProvider.GetRequiredService<IRequestCoordinator>();
             var Started = false;
+            await using var Speech = Options.Speak && Options.StreamSpeech && Configuration.GetValue("Voice:RichStreamingEnabled", true)
+                ? new RichSpeechOutput(Id, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), Store, Configuration, Source.Token) : null;
+            var StreamedText = new System.Text.StringBuilder();
+            var SpeechAborted = false;
             Task<RequestResult> Process(UserRequest Request, Func<string, CancellationToken, Task> OnText)
                 => Coordinator is Assister.Conversations.ConversationCoordinator Conversations
                     ? Conversations.ProcessClientStreamingAsync(Request, OnText, Source.Token)
@@ -114,12 +118,23 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             RequestResult Result;
             try
             {
-                Result = await Process(new(Input, Satellite, ConversationId: Item.ConversationId, Documents: Store.Documents(Id), DeviceId: ClientId), (Text, Token) =>
+                Result = await Process(new(Input, Satellite, ConversationId: Item.ConversationId, Documents: Store.Documents(Id), DeviceId: ClientId), async (Text, Token) =>
                 {
                     Token.ThrowIfCancellationRequested();
+                    if (Speech is not null) WarningLifetime.Cancel();
                     if (!Started) { Cue(Id, "done"); Store.Append(Id, "response.started", new { }, "responding"); Started = true; }
                     Store.Append(Id, "response.delta", new { text = Text });
-                    return Task.CompletedTask;
+                    if (Speech is not null && !SpeechAborted)
+                    {
+                        if (StreamedText.Length + Text.Length > 16000)
+                        {
+                            SpeechAborted = true;
+                            await Speech.DisposeAsync();
+                            return;
+                        }
+                        StreamedText.Append(Text);
+                        await Speech.AppendAsync(Text);
+                    }
                 });
             }
             finally { WarningLifetime.Cancel(); await Warning; }
@@ -129,7 +144,17 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             Store.Append(Id, "response.completed", new { text = Result.Response, spokenText = Result.SpokenResponse, routingConversationId = Result.ConversationId }, Response: Result.Response);
             var Failed = Result.Outcome is "failed" or "unavailable" or "invalid-request" or "unmatched";
             if (Failed) Cue(Id, Result.Outcome == "failed" ? "error" : "issue");
-            if (Options.Speak) await Scope.ServiceProvider.GetRequiredService<RichSpeech>().SynthesizeAsync(Id,
+            if (Speech is not null)
+            {
+                if (!SpeechAborted)
+                {
+                    var Spoken = Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response);
+                    if (StreamedText.Length == 0) await Speech.AppendAsync(Spoken);
+                    else if (VoiceFormatter.Format(StreamedText.ToString()).Trim() != Spoken.Trim()) await Speech.DisposeAsync();
+                    if (StreamedText.Length == 0 || VoiceFormatter.Format(StreamedText.ToString()).Trim() == Spoken.Trim()) await Speech.CompleteAsync();
+                }
+            }
+            else if (Options.Speak) await Scope.ServiceProvider.GetRequiredService<RichSpeech>().SynthesizeAsync(Id,
                 Result.SpokenResponse ?? Assister.Voice.VoiceFormatter.Format(Result.Response), Source.Token);
             Source.Token.ThrowIfCancellationRequested();
             Cue(Id, "goodbye", Options.Speak && Store.Audio(Id) is not null ? "after-response-audio" : "immediate");

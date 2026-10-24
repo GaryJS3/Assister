@@ -17,6 +17,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
     {
         var Session = new VoiceSession(Guid.NewGuid(), Satellite.SatelliteId, Satellite.Area, ConversationId, DateTimeOffset.UtcNow);
         using var Run = RunTracing.BeginRun(Diagnostics ?? new RunStore(), "voice", Satellite.SatelliteId, Satellite.Area, Session.Id, ConversationId);
+        using var LatencyMetrics = new VoiceLatency();
         var RunId = RunTracing.RunId;
         IAsyncEnumerable<AudioChunk> Capture(string Direction, IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token)
             => RunAudio?.ObserveAsync(RunId, Direction, Audio, Token) ?? Audio;
@@ -88,6 +89,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                         yield return Chunk;
                     }
                     AudioEnded = DateTimeOffset.UtcNow;
+                    LatencyMetrics.Mark("captureCompleted");
                     Satellites.Record(Satellite.SatelliteId, "Microphone stopped", SessionId: Session.Id);
                     Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Transcribing);
                 }
@@ -106,6 +108,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 var Language = Configuration["SpeechToText:Language"] ?? "en";
                 Recognition.Input(new { languageRequested = Language });
                 Transcript = await Stt.TranscribeAsync(ObserveAudio(Timeout.Token), new(Language), Timeout.Token);
+                LatencyMetrics.Mark("transcriptFinal");
                 var Arrived = DateTimeOffset.UtcNow;
                 Recognition.Output(new { transcript = Transcript.Text, returnedLanguage = Transcript.Language });
                 Recognition.Metadata(new { audioDurationMilliseconds = AudioMilliseconds, audioInputCompletedAt = AudioEnded,
@@ -140,6 +143,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                         async (Delta, Token) =>
                         {
                             Token.ThrowIfCancellationRequested();
+                            if (!string.IsNullOrWhiteSpace(Delta)) LatencyMetrics.Mark("firstSpeakableText");
                             if (DeliveredText.Length < 16000) { DeliveredText.Append(Delta.AsSpan(0, Math.Min(Delta.Length, 16000 - DeliveredText.Length))); }
                             foreach (var Sentence in Sentences.Append(Delta))
                             {
@@ -147,6 +151,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                                 catch (OperationCanceledException) when (!Timeout.IsCancellationRequested && OutputLifetime.IsCancellationRequested) { break; }
                             }
                         }, Timeout.Token);
+                    LatencyMetrics.Mark("routingCompleted");
                     Session = Session with { ConversationId = Result.ConversationId };
                     RunTracing.Response(Result.Response, Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), Result.Outcome, Result.HandledBy, Result.ConversationId);
                     await Satellite.SendEventAsync(new("response", Result.Response, Session.Id, Result.ConversationId), Timeout.Token);
@@ -190,6 +195,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     {
                         using var Playback = RunTracing.Start("Playback", "Streaming delivery", "Overlap sentence synthesis with response generation; the provider controls audio buffering.");
                         await Satellite.SendAudioAsync(Capture("output", Audio(OutputLifetime.Token), OutputLifetime.Token), OutputLifetime.Token);
+                        LatencyMetrics.Mark("transportCompleted");
                         Playback.Complete();
                     }
                     catch { OutputLifetime.Cancel(); throw; }
@@ -206,6 +212,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     {
                         if (FirstAudioAtOutput is null) { Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Synthesizing); }
                         FirstAudioAtOutput ??= DateTimeOffset.UtcNow;
+                        if (!Chunk.Pcm.IsEmpty) LatencyMetrics.Mark("firstSynthesizedPcm");
                         yield return Chunk;
                     }
                     Synthesis.Complete();
@@ -235,6 +242,8 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 try { Result = await Coordinator.ProcessAsync(new(Transcript.Text, Satellite.SatelliteId, Satellite.Area, ConversationId), Timeout.Token); }
                 finally { IssueLifetime.Cancel(); await Warning; }
             }
+            LatencyMetrics.Mark("routingCompleted");
+            if (!string.IsNullOrWhiteSpace(Result.Response)) LatencyMetrics.Mark("firstSpeakableText");
             Session = Session with { ConversationId = Result.ConversationId };
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Synthesizing, Result.ConversationId);
             var Spoken = Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response);
@@ -256,6 +265,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 double Duration = 0;
                 await foreach (var Chunk in Tts.SynthesizeAsync(Spoken, new(Voice), Token).WithCancellation(Token))
                 {
+                    if (!Chunk.Pcm.IsEmpty) LatencyMetrics.Mark("firstSynthesizedPcm");
                     FirstAudio ??= (DateTimeOffset.UtcNow - Started).TotalMilliseconds;
                     OutputFormat ??= Chunk;
                     Bytes += Chunk.Pcm.Length;
@@ -283,6 +293,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             using (var Playback = RunTracing.Start("Playback", "Playback delivery", "Deliver synthesized audio and wait for satellite playback completion."))
             {
                 await Satellite.SendAudioAsync(Capture("output", Synthesize(Timeout.Token), Timeout.Token), Timeout.Token);
+                LatencyMetrics.Mark("transportCompleted");
                 Playback.Output(new { deliveryCompleted = true });
                 Playback.Complete();
             }

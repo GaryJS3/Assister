@@ -1,0 +1,1211 @@
+{
+  "measuredAt": "2026-10-24T01:05:21.9011001+00:00",
+  "scope": "Actual RichSpeech versus RichSpeechOutput and SQLite segment/audio storage; simulated generation/TTS; no network, browser decoding or physical playback. Monotonic wall time from generation start, first audio availability observed by 1ms polling (scheduler granularity included).",
+  "configuration": {
+    "samplesPerCell": 20,
+    "warmupsPerCell": 1,
+    "generationPerSentenceMs": 100,
+    "ttsPerSentenceMs": 35,
+    "toolMs": 120,
+    "streamingQueueCapacity": 8,
+    "maximumPcmBytes": 8388608,
+    "maximumSegments": 1024,
+    "modeOrder": "alternating"
+  },
+  "summary": [
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "count": 20,
+      "firstAudioMedianMs": 75.12,
+      "firstAudioP95Ms": 91.17,
+      "completionMedianMs": 75.12,
+      "completionP95Ms": 91.17
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "count": 20,
+      "firstAudioMedianMs": 74.92,
+      "firstAudioP95Ms": 91.04,
+      "completionMedianMs": 74.92,
+      "completionP95Ms": 91.04
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "count": 20,
+      "firstAudioMedianMs": 170.98,
+      "firstAudioP95Ms": 173.46,
+      "completionMedianMs": 282.95,
+      "completionP95Ms": 286.06
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "count": 20,
+      "firstAudioMedianMs": 330.76,
+      "firstAudioP95Ms": 333.82,
+      "completionMedianMs": 330.76,
+      "completionP95Ms": 333.82
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "count": 20,
+      "firstAudioMedianMs": 412.02,
+      "firstAudioP95Ms": 418.38,
+      "completionMedianMs": 462.24,
+      "completionP95Ms": 467.26
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "count": 20,
+      "firstAudioMedianMs": 460.52,
+      "firstAudioP95Ms": 465.51,
+      "completionMedianMs": 461.41,
+      "completionP95Ms": 465.51
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "count": 20,
+      "firstAudioMedianMs": 173.89,
+      "firstAudioP95Ms": 176.28,
+      "completionMedianMs": 510.16,
+      "completionP95Ms": 513.91
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "count": 20,
+      "firstAudioMedianMs": 657,
+      "firstAudioP95Ms": 660.11,
+      "completionMedianMs": 657.01,
+      "completionP95Ms": 660.11
+    }
+  ],
+  "measurements": [
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 0,
+      "firstAudioMs": 72.9517,
+      "completionMs": 72.9518
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 0,
+      "firstAudioMs": 72.3057,
+      "completionMs": 72.3058
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 1,
+      "firstAudioMs": 87.3359,
+      "completionMs": 87.3362
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 1,
+      "firstAudioMs": 71.5808,
+      "completionMs": 71.5809
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 2,
+      "firstAudioMs": 71.4199,
+      "completionMs": 71.4201
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 2,
+      "firstAudioMs": 71.9512,
+      "completionMs": 71.9514
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 3,
+      "firstAudioMs": 71.8071,
+      "completionMs": 71.8073
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 3,
+      "firstAudioMs": 71.9964,
+      "completionMs": 71.9966
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 4,
+      "firstAudioMs": 71.898,
+      "completionMs": 71.8981
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 4,
+      "firstAudioMs": 74.6514,
+      "completionMs": 74.6516
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 5,
+      "firstAudioMs": 74.3654,
+      "completionMs": 74.3656
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 5,
+      "firstAudioMs": 74.4424,
+      "completionMs": 74.4425
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 6,
+      "firstAudioMs": 90.5091,
+      "completionMs": 90.5093
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 6,
+      "firstAudioMs": 90.1627,
+      "completionMs": 90.1628
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 7,
+      "firstAudioMs": 74.6567,
+      "completionMs": 74.6569
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 7,
+      "firstAudioMs": 74.8645,
+      "completionMs": 74.8648
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 8,
+      "firstAudioMs": 91.1683,
+      "completionMs": 91.1688
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 8,
+      "firstAudioMs": 74.482,
+      "completionMs": 74.4822
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 9,
+      "firstAudioMs": 72.2117,
+      "completionMs": 72.2118
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 9,
+      "firstAudioMs": 90.0901,
+      "completionMs": 90.0903
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 10,
+      "firstAudioMs": 75.1246,
+      "completionMs": 75.1248
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 10,
+      "firstAudioMs": 74.9805,
+      "completionMs": 74.9809
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 11,
+      "firstAudioMs": 90.7115,
+      "completionMs": 90.7117
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 11,
+      "firstAudioMs": 90.1682,
+      "completionMs": 90.1684
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 12,
+      "firstAudioMs": 91.549,
+      "completionMs": 91.5495
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 12,
+      "firstAudioMs": 74.9166,
+      "completionMs": 74.9169
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 13,
+      "firstAudioMs": 75.392,
+      "completionMs": 75.3922
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 13,
+      "firstAudioMs": 75.9062,
+      "completionMs": 75.9066
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 14,
+      "firstAudioMs": 75.5726,
+      "completionMs": 75.5728
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 14,
+      "firstAudioMs": 75.5916,
+      "completionMs": 75.5918
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 15,
+      "firstAudioMs": 75.4043,
+      "completionMs": 75.4045
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 15,
+      "firstAudioMs": 75.666,
+      "completionMs": 75.6662
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 16,
+      "firstAudioMs": 74.9252,
+      "completionMs": 74.9254
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 16,
+      "firstAudioMs": 75.5067,
+      "completionMs": 75.5069
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 17,
+      "firstAudioMs": 91.103,
+      "completionMs": 91.104
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 17,
+      "firstAudioMs": 75.4516,
+      "completionMs": 75.4517
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 18,
+      "firstAudioMs": 75.1673,
+      "completionMs": 75.1675
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 18,
+      "firstAudioMs": 91.0358,
+      "completionMs": 91.036
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "sample": 19,
+      "firstAudioMs": 74.7243,
+      "completionMs": 74.7245
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "streaming",
+      "sample": 19,
+      "firstAudioMs": 74.8011,
+      "completionMs": 74.8012
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 0,
+      "firstAudioMs": 173.1428,
+      "completionMs": 285.9848
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 0,
+      "firstAudioMs": 334.0383,
+      "completionMs": 334.0385
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 1,
+      "firstAudioMs": 332.5411,
+      "completionMs": 332.5413
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 1,
+      "firstAudioMs": 172.641,
+      "completionMs": 285.2977
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 2,
+      "firstAudioMs": 173.0073,
+      "completionMs": 286.0632
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 2,
+      "firstAudioMs": 333.8174,
+      "completionMs": 333.8177
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 3,
+      "firstAudioMs": 330.7587,
+      "completionMs": 330.7592
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 3,
+      "firstAudioMs": 174.0882,
+      "completionMs": 287.0486
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 4,
+      "firstAudioMs": 170.8037,
+      "completionMs": 280.9182
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 4,
+      "firstAudioMs": 331.9429,
+      "completionMs": 331.943
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 5,
+      "firstAudioMs": 324.4282,
+      "completionMs": 324.4288
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 5,
+      "firstAudioMs": 170.9757,
+      "completionMs": 284.1175
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 6,
+      "firstAudioMs": 172.5582,
+      "completionMs": 284.1343
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 6,
+      "firstAudioMs": 333.6522,
+      "completionMs": 333.6527
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 7,
+      "firstAudioMs": 333.6572,
+      "completionMs": 333.6576
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 7,
+      "firstAudioMs": 173.0582,
+      "completionMs": 284.0121
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 8,
+      "firstAudioMs": 169.1985,
+      "completionMs": 280.2744
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 8,
+      "firstAudioMs": 329.67,
+      "completionMs": 329.6703
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 9,
+      "firstAudioMs": 327.4761,
+      "completionMs": 327.4766
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 9,
+      "firstAudioMs": 169.4715,
+      "completionMs": 281.0655
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 10,
+      "firstAudioMs": 170.3933,
+      "completionMs": 281.5141
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 10,
+      "firstAudioMs": 327.9028,
+      "completionMs": 327.903
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 11,
+      "firstAudioMs": 327.402,
+      "completionMs": 327.4023
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 11,
+      "firstAudioMs": 168.8162,
+      "completionMs": 278.9857
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 12,
+      "firstAudioMs": 169.281,
+      "completionMs": 279.8242
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 12,
+      "firstAudioMs": 329.1531,
+      "completionMs": 329.1534
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 13,
+      "firstAudioMs": 325.5396,
+      "completionMs": 325.5399
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 13,
+      "firstAudioMs": 168.7057,
+      "completionMs": 279.2497
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 14,
+      "firstAudioMs": 170.9456,
+      "completionMs": 282.2922
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 14,
+      "firstAudioMs": 330.3611,
+      "completionMs": 330.3614
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 15,
+      "firstAudioMs": 331.0073,
+      "completionMs": 331.0078
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 15,
+      "firstAudioMs": 170.6971,
+      "completionMs": 281.6075
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 16,
+      "firstAudioMs": 171.5902,
+      "completionMs": 282.9452
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 16,
+      "firstAudioMs": 331.1246,
+      "completionMs": 331.1249
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 17,
+      "firstAudioMs": 330.2836,
+      "completionMs": 330.2839
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 17,
+      "firstAudioMs": 173.457,
+      "completionMs": 285.1256
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 18,
+      "firstAudioMs": 172.5467,
+      "completionMs": 283.2213
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 18,
+      "firstAudioMs": 332.0086,
+      "completionMs": 332.0091
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "sample": 19,
+      "firstAudioMs": 333.5387,
+      "completionMs": 333.5392
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "streaming",
+      "sample": 19,
+      "firstAudioMs": 172.6729,
+      "completionMs": 283.3092
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 0,
+      "firstAudioMs": 410.4946,
+      "completionMs": 458.1165
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 0,
+      "firstAudioMs": 460.0977,
+      "completionMs": 460.0981
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 1,
+      "firstAudioMs": 458.897,
+      "completionMs": 458.8972
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 1,
+      "firstAudioMs": 410.518,
+      "completionMs": 457.4445
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 2,
+      "firstAudioMs": 410.2532,
+      "completionMs": 458.098
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 2,
+      "firstAudioMs": 458.3415,
+      "completionMs": 458.3418
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 3,
+      "firstAudioMs": 459.1067,
+      "completionMs": 459.1071
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 3,
+      "firstAudioMs": 410.2772,
+      "completionMs": 457.6153
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 4,
+      "firstAudioMs": 411.1797,
+      "completionMs": 458.2739
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 4,
+      "firstAudioMs": 462.4418,
+      "completionMs": 462.442
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 5,
+      "firstAudioMs": 464.865,
+      "completionMs": 464.8655
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 5,
+      "firstAudioMs": 416.3832,
+      "completionMs": 464.8749
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 6,
+      "firstAudioMs": 414.2591,
+      "completionMs": 461.7912
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 6,
+      "firstAudioMs": 460.5247,
+      "completionMs": 460.5249
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 7,
+      "firstAudioMs": 456.0381,
+      "completionMs": 456.0384
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 7,
+      "firstAudioMs": 410.1181,
+      "completionMs": 457.6408
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 8,
+      "firstAudioMs": 412.0246,
+      "completionMs": 459.5721
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 8,
+      "firstAudioMs": 458.125,
+      "completionMs": 458.1253
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 9,
+      "firstAudioMs": 457.5889,
+      "completionMs": 457.5894
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 9,
+      "firstAudioMs": 416.0177,
+      "completionMs": 464.6032
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 10,
+      "firstAudioMs": 417.9837,
+      "completionMs": 465.8653
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 10,
+      "firstAudioMs": 456.9357,
+      "completionMs": 456.936
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 11,
+      "firstAudioMs": 461.7539,
+      "completionMs": 461.7544
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 11,
+      "firstAudioMs": 417.1485,
+      "completionMs": 465.0631
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 12,
+      "firstAudioMs": 415.0955,
+      "completionMs": 463.7021
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 12,
+      "firstAudioMs": 465.5102,
+      "completionMs": 465.5106
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 13,
+      "firstAudioMs": 463.3723,
+      "completionMs": 463.3728
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 13,
+      "firstAudioMs": 403.4974,
+      "completionMs": 467.6794
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 14,
+      "firstAudioMs": 414.2918,
+      "completionMs": 461.3492
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 14,
+      "firstAudioMs": 463.8045,
+      "completionMs": 463.8047
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 15,
+      "firstAudioMs": 464.6018,
+      "completionMs": 464.6022
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 15,
+      "firstAudioMs": 398.7901,
+      "completionMs": 462.238
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 16,
+      "firstAudioMs": 416.5867,
+      "completionMs": 465.3997
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 16,
+      "firstAudioMs": 465.6875,
+      "completionMs": 465.6877
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 17,
+      "firstAudioMs": 461.4083,
+      "completionMs": 461.4088
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 17,
+      "firstAudioMs": 402.595,
+      "completionMs": 465.8701
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 18,
+      "firstAudioMs": 418.3758,
+      "completionMs": 466.1394
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 18,
+      "firstAudioMs": 448.9358,
+      "completionMs": 463.0061
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "sample": 19,
+      "firstAudioMs": 465.3782,
+      "completionMs": 465.3786
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "streaming",
+      "sample": 19,
+      "firstAudioMs": 418.9742,
+      "completionMs": 467.2552
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 0,
+      "firstAudioMs": 173.7811,
+      "completionMs": 509.8315
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 0,
+      "firstAudioMs": 656.4224,
+      "completionMs": 656.4228
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 1,
+      "firstAudioMs": 651.2677,
+      "completionMs": 651.2679
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 1,
+      "firstAudioMs": 175.2577,
+      "completionMs": 510.1566
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 2,
+      "firstAudioMs": 174.0223,
+      "completionMs": 509.8318
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 2,
+      "firstAudioMs": 658.5462,
+      "completionMs": 658.5465
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 3,
+      "firstAudioMs": 655.4306,
+      "completionMs": 655.4311
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 3,
+      "firstAudioMs": 173.1102,
+      "completionMs": 509.6684
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 4,
+      "firstAudioMs": 160.0872,
+      "completionMs": 510.2828
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 4,
+      "firstAudioMs": 660.1118,
+      "completionMs": 660.1124
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 5,
+      "firstAudioMs": 657.89,
+      "completionMs": 657.8905
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 5,
+      "firstAudioMs": 175.9749,
+      "completionMs": 513.8274
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 6,
+      "firstAudioMs": 173.4387,
+      "completionMs": 513.3006
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 6,
+      "firstAudioMs": 657.2565,
+      "completionMs": 657.2569
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 7,
+      "firstAudioMs": 659.6617,
+      "completionMs": 659.662
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 7,
+      "firstAudioMs": 175.1295,
+      "completionMs": 512.2147
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 8,
+      "firstAudioMs": 175.44,
+      "completionMs": 513.9141
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 8,
+      "firstAudioMs": 658.8147,
+      "completionMs": 658.8151
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 9,
+      "firstAudioMs": 655.267,
+      "completionMs": 655.2672
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 9,
+      "firstAudioMs": 176.1078,
+      "completionMs": 514.6143
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 10,
+      "firstAudioMs": 176.2791,
+      "completionMs": 513.4777
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 10,
+      "firstAudioMs": 658.6184,
+      "completionMs": 658.6187
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 11,
+      "firstAudioMs": 659.4813,
+      "completionMs": 659.4818
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 11,
+      "firstAudioMs": 176.3773,
+      "completionMs": 510.0748
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 12,
+      "firstAudioMs": 173.391,
+      "completionMs": 512.6893
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 12,
+      "firstAudioMs": 652.6242,
+      "completionMs": 652.6244
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 13,
+      "firstAudioMs": 655.488,
+      "completionMs": 655.4883
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 13,
+      "firstAudioMs": 172.6261,
+      "completionMs": 508.4332
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 14,
+      "firstAudioMs": 174.6211,
+      "completionMs": 513.7373
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 14,
+      "firstAudioMs": 657.0049,
+      "completionMs": 657.0055
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 15,
+      "firstAudioMs": 653.796,
+      "completionMs": 653.7962
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 15,
+      "firstAudioMs": 172.9623,
+      "completionMs": 508.868
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 16,
+      "firstAudioMs": 176.0939,
+      "completionMs": 509.7667
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 16,
+      "firstAudioMs": 661.0624,
+      "completionMs": 661.0627
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 17,
+      "firstAudioMs": 658.1247,
+      "completionMs": 658.1251
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 17,
+      "firstAudioMs": 157.5363,
+      "completionMs": 506.4846
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 18,
+      "firstAudioMs": 173.894,
+      "completionMs": 511.6228
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 18,
+      "firstAudioMs": 637.875,
+      "completionMs": 652.42
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "sample": 19,
+      "firstAudioMs": 651.0974,
+      "completionMs": 651.0978
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "streaming",
+      "sample": 19,
+      "firstAudioMs": 171.594,
+      "completionMs": 505.3119
+    }
+  ]
+}

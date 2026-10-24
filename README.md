@@ -8,7 +8,7 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 ## Current implementation
 
 Latest recorded deployed runtime: 6918741 (October 12, 2026). The local suite now has
-436 passing .NET tests (385 unit/component, 51 integration), plus 10 browser-script tests;
+449 passing .NET tests (391 unit/component, 58 integration), plus 17 browser-script tests;
 these local results do not establish the deployed revision. Daily/weekly reminders support native voice/text
 creation, dashboard CRUD, and gated AI create/get/edit/cancel tools. Live model operations
 and persisted state were verified; physical reminder announcements remain unverified.
@@ -62,6 +62,13 @@ Future weather requests use Home Assistant's `weather.get_forecasts` service. Cu
 Latest MVP, timer/memory and streaming acceptance is recorded in [docs/mvp-acceptance.md](docs/mvp-acceptance.md), distinguishing local implementation, live module checks and physical acceptance.
 
 Voice generation and sentence synthesis overlap by default. Set `Voice__StreamingEnabled=false` to restore buffered generation. Native Wyoming text streaming is negotiated when advertised, with ordinary sentence synthesis as a legacy fallback. Tool-capable rounds remain buffered until validated; final speech-only rounds can feed synthesis immediately. Installed EchoMuse/ESPHome transports still receive complete audio files, so physical early playback and wake-word barge-in remain open.
+
+Rich-client browser speech now optionally streams ordered WAV segments while the
+response is generated, with a combined retained recording for manual replay.
+Old clients keep buffered playback. Set `Voice__RichStreamingEnabled=false` to
+force that fallback. Local controlled long-reply tests reduced first audio
+availability from 657 to 174 ms; this is not a production or physical-playback
+measurement. See [S1 implementation and measurements](docs/voice-s1-rich-streaming.md).
 
 Live service checks and their limits are recorded in [docs/service-validation.md](docs/service-validation.md). The C# `tools/Assister.ServiceProbe` CLI runs read-only dependency checks using the container environment, including a synthetic TTS-to-STT round trip and a short LLM completion. `--ha-only` narrows read-only checks. The explicit `--direct-intents --light light.authorized_entity` mode performs real controls and restores original member states/brightness; use it only with an authorized target.
 

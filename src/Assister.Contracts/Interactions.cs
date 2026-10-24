@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace Assister.Contracts;
 
 public sealed record SubmitInteraction(string Message, string IdempotencyKey, IReadOnlyList<Guid>? AttachmentIds = null,
-    Guid? AudioAttachmentId = null, bool Speak = false);
+    Guid? AudioAttachmentId = null, bool Speak = false, bool StreamSpeech = false);
+public sealed record SpeechSegment(int Index, string Url, int SampleRate, int SampleWidth, int Channels, int Size);
 public sealed record ClientRegistration(string ClientType, string DeviceName, IReadOnlyList<string> Capabilities);
 public sealed record RegisteredClient(string ClientId, string Owner, string ClientType, string DeviceName,
     IReadOnlyList<string> Capabilities, DateTimeOffset LastSeen, bool Online = true);

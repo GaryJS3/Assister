@@ -50,6 +50,7 @@ public sealed class InteractionStore : IDisposable
                 PRIMARY KEY(InteractionId,ContextId));
             CREATE TABLE IF NOT EXISTS InteractionOptions(InteractionId TEXT PRIMARY KEY REFERENCES Interactions(Id), Payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS InteractionAudio(InteractionId TEXT PRIMARY KEY REFERENCES Interactions(Id), Content BLOB NOT NULL);
+            CREATE TABLE IF NOT EXISTS InteractionAudioSegments(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), SegmentIndex INTEGER NOT NULL, Content BLOB NOT NULL, PRIMARY KEY(InteractionId,SegmentIndex));
             CREATE TABLE IF NOT EXISTS PlaybackReports(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), ClientId TEXT NOT NULL, PlaybackId TEXT NOT NULL, State TEXT NOT NULL, PRIMARY KEY(InteractionId,ClientId,PlaybackId));
             """;
         Command.ExecuteNonQuery();
@@ -76,13 +77,15 @@ public sealed class InteractionStore : IDisposable
                     FROM Interactions WHERE Status IN ('completed','failed','cancelled')
                 ) WHERE julianday(CreatedAt) < julianday($cutoff) OR Position > $maximum
                 """, ("$cutoff", Now.AddDays(-RetentionDays).ToString("O")), ("$maximum", MaxInteractions));
-            foreach (var Table in new[] { "InteractionEvents", "InteractionAttachments", "InteractionContexts", "InteractionOptions", "InteractionAudio", "PlaybackReports" })
+            foreach (var Table in new[] { "InteractionEvents", "InteractionAttachments", "InteractionContexts", "InteractionOptions", "InteractionAudio", "InteractionAudioSegments", "PlaybackReports" })
                 Execute($"DELETE FROM {Table} WHERE InteractionId IN (SELECT Id FROM ExpiredInteractions)");
             Execute("DELETE FROM Interactions WHERE Id IN (SELECT Id FROM ExpiredInteractions)");
             Execute("""
                 DELETE FROM InteractionAudio WHERE InteractionId IN (
                     SELECT Id FROM Interactions WHERE Status IN ('completed','failed','cancelled') AND julianday(CreatedAt) < julianday($cutoff))
                 """, ("$cutoff", Now.AddHours(-AudioRetentionHours).ToString("O")));
+            Execute("DELETE FROM InteractionAudioSegments WHERE InteractionId IN (SELECT Id FROM Interactions WHERE Status IN ('completed','failed','cancelled') AND julianday(CreatedAt) < julianday($cutoff))",
+                ("$cutoff", Now.AddHours(-AudioRetentionHours).ToString("O")));
             Execute("""
                 DELETE FROM ClientAttachments
                 WHERE julianday(json_extract(Metadata,'$.createdAt')) < julianday($cutoff)
@@ -148,7 +151,7 @@ public sealed class InteractionStore : IDisposable
                 if (Item.ConversationId != ConversationId || Options(Item.Id).Message != Request.Message) throw new InvalidOperationException("idempotency_conflict");
                 if (!Attachments(Item.Id).Select(Attachment => Attachment.Id).SequenceEqual(Request.AttachmentIds ?? [])) throw new InvalidOperationException("idempotency_conflict");
                 var SavedOptions = Options(Item.Id);
-                if (SavedOptions.AudioAttachmentId != Request.AudioAttachmentId || SavedOptions.Speak != Request.Speak) throw new InvalidOperationException("idempotency_conflict");
+                if (SavedOptions.AudioAttachmentId != Request.AudioAttachmentId || SavedOptions.Speak != Request.Speak || SavedOptions.StreamSpeech != Request.StreamSpeech) throw new InvalidOperationException("idempotency_conflict");
                 return Item;
             }
             using var Count = Command("SELECT COUNT(*) FROM Interactions WHERE Status IN ('created','transcribing','running','responding')");
@@ -388,6 +391,7 @@ public sealed class InteractionStore : IDisposable
     {
         lock (Gate)
         {
+            if (Get(Id)?.CancelRequested == true) throw new OperationCanceledException();
             using var Transaction = Database.BeginTransaction();
             using var Insert = Command("INSERT INTO InteractionAudio VALUES($id,$content)", ("$id", Id.ToString()), ("$content", Content));
             Insert.Transaction = Transaction;
@@ -406,12 +410,35 @@ public sealed class InteractionStore : IDisposable
     }
     public bool Playback(Guid Id, string ClientId, PlaybackReport Report) => Playback(Id, ClientId, Report, out _);
 
+    public void SaveSegment(Guid Id, int Index, byte[] Content, AudioChunk Format)
+    {
+        lock (Gate)
+        {
+            if (Get(Id) is not { CancelRequested: false, Status: not ("completed" or "failed" or "cancelled") }) throw new OperationCanceledException();
+            using var Transaction = Database.BeginTransaction();
+            using var Insert = Command("INSERT INTO InteractionAudioSegments VALUES($id,$index,$content)", ("$id", Id.ToString()), ("$index", Index), ("$content", Content));
+            Insert.Transaction = Transaction;
+            Insert.ExecuteNonQuery();
+            AppendCore(Id, "tts.segment", new SpeechSegment(Index, $"/api/client/interactions/{Id}/audio/segments/{Index}", Format.SampleRate, Format.SampleWidth, Format.Channels, Content.Length), Transaction);
+            Transaction.Commit();
+        }
+    }
+    public byte[]? Segment(Guid Id, int Index)
+    {
+        lock (Gate)
+        {
+            using var Query = Command("SELECT Content FROM InteractionAudioSegments WHERE InteractionId=$id AND SegmentIndex=$index", ("$id", Id.ToString()), ("$index", Index));
+            return Query.ExecuteScalar() as byte[];
+        }
+    }
+
     public bool Playback(Guid Id, string ClientId, PlaybackReport Report, out bool Changed)
     {
         lock (Gate)
         {
             Changed = false;
-            if (Audio(Id) is null || Report.PlaybackId == Guid.Empty || Report.State is not ("started" or "completed" or "stopped" or "failed")) return false;
+            if ((Audio(Id) is null && Segment(Id, 0) is null) || Report.PlaybackId == Guid.Empty || Report.State is not ("started" or "completed" or "stopped" or "failed")) return false;
+            if (Report.State == "completed" && Audio(Id) is null) return false;
             using var Query = Command("SELECT State FROM PlaybackReports WHERE InteractionId=$id AND ClientId=$client AND PlaybackId=$playback", ("$id", Id.ToString()), ("$client", ClientId), ("$playback", Report.PlaybackId.ToString()));
             var Previous = Query.ExecuteScalar() as string;
             if (Previous == Report.State) return true;

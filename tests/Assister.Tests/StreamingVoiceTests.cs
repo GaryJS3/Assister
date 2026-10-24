@@ -67,6 +67,12 @@ public sealed class StreamingVoiceTests
         Assert.Single(Satellite.Events, Event => Event.Type == "response");
         Assert.Equal(Result.Request!.ConversationId, Result.Session.ConversationId);
         var Run = Assert.Single(Runs.Snapshot());
+        var Metrics = Runs.Get(Run.RunId)!.Steps.Single(Step => Step.Name == "Voice latency").Metadata!.Value;
+        var Marks = Metrics.GetProperty("milestones");
+        Assert.True(Marks.GetProperty("firstSynthesizedPcm").GetDouble() >= Marks.GetProperty("transcriptFinal").GetDouble());
+        if (!BufferedPlayback) Assert.True(Marks.GetProperty("firstSynthesizedPcm").GetDouble() <= Marks.GetProperty("routingCompleted").GetDouble());
+        Assert.True(Marks.GetProperty("transportCompleted").GetDouble() >= Marks.GetProperty("routingCompleted").GetDouble());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, Metrics.GetProperty("firstAudioPlayedMilliseconds").ValueKind);
         Assert.Equal(48, Audio.Get(Run.RunId, "output")!.Length); // Two distinct 16-bit synthesized chunks.
         Assert.Equal("available", Audio.Info(Run.RunId, "input").State);
     }

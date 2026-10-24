@@ -17,6 +17,122 @@ public sealed class RichClientTests
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     [Fact]
+    public async Task ServerCanForceBufferedFallbackForAStreamingClient()
+    {
+        using var Base = new TestApplication();
+        using var App = Base.WithWebHostBuilder(Builder =>
+        {
+            Builder.ConfigureAppConfiguration((_, Config) => Config.AddInMemoryCollection(new Dictionary<string, string?> { ["Voice:RichStreamingEnabled"] = "false" }));
+            Builder.ConfigureServices(Services => Services.AddSingleton<ITextToSpeechProvider>(new FakeTts()));
+        });
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, new("speech-stream", "forced-buffering", Speak: true, StreamSpeech: true));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var Events = await WaitEvent(Http, Item.Id, "response.delta", Deadline.Token);
+        Assert.DoesNotContain(Events, Event => Event.Type == "tts.started");
+        Base.Coordinator.Release.TrySetResult(); await WaitTerminal(Http, Item.Id, Deadline.Token);
+        Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.DoesNotContain(Events, Event => Event.Type == "tts.segment");
+        Assert.Single(Events, Event => Event.Type == "tts.audio");
+    }
+    [Fact]
+    public async Task ExceedingSpeechTextLimitPreservesTheCompletedTextAnswer()
+    {
+        using var Base = new TestApplication();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureServices(Services => Services.AddSingleton<ITextToSpeechProvider>(new FakeTts())));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, new("speech-stream-large", "speech-text-bound", Speak: true, StreamSpeech: true));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var Final = await WaitTerminal(Http, Item.Id, Deadline.Token);
+        Assert.Equal("completed", Final.Status); Assert.Equal(17000, Final.Response.Length);
+        var Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.Single(Events, Event => Event.Type == "tts.failed");
+        Assert.DoesNotContain(Events, Event => Event.Type == "tts.audio");
+    }
+    [Fact]
+    public async Task StreamingSpeechArrivesBeforeGenerationAndRetainsExactlyOneRecording()
+    {
+        using var Base = new TestApplication();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureServices(Services => Services.AddSingleton<ITextToSpeechProvider>(new FakeTts())));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, new("speech-stream", "early-audio", Speak: true, StreamSpeech: true));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var Events = await WaitEvent(Http, Item.Id, "tts.segment", Deadline.Token);
+        Assert.DoesNotContain(Events, Event => Event.Type == "response.completed");
+        var First = Events.Single(Event => Event.Type == "tts.segment").Data.Deserialize<SpeechSegment>(Json)!;
+        Assert.Equal(0, First.Index);
+        using var Segment = await Client.DownloadSpeechSegmentAsync(Item.Id, 0, Deadline.Token);
+        using var Bytes = new MemoryStream(); await Segment.CopyToAsync(Bytes, Deadline.Token);
+        Assert.Equal(3244, Bytes.Length);
+        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(Bytes.ToArray(), 0, 4));
+        var PlaybackId = Guid.NewGuid();
+        await Client.ReportPlaybackAsync(Item.Id, new("started", PlaybackId), Deadline.Token);
+        using var Other = App.CreateClient(); Other.DefaultRequestHeaders.Authorization = new("Bearer", "other-client-test-credential-123456789");
+        Assert.Equal(HttpStatusCode.NotFound, (await Other.GetAsync($"/api/client/interactions/{Item.Id}/audio/segments/0", Deadline.Token)).StatusCode);
+        Base.Coordinator.Release.TrySetResult();
+        Assert.Equal("completed", (await WaitTerminal(Http, Item.Id, Deadline.Token)).Status);
+        Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.Equal(new[] { 0, 1 }, Events.Where(Event => Event.Type == "tts.segment").Select(Event => Event.Data.GetProperty("index").GetInt32()));
+        Assert.Single(Events, Event => Event.Type == "tts.audio");
+        Assert.Single(Events, Event => Event.Type == "tts.completed");
+        Assert.DoesNotContain(Events, Event => Event.Type == "tts.failed");
+        using var Recording = await Client.DownloadAudioAsync(Item.Id, Deadline.Token);
+        Assert.Equal(6444, (await ReadAll(Recording)).Length);
+        await Client.ReportPlaybackAsync(Item.Id, new("completed", PlaybackId), Deadline.Token);
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamingCancellationOrChangedAuthoritativeAnswerStopsOutput(bool Changed)
+    {
+        using var Base = new TestApplication();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureServices(Services => Services.AddSingleton<ITextToSpeechProvider>(new FakeTts())));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, new(Changed ? "speech-stream-changed" : "speech-stream", "stream-stop", Speak: true, StreamSpeech: true));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await WaitEvent(Http, Item.Id, "tts.segment", Deadline.Token);
+        if (Changed) Base.Coordinator.Release.TrySetResult(); else await Client.CancelAsync(Item.Id, Deadline.Token);
+        var Final = await WaitTerminal(Http, Item.Id, Deadline.Token);
+        Assert.Equal(Changed ? "failed" : "cancelled", Final.Status);
+        var Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.DoesNotContain(Events, Event => Event.Type is "tts.audio" or "tts.completed");
+        if (Changed) Assert.Single(Events, Event => Event.Type == "tts.failed");
+    }
+    [Fact]
+    public async Task StreamingTtsFailureDoesNotDeadlockGenerationOrLoseText()
+    {
+        using var Base = new TestApplication(); Base.Coordinator.Release.TrySetResult();
+        using var App = Base.WithWebHostBuilder(Builder => Builder.ConfigureServices(Services => Services.AddSingleton<ITextToSpeechProvider>(new FakeTts { Fail = true })));
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Item = await Client.SubmitAsync(Conversation.Id, new("speech-stream", "stream-tts-fail", Speak: true, StreamSpeech: true));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        Assert.Equal("Hello world. Another sentence.", (await WaitTerminal(Http, Item.Id, Deadline.Token)).Response);
+        var Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Item.Id}/events", Deadline.Token))!;
+        Assert.Single(Events, Event => Event.Type == "tts.failed");
+        Assert.DoesNotContain(Events, Event => Event.Type is "tts.segment" or "tts.audio");
+    }
+    private static async Task<byte[]> ReadAll(Stream Input)
+    { using var Output = new MemoryStream(); await Input.CopyToAsync(Output); return Output.ToArray(); }
+    private static async Task<InteractionEvent[]> WaitEvent(HttpClient Http, Guid Id, string Type, CancellationToken Token)
+    {
+        while (true)
+        {
+            var Events = (await Http.GetFromJsonAsync<InteractionEvent[]>($"/api/client/interactions/{Id}/events", Token))!;
+            if (Events.Any(Event => Event.Type == Type)) return Events;
+            await Task.Delay(20, Token);
+        }
+    }
+    [Fact]
     public async Task UnusedUploadsCanBeDeletedThroughSdkWithOwnerIsolation()
     {
         using var App = new TestApplication();
@@ -459,11 +575,18 @@ public sealed class RichClientTests
             InteractionFeedback.Emit("step.started", new { stepId = Guid.NewGuid(), label = "Running local test model" });
             await Assister.Voice.VoiceFeedback.EmitAsync("ai-think", Token);
             await Assister.Voice.VoiceFeedback.EmitAsync("ai-thought", Token);
-            await OnText("Hello", Token);
+            var Speech = Request.Message.StartsWith("speech-stream", StringComparison.Ordinal);
+            if (Request.Message == "speech-stream-large")
+            {
+                var Long = new string('a', 17000); await OnText(Long, Token);
+                return new(Long, Request.ConversationId, "test-model", Guid.NewGuid(), "succeeded", [], null, 0);
+            }
+            await OnText(Speech ? "Hello world. " : "Hello", Token);
             if (Request.Message == "wait") await Task.Delay(Timeout.InfiniteTimeSpan, Token);
             else await Release.Task.WaitAsync(Token);
-            await OnText(" world", Token);
-            return new("Hello world", Request.ConversationId, "test-model", Guid.NewGuid(), "succeeded", [], null, 0);
+            if (Request.Message == "speech-stream-changed") return new("The language model is unavailable.", Request.ConversationId, "language-model", Guid.NewGuid(), "unavailable", [], null, 0);
+            await OnText(Speech ? "Another sentence." : " world", Token);
+            return new(Speech ? "Hello world. Another sentence." : "Hello world", Request.ConversationId, "test-model", Guid.NewGuid(), "succeeded", [], null, 0);
         }
     }
     private sealed class FakeStt : IStreamingSpeechToTextProvider

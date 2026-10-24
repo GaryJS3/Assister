@@ -36,7 +36,7 @@ public static class InteractionEndpoints
         Group.MapGet("/protocol", () => new { protocolVersion = 1, eventDelivery = "at_least_once", maxMessageCharacters = 1000, heartbeatSeconds = 15,
             maxAttachmentBytes = 1048576, maxAttachments = 8, maxAttachmentContextCharacters = 12000,
             inputAudioFormat = "pcm_s16le_16000_mono", outputAudioFormat = "wav", voiceInputMode = "buffered_upload",
-            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "audio.tones", "client.capabilities", "device.requests" } });
+            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "audio.output.segments", "audio.tones", "client.capabilities", "device.requests" } });
         Group.MapPost("/attachments", AttachmentUpload.ReceiveAsync);
         Group.MapDelete("/attachments/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) =>
         {
@@ -92,6 +92,12 @@ public static class InteractionEndpoints
         Group.MapGet("/interactions/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) => Store.Get(Id, Owner(Http)) is { } Item ? Results.Ok(Item) : Results.NotFound());
         Group.MapGet("/interactions/{id:guid}/audio", (Guid Id, InteractionStore Store, HttpContext Http) =>
             Store.Get(Id, Owner(Http)) is not null && Store.Audio(Id) is { } Audio ? Results.File(Audio, "audio/wav", enableRangeProcessing: true) : Results.NotFound());
+        Group.MapGet("/interactions/{id:guid}/audio/segments/{index:int}", (Guid Id, int Index, InteractionStore Store, HttpContext Http) =>
+        {
+            Http.Response.Headers.CacheControl = "private, no-store";
+            return Store.Get(Id, Owner(Http)) is not null && Store.Segment(Id, Index) is { } Audio
+                ? Results.File(Audio, "audio/wav") : Results.NotFound();
+        });
         Group.MapPost("/interactions/{id:guid}/playback", async (Guid Id, PlaybackReport Report, InteractionStore Store, IRequestCoordinator Coordinator, HttpContext Http) =>
         {
             if (Store.Get(Id, Owner(Http)) is null) return Results.NotFound();

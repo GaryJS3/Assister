@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Assister streaming audio verification</title>
+<script src="/speech-player.js"></script>
+<h1>Streaming audio verification</h1><p>Synthetic audio tests the browser transport and scheduler; it does not establish spoken-answer or physical-device latency.</p>
+<button id="run">Run browser verification</button><pre id="result">Ready</pre>
+<script>
+document.getElementById('run').onclick = async () => {
+  const result = document.getElementById('result'); result.textContent = 'Running';
+  const context = new AudioContext(); await context.resume();
+  const bytes = new ArrayBuffer(6444), view = new DataView(bytes);
+  const text = (at, value) => [...value].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+  text(0, 'RIFF'); view.setUint32(4, 6436, true); text(8, 'WAVEfmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 16000, true);
+  view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, 'data'); view.setUint32(40, 6400, true);
+  for (let i = 0; i < 3200; i++) view.setInt16(44 + i * 2, 1200 * Math.sin(i * 2 * Math.PI * 440 / 16000), true);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  const reports = [], started = performance.now(); let synthesisFinished = false;
+  let resolve; const completed = new Promise(r => resolve = r);
+  const player = new window.AssisterSpeechPlayer(context, {
+    report: state => reports.push({ state, elapsedMs: performance.now() - started, synthesisFinished }),
+    done: resolve, status: text => result.textContent = text
+  });
+  const segment = index => ({ index, url, size: bytes.byteLength, sampleRate: 16000, sampleWidth: 2, channels: 1 });
+  try {
+    player.add(segment(0));
+    await new Promise(r => setTimeout(r, 350));
+    if (!reports.some(r => r.state === 'started' && !r.synthesisFinished)) throw Error('No early playback');
+    player.add(segment(1)); synthesisFinished = true; player.finish(2);
+    await Promise.race([completed, new Promise((_, reject) => setTimeout(() => reject(Error('Playback hung')), 4000))]);
+    if (reports.map(r => r.state).join() !== 'started,completed') throw Error('Incorrect lifecycle');
+    result.textContent = 'PASS\n' + JSON.stringify({ sampleRate: context.sampleRate, contextState: context.state, reports }, null, 2);
+  } catch (error) { player.stop(); result.textContent = 'FAIL: ' + error.message + '\n' + JSON.stringify(reports); }
+  finally { URL.revokeObjectURL(url); await context.close(); }
+};
+</script></html>

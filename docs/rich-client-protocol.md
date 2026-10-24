@@ -104,7 +104,40 @@ Upload raw `audio/pcm` bytes at 16 kHz, mono, signed 16-bit little-endian, then 
 
 The server emits `stt.started`, genuine `stt.partial` updates when the provider supplies chunks, then persists `stt.final` and replaces the interaction input with the transcript before routing. Empty/overlong transcripts fail without executing the request. Wyoming partial callbacks currently run during transcription finalization after audio upload. Final-only providers still work; no synthetic partials are produced. Native streaming microphone framing remains a future extension.
 
-With `speak: true`, response text and `response.completed` precede `tts.started`. Generated PCM is bounded to 8 MiB, encoded as WAV and stored separately; `tts.audio` references its authenticated download URL, followed by `tts.completed` or `tts.failed`. A speech failure preserves successful text and does not change its outcome. Audio delivery currently waits for full synthesis rather than streaming early chunks. Cancelling during synthesis stops generation and preserves any completed answer text.
+With `speak: true` and `streamSpeech: false` (the default), response text and `response.completed` precede `tts.started`. Generated PCM is bounded to 8 MiB, encoded as WAV and stored separately; `tts.audio` references its authenticated download URL, followed by `tts.completed` or `tts.failed`. A speech failure preserves successful text and does not change its outcome. This fallback waits for full synthesis. Cancelling during synthesis stops generation and preserves any completed answer text.
+
+Clients supporting ordered segment playback may submit `speak: true, streamSpeech: true`.
+The protocol advertises `audio.output.segments`. `tts.started` then precedes response
+completion and includes `streaming: true` / `encoding: "wav-segments"`. Each
+`tts.segment` contains zero-based `index`, authenticated `url`, `sampleRate`,
+`sampleWidth` (bytes), `channels`, and WAV file `size`. Segments contain at most
+500 ms / 64 KiB PCM before their headers, use a consistent PCM format, and arrive
+in playback order. A bounded eight-sentence worker feeds the existing TTS provider;
+tool-capable rounds remain behind the existing coordinator validation policy.
+Maximum output is 8 MiB PCM / 1024 segments with a three-minute stream deadline.
+
+`GET /api/client/interactions/{id}/audio/segments/{index}` requires the same owner
+authorization as the interaction. The SDK exposes `DownloadSpeechSegmentAsync`.
+Complete synthesis still emits one `tts.audio` for the combined retained WAV,
+followed by `tts.completed` with `streaming: true` and `segmentCount`. Clients
+already playing segments must not autoplay the combined WAV. Final failure emits
+`tts.failed`; clients stop queued/playing segments and keep the text answer.
+Cancellation or terminal interaction failure also stops partial playback. Earlier
+audio cannot be retracted if generation later fails or the authoritative answer
+changes. Successful playback completes only after the final count is known and
+all scheduled buffers have ended. The server accepts `started` before complete
+synthesis, but accepts `completed` only when the retained WAV is available.
+
+The browser opts in after activating a Web Audio context from the submit gesture;
+unsupported/suspended contexts use buffered playback. It decodes serially and
+schedules at most about 2.5 seconds ahead, with a bounded metadata queue. Initial
+tones precede the stream; Goodbye follows actual buffer completion. History
+reconstruction stays silent; event cursors deduplicate reconnect delivery. Segment
+download/gap/decode failure stops playback and exposes the retained WAV for manual
+replay, without automatically repeating earlier speech. Native application player
+implementations are outside this repository. Set `Voice__RichStreamingEnabled=false`
+on the server to force the buffered fallback, including opted-in submissions.
+See [S1 measurements and acceptance](voice-s1-rich-streaming.md).
 
 Playback is acknowledged by the consuming client, never inferred from generation. Each playback/replay uses a new `playbackId`; transitions are started to completed/stopped/failed, with identical acknowledgements idempotent. A failed attempt may be reported before started. Playback events can be appended after execution completes and do not change that terminal outcome. The default interaction stream closes at execution completion; use `followPlayback=true` (or the .NET observer's `FollowPlayback` option) to keep following post-completion playback, cancelling observation when finished. Browser replay reconstructs audio controls without automatically replaying historical speech; autoplay may require a user gesture.
 
@@ -186,7 +219,7 @@ await foreach (var item in client.ObserveAsync(interaction.Id, Token: cancellati
 }
 ```
 
-Keep the same idempotency key if a submission must be retried after an uncertain network result. Disposing/cancelling observation does not cancel the interaction; call `CancelAsync` explicitly. Caller owns HttpClient and credential refresh. Use a base URL ending in `/`. Streaming microphone/early-audio transports remain future work.
+Keep the same idempotency key if a submission must be retried after an uncertain network result. Disposing/cancelling observation does not cancel the interaction; call `CancelAsync` explicitly. Caller owns HttpClient and credential refresh. Use a base URL ending in `/`. Streaming microphone input remains future work; optional early output uses the segment contract above.
 
 The SDK also supports optional connection-state callbacks, `UploadAttachmentAsync` for PCM, submission options for `AudioAttachmentId`/`Speak`, `DownloadAudioAsync`, `ReportPlaybackAsync`, `RegisterAsync`, `ObserveDeviceRequestsAsync`, `RespondAsync` and `GetDeviceOutcomeAsync`. Register capabilities before opening the device observer. Both observers check the v1 readiness message and ignore unknown additive event types. Dispose returned audio streams after use. Connection-state callbacks are transport feedback; execution and playback remain separate semantic events.
 
@@ -198,7 +231,7 @@ The real coordinator is also tested with unavailable Home Assistant, proving int
 
 Next increments:
 
-1. Streaming microphone framing and early TTS audio delivery, with live-provider and physical-browser acceptance.
+1. Streaming microphone framing and live-provider/physical-client acceptance of early TTS segment delivery.
 2. Execution tools that deliberately consume device capabilities, plus platform-specific permissions and durable execution ledgers in future native clients.
 3. Vision-capable image processing and additional document formats.
 4. Conversation/event pagination and expired-cursor snapshot recovery.

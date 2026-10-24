@@ -42,11 +42,14 @@ public sealed class InteractionRetentionTests : IDisposable
         var Text = Store.SaveAttachment("owner", "note.txt", "text/plain", "user", "hello"u8.ToArray(), "hello");
         var Done = Store.Submit(Conversation.Id, "owner", new("voice", "done", [Text.Id], Audio.Id));
         Store.SaveAudio(Done.Id, new byte[44]);
+        Store.SaveSegment(Done.Id, 0, new byte[44], new(new byte[2], 16000, 2, 1));
+        Assert.NotNull(Store.Segment(Done.Id, 0));
         Store.Append(Done.Id, "interaction.completed", new { }, "completed");
         var Active = Store.Submit(Conversation.Id, "owner", new("voice", "active", AudioAttachmentId: ActiveAudio.Id));
         Clock.Advance(TimeSpan.FromHours(25));
         Store.Prune();
         Assert.Null(Store.Audio(Done.Id));
+        Assert.Null(Store.Segment(Done.Id, 0));
         Assert.Null(Store.Attachment(Audio.Id, "owner"));
         Assert.NotNull(Store.Get(Done.Id));
         Assert.Single(Store.Documents(Done.Id));
@@ -72,6 +75,7 @@ public sealed class InteractionRetentionTests : IDisposable
             OldId = Store.Submit(Conversation.Id, "owner", new("old", "old")).Id;
             Store.SelectContext(OldId, new("input", "user_input", "user", "Input", "old", new { }, 0));
             Store.SaveAudio(OldId, new byte[44]);
+            Store.SaveSegment(OldId, 0, new byte[44], new(new byte[2], 16000, 2, 1));
             Store.Playback(OldId, "client", new("started", Guid.NewGuid()));
             Store.Append(OldId, "interaction.completed", new { }, "completed");
             Clock.Advance(TimeSpan.FromSeconds(1));
@@ -81,6 +85,7 @@ public sealed class InteractionRetentionTests : IDisposable
             Assert.Null(Store.Get(OldId));
             Assert.Empty(Store.Context(OldId));
             Assert.Null(Store.Audio(OldId));
+            Assert.Null(Store.Segment(OldId, 0));
             Assert.NotNull(Store.Get(RecentId));
         }
         using var Reopened = Open(("RichClients:MaxInteractions", "1"));

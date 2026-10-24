@@ -21,7 +21,13 @@ function client() {
   const source = fs.readFileSync(path.join(__dirname, '../../src/Assister/wwwroot/chat.js'), 'utf8');
   vm.runInContext(source.replace('load().catch(error);', `globalThis.hooks = { apply, stopTones, setup() {
     active = 'request'; const v = { cursor: 0, row: { append() {} }, mediaStatus: {}, status: {} }; views.set(active, v); return v;
-  }, drain: () => toneQueue };`), context);
+  }, enableStreaming() { speechContext = { state: 'running' }; window.AssisterSpeechPlayer = class {
+    constructor(ctx, options) { this.options = options; this.segments = []; }
+    add(segment) { this.segments.push(segment); }
+    finish(count) { this.count = count; }
+    stop() { this.stopped = true; }
+    end() { this.ended = true; this.options.done(); }
+  }; }, drain: () => toneQueue };`), context);
   const view = context.hooks.setup();
   let sequence = 0;
   const send = (type, data, replaying = false) => context.hooks.apply({ id: 'request' }, { sequence: ++sequence, type, data }, replaying);
@@ -70,4 +76,18 @@ test('stopped speech discards deferred Goodbye', async () => {
   c.send('tone.play', c.cue('goodbye', 'after-response-audio'));
   await tick(); c.view.audio.onplaying(); c.view.audio.pause(); c.view.audio.end();
   await tick(); assert.equal(c.played.length, 1); assert.equal(c.view.goodbye, null);
+});
+test('streamed speech suppresses retained-recording autoplay and Goodbye waits for stream playback', async () => {
+  const c = client(); c.enableStreaming(); c.send('tts.segment', { index: 0 });
+  c.send('tts.audio', { url: '/retained.wav' }); c.send('tts.completed', { streaming: true, segmentCount: 1 });
+  c.send('tone.play', c.cue('goodbye', 'after-response-audio')); await tick();
+  assert.equal(c.played.length, 0); assert.equal(c.view.stream.count, 1);
+  c.view.stream.end(); await tick(); assert.equal(c.played.length, 1);
+  assert.equal(c.played[0].src, '/api/voice/tones/goodbye.wav'); c.played[0].end(); await c.drain();
+});
+test('historical segments stay silent and cancellation stops live streamed speech', async () => {
+  const c = client(); c.enableStreaming(); c.send('tts.segment', { index: 0 }, true);
+  assert.equal(c.view.stream, undefined);
+  c.send('tts.segment', { index: 0 }); c.send('interaction.cancel_requested', {});
+  assert.equal(c.view.stream.stopped, true);
 });

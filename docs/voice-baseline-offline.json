@@ -1,0 +1,2104 @@
+{
+  "measuredAt": "2026-10-24T00:02:19.660845+00:00",
+  "framework": ".NET 10.0.10",
+  "os": "Microsoft Windows 10.0.26200",
+  "processorCount": 32,
+  "scope": "Offline real pipeline; simulated providers/transport playback, warm process, tones disabled; no physical playback or inference speed claim.",
+  "configuration": {
+    "samplesPerCell": 20,
+    "warmupsPerCell": 1,
+    "sttFinalizationMs": 20,
+    "ttsSentenceMs": 35,
+    "pcmChunksPerSentence": 2,
+    "simulatedPlaybackTailMs": 10,
+    "scenarios": [
+      {
+        "name": "direct-control",
+        "sentences": [
+          "The test light is on."
+        ],
+        "generationPerSentenceMs": 15,
+        "toolMs": 0,
+        "holdToolRound": false
+      },
+      {
+        "name": "short-knowledge",
+        "sentences": [
+          "The Moon orbits Earth.",
+          "One orbit takes about a month."
+        ],
+        "generationPerSentenceMs": 100,
+        "toolMs": 0,
+        "holdToolRound": false
+      },
+      {
+        "name": "tool-backed",
+        "sentences": [
+          "The test temperature is 21 degrees.",
+          "That is the latest reading."
+        ],
+        "generationPerSentenceMs": 100,
+        "toolMs": 120,
+        "holdToolRound": true
+      },
+      {
+        "name": "long-reply",
+        "sentences": [
+          "Here is the first useful sentence.",
+          "Here is the second useful sentence.",
+          "Here is the third useful sentence.",
+          "Here is the last useful sentence."
+        ],
+        "generationPerSentenceMs": 100,
+        "toolMs": 0,
+        "holdToolRound": false
+      }
+    ],
+    "percentile": "nearest rank",
+    "origin": "server capture completion"
+  },
+  "summary": [
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 94.61,
+      "firstUsefulAudioP95Ms": 96.74,
+      "completionMedianMs": 110.77,
+      "completionP95Ms": 113.14,
+      "firstPcmMedianMs": 94.61
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 94.85,
+      "firstUsefulAudioP95Ms": 96.48,
+      "completionMedianMs": 111.11,
+      "completionP95Ms": 112.45,
+      "firstPcmMedianMs": 94.82
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 95.1,
+      "firstUsefulAudioP95Ms": 96.74,
+      "completionMedianMs": 111.19,
+      "completionP95Ms": 112.94,
+      "firstPcmMedianMs": 95.04
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 192.48,
+      "firstUsefulAudioP95Ms": 193.36,
+      "completionMedianMs": 321.15,
+      "completionP95Ms": 322.29,
+      "firstPcmMedianMs": 192.48
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 305.17,
+      "firstUsefulAudioP95Ms": 306.63,
+      "completionMedianMs": 321.19,
+      "completionP95Ms": 323.08,
+      "firstPcmMedianMs": 193.21
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 352.05,
+      "firstUsefulAudioP95Ms": 355.86,
+      "completionMedianMs": 368.35,
+      "completionP95Ms": 372.07,
+      "firstPcmMedianMs": 304.28
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 431.76,
+      "firstUsefulAudioP95Ms": 436.07,
+      "completionMedianMs": 496.65,
+      "completionP95Ms": 500.27,
+      "firstPcmMedianMs": 431.76
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 477.34,
+      "firstUsefulAudioP95Ms": 483.96,
+      "completionMedianMs": 493.62,
+      "completionP95Ms": 500.09,
+      "firstPcmMedianMs": 430.5
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 480.76,
+      "firstUsefulAudioP95Ms": 483.31,
+      "completionMedianMs": 497.25,
+      "completionP95Ms": 499.4,
+      "firstPcmMedianMs": 432.14
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 192.58,
+      "firstUsefulAudioP95Ms": 194.14,
+      "completionMedianMs": 546.37,
+      "completionP95Ms": 548.59,
+      "firstPcmMedianMs": 192.58
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 529.48,
+      "firstUsefulAudioP95Ms": 533.6,
+      "completionMedianMs": 545.61,
+      "completionP95Ms": 549.93,
+      "firstPcmMedianMs": 192.12
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "count": 20,
+      "firstUsefulAudioMedianMs": 675.09,
+      "firstUsefulAudioP95Ms": 678.71,
+      "completionMedianMs": 691.24,
+      "completionP95Ms": 694.51,
+      "firstPcmMedianMs": 529.85
+    }
+  ],
+  "measurements": [
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 93.6629,
+      "completionMs": 109.7834,
+      "firstPcmMs": 93.65979999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 94.7092,
+      "completionMs": 111.3023,
+      "firstPcmMs": 94.6284
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 0,
+      "firstUsefulAudioMs": 95.7416,
+      "completionMs": 111.7158,
+      "firstPcmMs": 95.6143
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 1,
+      "firstUsefulAudioMs": 94.2856,
+      "completionMs": 110.10589999999999,
+      "firstPcmMs": 94.15899999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 95.5091,
+      "completionMs": 112.1573,
+      "firstPcmMs": 95.4422
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 94.6311,
+      "completionMs": 110.5035,
+      "firstPcmMs": 94.62559999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 94.41460000000001,
+      "completionMs": 110.4952,
+      "firstPcmMs": 94.4107
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 93.65979999999999,
+      "completionMs": 109.99629999999999,
+      "firstPcmMs": 93.6225
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 2,
+      "firstUsefulAudioMs": 93.6662,
+      "completionMs": 109.7591,
+      "firstPcmMs": 93.5534
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 3,
+      "firstUsefulAudioMs": 94.8794,
+      "completionMs": 110.6212,
+      "firstPcmMs": 94.7457
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 95.12650000000001,
+      "completionMs": 111.3394,
+      "firstPcmMs": 95.0719
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 94.6091,
+      "completionMs": 110.7713,
+      "firstPcmMs": 94.60640000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 94.52300000000001,
+      "completionMs": 111.0604,
+      "firstPcmMs": 94.517
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 94.8539,
+      "completionMs": 111.1134,
+      "firstPcmMs": 94.82119999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 4,
+      "firstUsefulAudioMs": 95.1816,
+      "completionMs": 111.3384,
+      "firstPcmMs": 95.08879999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 5,
+      "firstUsefulAudioMs": 95.0479,
+      "completionMs": 111.1935,
+      "firstPcmMs": 94.9573
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 95.3807,
+      "completionMs": 111.4997,
+      "firstPcmMs": 95.31580000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 95.3553,
+      "completionMs": 111.30630000000001,
+      "firstPcmMs": 95.3531
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 93.7849,
+      "completionMs": 109.9854,
+      "firstPcmMs": 93.78160000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 94.1203,
+      "completionMs": 109.92830000000001,
+      "firstPcmMs": 94.0956
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 6,
+      "firstUsefulAudioMs": 94.1304,
+      "completionMs": 109.906,
+      "firstPcmMs": 94.0694
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 7,
+      "firstUsefulAudioMs": 94.81540000000001,
+      "completionMs": 110.42710000000001,
+      "firstPcmMs": 94.7503
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 95.0265,
+      "completionMs": 110.29289999999999,
+      "firstPcmMs": 94.9928
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 94.192,
+      "completionMs": 110.0594,
+      "firstPcmMs": 94.18939999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 94.2002,
+      "completionMs": 110.0918,
+      "firstPcmMs": 94.1981
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 94.3802,
+      "completionMs": 110.1007,
+      "firstPcmMs": 94.34
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 8,
+      "firstUsefulAudioMs": 95.4468,
+      "completionMs": 111.6588,
+      "firstPcmMs": 95.32860000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 9,
+      "firstUsefulAudioMs": 95.0984,
+      "completionMs": 110.81200000000001,
+      "firstPcmMs": 95.0411
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 94.1792,
+      "completionMs": 110.5583,
+      "firstPcmMs": 94.1453
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 94.85140000000001,
+      "completionMs": 110.7842,
+      "firstPcmMs": 94.8486
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 94.15859999999999,
+      "completionMs": 109.788,
+      "firstPcmMs": 94.157
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 94.41239999999999,
+      "completionMs": 110.2384,
+      "firstPcmMs": 94.4001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 10,
+      "firstUsefulAudioMs": 95.5681,
+      "completionMs": 111.40320000000001,
+      "firstPcmMs": 95.464
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 11,
+      "firstUsefulAudioMs": 95.324,
+      "completionMs": 111.5811,
+      "firstPcmMs": 95.2148
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 95.6723,
+      "completionMs": 111.5169,
+      "firstPcmMs": 95.65899999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 95.3507,
+      "completionMs": 111.18,
+      "firstPcmMs": 95.3486
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 95.2666,
+      "completionMs": 111.14259999999999,
+      "firstPcmMs": 95.2641
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 96.4791,
+      "completionMs": 112.4532,
+      "firstPcmMs": 96.443
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 12,
+      "firstUsefulAudioMs": 94.39,
+      "completionMs": 110.46940000000001,
+      "firstPcmMs": 94.31750000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 13,
+      "firstUsefulAudioMs": 94.23870000000001,
+      "completionMs": 110.40780000000001,
+      "firstPcmMs": 94.1866
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 94.6499,
+      "completionMs": 110.61370000000001,
+      "firstPcmMs": 94.6365
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 94.8694,
+      "completionMs": 110.8306,
+      "firstPcmMs": 94.8682
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 94.5004,
+      "completionMs": 110.6914,
+      "firstPcmMs": 94.4991
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 94.7833,
+      "completionMs": 111.0375,
+      "firstPcmMs": 94.7717
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 14,
+      "firstUsefulAudioMs": 96.9271,
+      "completionMs": 113.22019999999999,
+      "firstPcmMs": 96.7896
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 15,
+      "firstUsefulAudioMs": 96.51469999999999,
+      "completionMs": 112.93979999999999,
+      "firstPcmMs": 96.4007
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 94.39599999999999,
+      "completionMs": 110.6095,
+      "firstPcmMs": 94.3274
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 95.4396,
+      "completionMs": 111.4752,
+      "firstPcmMs": 95.4376
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 97.0071,
+      "completionMs": 113.44879999999999,
+      "firstPcmMs": 97.0047
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 96.6726,
+      "completionMs": 112.823,
+      "firstPcmMs": 96.64750000000001
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 16,
+      "firstUsefulAudioMs": 96.431,
+      "completionMs": 112.56360000000001,
+      "firstPcmMs": 96.3373
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 17,
+      "firstUsefulAudioMs": 96.3661,
+      "completionMs": 112.62440000000001,
+      "firstPcmMs": 96.2655
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 95.5677,
+      "completionMs": 111.8038,
+      "firstPcmMs": 95.5436
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 95.18100000000001,
+      "completionMs": 111.38980000000001,
+      "firstPcmMs": 95.1787
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 96.7373,
+      "completionMs": 113.1401,
+      "firstPcmMs": 96.73429999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 95.2837,
+      "completionMs": 111.5834,
+      "firstPcmMs": 95.2513
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 18,
+      "firstUsefulAudioMs": 96.73570000000001,
+      "completionMs": 112.0356,
+      "firstPcmMs": 96.61659999999999
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "buffered",
+      "repetition": 19,
+      "firstUsefulAudioMs": 94.9585,
+      "completionMs": 111.0623,
+      "firstPcmMs": 94.8444
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-buffered-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 95.3429,
+      "completionMs": 111.55069999999999,
+      "firstPcmMs": 95.3188
+    },
+    {
+      "scenario": "direct-control",
+      "mode": "overlap-streaming-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 94.2539,
+      "completionMs": 110.29599999999999,
+      "firstPcmMs": 94.25150000000001
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 192.15800000000002,
+      "completionMs": 320.83209999999997,
+      "firstPcmMs": 192.15460000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 305.153,
+      "completionMs": 321.4821,
+      "firstPcmMs": 193.2092
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 0,
+      "firstUsefulAudioMs": 354.3114,
+      "completionMs": 369.97679999999997,
+      "firstPcmMs": 305.913
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 1,
+      "firstUsefulAudioMs": 351.7885,
+      "completionMs": 367.6862,
+      "firstPcmMs": 303.7259
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 298.5163,
+      "completionMs": 314.41110000000003,
+      "firstPcmMs": 189.0234
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 191.1025,
+      "completionMs": 318.0834,
+      "firstPcmMs": 191.10029999999998
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 190.80610000000001,
+      "completionMs": 318.0996,
+      "firstPcmMs": 190.80419999999998
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 304.9007,
+      "completionMs": 321.20079999999996,
+      "firstPcmMs": 193.293
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 2,
+      "firstUsefulAudioMs": 354.5473,
+      "completionMs": 370.3777,
+      "firstPcmMs": 305.9346
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 3,
+      "firstUsefulAudioMs": 350.9959,
+      "completionMs": 367.1723,
+      "firstPcmMs": 302.2884
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 306.93019999999996,
+      "completionMs": 323.3572,
+      "firstPcmMs": 194.3655
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 192.1859,
+      "completionMs": 319.8095,
+      "firstPcmMs": 192.18210000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 191.87030000000001,
+      "completionMs": 320.0979,
+      "firstPcmMs": 191.8679
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 299.99,
+      "completionMs": 316.0858,
+      "firstPcmMs": 189.29979999999998
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 4,
+      "firstUsefulAudioMs": 355.8587,
+      "completionMs": 371.9188,
+      "firstPcmMs": 307.16290000000004
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 5,
+      "firstUsefulAudioMs": 355.04499999999996,
+      "completionMs": 371.11629999999997,
+      "firstPcmMs": 306.3387
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 306.5985,
+      "completionMs": 323.0781,
+      "firstPcmMs": 193.6906
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 192.6195,
+      "completionMs": 321.51890000000003,
+      "firstPcmMs": 192.61530000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 193.534,
+      "completionMs": 322.6979,
+      "firstPcmMs": 193.5299
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 302.7558,
+      "completionMs": 318.6752,
+      "firstPcmMs": 191.63600000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 6,
+      "firstUsefulAudioMs": 352.05420000000004,
+      "completionMs": 368.19710000000003,
+      "firstPcmMs": 303.6736
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 7,
+      "firstUsefulAudioMs": 352.00539999999995,
+      "completionMs": 367.5902,
+      "firstPcmMs": 304.4349
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 300.808,
+      "completionMs": 316.7919,
+      "firstPcmMs": 190.5924
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 189.74679999999998,
+      "completionMs": 316.64279999999997,
+      "firstPcmMs": 189.74280000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 192.70149999999998,
+      "completionMs": 320.6895,
+      "firstPcmMs": 192.6973
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 305.99129999999997,
+      "completionMs": 321.8446,
+      "firstPcmMs": 193.51420000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 8,
+      "firstUsefulAudioMs": 348.6296,
+      "completionMs": 364.70689999999996,
+      "firstPcmMs": 300.7399
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 9,
+      "firstUsefulAudioMs": 348.5001,
+      "completionMs": 364.6544,
+      "firstPcmMs": 300.9163
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 305.4582,
+      "completionMs": 320.9731,
+      "firstPcmMs": 193.4918
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 193.18599999999998,
+      "completionMs": 321.9097,
+      "firstPcmMs": 193.18210000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 193.3604,
+      "completionMs": 322.16389999999996,
+      "firstPcmMs": 193.3565
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 305.2423,
+      "completionMs": 320.9777,
+      "firstPcmMs": 193.8138
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 10,
+      "firstUsefulAudioMs": 352.877,
+      "completionMs": 368.7024,
+      "firstPcmMs": 304.7282
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 11,
+      "firstUsefulAudioMs": 355.8263,
+      "completionMs": 372.06530000000004,
+      "firstPcmMs": 307.26140000000004
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 303.3027,
+      "completionMs": 319.45300000000003,
+      "firstPcmMs": 191.9009
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 193.1765,
+      "completionMs": 322.2893,
+      "firstPcmMs": 193.1721
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 192.8634,
+      "completionMs": 322.1158,
+      "firstPcmMs": 192.8594
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 306.4603,
+      "completionMs": 322.75030000000004,
+      "firstPcmMs": 193.77179999999998
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 12,
+      "firstUsefulAudioMs": 353.3945,
+      "completionMs": 369.5728,
+      "firstPcmMs": 305.3769
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 13,
+      "firstUsefulAudioMs": 352.038,
+      "completionMs": 368.3514,
+      "firstPcmMs": 304.27930000000003
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 305.9792,
+      "completionMs": 322.0031,
+      "firstPcmMs": 193.4247
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 192.7928,
+      "completionMs": 320.99199999999996,
+      "firstPcmMs": 192.7891
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 193.0079,
+      "completionMs": 322.0998,
+      "firstPcmMs": 193.0042
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 305.1701,
+      "completionMs": 321.192,
+      "firstPcmMs": 192.8279
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 14,
+      "firstUsefulAudioMs": 351.22520000000003,
+      "completionMs": 367.1648,
+      "firstPcmMs": 303.0433
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 15,
+      "firstUsefulAudioMs": 355.88820000000004,
+      "completionMs": 372.1093,
+      "firstPcmMs": 307.2172
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 306.62850000000003,
+      "completionMs": 322.3484,
+      "firstPcmMs": 193.5588
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 192.4521,
+      "completionMs": 321.9465,
+      "firstPcmMs": 192.44799999999998
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 191.88979999999998,
+      "completionMs": 321.3922,
+      "firstPcmMs": 191.8853
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 305.35859999999997,
+      "completionMs": 321.3455,
+      "firstPcmMs": 192.6172
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 16,
+      "firstUsefulAudioMs": 352.306,
+      "completionMs": 368.6107,
+      "firstPcmMs": 304.26640000000003
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 17,
+      "firstUsefulAudioMs": 354.47380000000004,
+      "completionMs": 370.62600000000003,
+      "firstPcmMs": 305.7556
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 306.2376,
+      "completionMs": 322.53319999999997,
+      "firstPcmMs": 193.82070000000002
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 192.4834,
+      "completionMs": 321.1453,
+      "firstPcmMs": 192.4793
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 193.127,
+      "completionMs": 321.6111,
+      "firstPcmMs": 193.1233
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 302.0974,
+      "completionMs": 318.1122,
+      "firstPcmMs": 190.4274
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 18,
+      "firstUsefulAudioMs": 350.8069,
+      "completionMs": 366.77819999999997,
+      "firstPcmMs": 301.90560000000005
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "buffered",
+      "repetition": 19,
+      "firstUsefulAudioMs": 349.23769999999996,
+      "completionMs": 365.51189999999997,
+      "firstPcmMs": 301.5718
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-buffered-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 304.37309999999997,
+      "completionMs": 320.7206,
+      "firstPcmMs": 190.5175
+    },
+    {
+      "scenario": "short-knowledge",
+      "mode": "overlap-streaming-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 190.8392,
+      "completionMs": 319.5631,
+      "firstPcmMs": 190.835
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 434.7397,
+      "completionMs": 499.6147,
+      "firstPcmMs": 434.7368
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 484.43879999999996,
+      "completionMs": 500.62969999999996,
+      "firstPcmMs": 435.95349999999996
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 0,
+      "firstUsefulAudioMs": 481.2796,
+      "completionMs": 497.4753,
+      "firstPcmMs": 432.5018
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 1,
+      "firstUsefulAudioMs": 483.0581,
+      "completionMs": 499.3672,
+      "firstPcmMs": 434.4936
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 477.2315,
+      "completionMs": 493.616,
+      "firstPcmMs": 429.8079
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 430.9769,
+      "completionMs": 494.3196,
+      "firstPcmMs": 430.9742
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 426.4694,
+      "completionMs": 490.0988,
+      "firstPcmMs": 426.4674
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 481.0033,
+      "completionMs": 497.3267,
+      "firstPcmMs": 432.7901
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 2,
+      "firstUsefulAudioMs": 481.6028,
+      "completionMs": 497.6067,
+      "firstPcmMs": 433.517
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 3,
+      "firstUsefulAudioMs": 480.76219999999995,
+      "completionMs": 497.2535,
+      "firstPcmMs": 431.9901
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 476.2556,
+      "completionMs": 492.42870000000005,
+      "firstPcmMs": 430.59360000000004
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 432.91270000000003,
+      "completionMs": 497.812,
+      "firstPcmMs": 432.90959999999995
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 436.0247,
+      "completionMs": 499.726,
+      "firstPcmMs": 436.0215
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 477.06129999999996,
+      "completionMs": 493.2466,
+      "firstPcmMs": 430.50100000000003
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 4,
+      "firstUsefulAudioMs": 473.1395,
+      "completionMs": 488.8952,
+      "firstPcmMs": 425.2556
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 5,
+      "firstUsefulAudioMs": 478.3716,
+      "completionMs": 494.791,
+      "firstPcmMs": 430.2305
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 477.16610000000003,
+      "completionMs": 493.4085,
+      "firstPcmMs": 428.6433
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 433.0696,
+      "completionMs": 497.71389999999997,
+      "firstPcmMs": 433.06649999999996
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 434.9169,
+      "completionMs": 499.50509999999997,
+      "firstPcmMs": 434.91380000000004
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 480.6381,
+      "completionMs": 496.7048,
+      "firstPcmMs": 432.46500000000003
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 6,
+      "firstUsefulAudioMs": 485.01709999999997,
+      "completionMs": 501.2033,
+      "firstPcmMs": 436.229
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 7,
+      "firstUsefulAudioMs": 483.3073,
+      "completionMs": 499.4043,
+      "firstPcmMs": 434.8213
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 483.9591,
+      "completionMs": 500.0865,
+      "firstPcmMs": 435.2278
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 431.762,
+      "completionMs": 496.6541,
+      "firstPcmMs": 431.7591
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 434.44259999999997,
+      "completionMs": 498.767,
+      "firstPcmMs": 434.4395
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 481.6943,
+      "completionMs": 497.8725,
+      "firstPcmMs": 433.88289999999995
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 8,
+      "firstUsefulAudioMs": 482.0762,
+      "completionMs": 498.3032,
+      "firstPcmMs": 433.4597
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 9,
+      "firstUsefulAudioMs": 478.6663,
+      "completionMs": 494.4425,
+      "firstPcmMs": 430.7325
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 477.2316,
+      "completionMs": 493.31210000000004,
+      "firstPcmMs": 429.5726
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 426.6554,
+      "completionMs": 490.2146,
+      "firstPcmMs": 426.65270000000004
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 427.7131,
+      "completionMs": 491.14360000000005,
+      "firstPcmMs": 427.71099999999996
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 476.8521,
+      "completionMs": 492.7783,
+      "firstPcmMs": 429.7697
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 10,
+      "firstUsefulAudioMs": 473.22499999999997,
+      "completionMs": 489.3966,
+      "firstPcmMs": 425.4593
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 11,
+      "firstUsefulAudioMs": 475.0887,
+      "completionMs": 491.3922,
+      "firstPcmMs": 426.72479999999996
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 474.94030000000004,
+      "completionMs": 491.0109,
+      "firstPcmMs": 427.0629
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 428.4076,
+      "completionMs": 492.513,
+      "firstPcmMs": 428.4052
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 431.42760000000004,
+      "completionMs": 496.1918,
+      "firstPcmMs": 431.4249
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 482.39439999999996,
+      "completionMs": 498.5379,
+      "firstPcmMs": 434.6069
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 12,
+      "firstUsefulAudioMs": 478.5693,
+      "completionMs": 494.8372,
+      "firstPcmMs": 429.9914
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 13,
+      "firstUsefulAudioMs": 481.3171,
+      "completionMs": 497.348,
+      "firstPcmMs": 432.8688
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 478.3185,
+      "completionMs": 494.1177,
+      "firstPcmMs": 431.072
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 435.7262,
+      "completionMs": 499.7302,
+      "firstPcmMs": 435.7235
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 431.6548,
+      "completionMs": 495.8607,
+      "firstPcmMs": 431.6522
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 482.9736,
+      "completionMs": 498.94829999999996,
+      "firstPcmMs": 434.80039999999997
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 14,
+      "firstUsefulAudioMs": 483.1593,
+      "completionMs": 498.5924,
+      "firstPcmMs": 435.6294
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 15,
+      "firstUsefulAudioMs": 478.1009,
+      "completionMs": 494.11,
+      "firstPcmMs": 430.86600000000004
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 483.7164,
+      "completionMs": 500.0025,
+      "firstPcmMs": 435.7448
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 428.0814,
+      "completionMs": 491.7559,
+      "firstPcmMs": 428.0784
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 436.07219999999995,
+      "completionMs": 500.6092,
+      "firstPcmMs": 436.06989999999996
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 477.3394,
+      "completionMs": 493.1372,
+      "firstPcmMs": 430.35889999999995
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 16,
+      "firstUsefulAudioMs": 482.1302,
+      "completionMs": 498.23859999999996,
+      "firstPcmMs": 433.4659
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 17,
+      "firstUsefulAudioMs": 479.908,
+      "completionMs": 495.3157,
+      "firstPcmMs": 432.137
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 477.8339,
+      "completionMs": 494.321,
+      "firstPcmMs": 429.59189999999995
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 436.3213,
+      "completionMs": 500.26619999999997,
+      "firstPcmMs": 436.3179
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 427.9422,
+      "completionMs": 492.8979,
+      "firstPcmMs": 427.9399
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 476.9986,
+      "completionMs": 493.2729,
+      "firstPcmMs": 429.7215
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 18,
+      "firstUsefulAudioMs": 476.2631,
+      "completionMs": 492.462,
+      "firstPcmMs": 429.0956
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "buffered",
+      "repetition": 19,
+      "firstUsefulAudioMs": 481.15009999999995,
+      "completionMs": 497.49289999999996,
+      "firstPcmMs": 432.5897
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-buffered-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 474.43609999999995,
+      "completionMs": 490.25289999999995,
+      "firstPcmMs": 426.6037
+    },
+    {
+      "scenario": "tool-backed",
+      "mode": "overlap-streaming-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 434.8228,
+      "completionMs": 500.0506,
+      "firstPcmMs": 434.8202
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 194.02419999999998,
+      "completionMs": 548.5948999999999,
+      "firstPcmMs": 194.0164
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 0,
+      "firstUsefulAudioMs": 533.5991,
+      "completionMs": 549.933,
+      "firstPcmMs": 193.6765
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 0,
+      "firstUsefulAudioMs": 675.1962000000001,
+      "completionMs": 691.3935,
+      "firstPcmMs": 529.8501
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 1,
+      "firstUsefulAudioMs": 675.0930999999999,
+      "completionMs": 691.2399,
+      "firstPcmMs": 530.1197000000001
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 528.3979999999999,
+      "completionMs": 544.8614,
+      "firstPcmMs": 191.0908
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 1,
+      "firstUsefulAudioMs": 193.0238,
+      "completionMs": 545.8536,
+      "firstPcmMs": 193.01930000000002
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 192.9433,
+      "completionMs": 548.6448,
+      "firstPcmMs": 192.9386
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 2,
+      "firstUsefulAudioMs": 524.1937,
+      "completionMs": 540.6231,
+      "firstPcmMs": 191.56109999999998
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 2,
+      "firstUsefulAudioMs": 677.9283,
+      "completionMs": 693.7865,
+      "firstPcmMs": 532.325
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 3,
+      "firstUsefulAudioMs": 674.9441,
+      "completionMs": 691.1001,
+      "firstPcmMs": 529.3821999999999
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 525.419,
+      "completionMs": 541.2049,
+      "firstPcmMs": 190.0825
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 3,
+      "firstUsefulAudioMs": 191.7441,
+      "completionMs": 547.1149,
+      "firstPcmMs": 191.7407
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 194.1429,
+      "completionMs": 546.1989,
+      "firstPcmMs": 194.1386
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 4,
+      "firstUsefulAudioMs": 533.4398,
+      "completionMs": 549.5944000000001,
+      "firstPcmMs": 194.2997
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 4,
+      "firstUsefulAudioMs": 676.2157,
+      "completionMs": 692.7646,
+      "firstPcmMs": 531.6714
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 5,
+      "firstUsefulAudioMs": 678.7107,
+      "completionMs": 694.5067,
+      "firstPcmMs": 532.4659
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 528.813,
+      "completionMs": 545.0486,
+      "firstPcmMs": 191.3824
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 5,
+      "firstUsefulAudioMs": 194.03670000000002,
+      "completionMs": 548.1985999999999,
+      "firstPcmMs": 194.03259999999997
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 191.63709999999998,
+      "completionMs": 546.0586,
+      "firstPcmMs": 191.6327
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 6,
+      "firstUsefulAudioMs": 529.2164,
+      "completionMs": 545.6087,
+      "firstPcmMs": 192.1211
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 6,
+      "firstUsefulAudioMs": 677.9756,
+      "completionMs": 694.3253,
+      "firstPcmMs": 534.1663000000001
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 7,
+      "firstUsefulAudioMs": 675.9558999999999,
+      "completionMs": 692.0536,
+      "firstPcmMs": 531.2903
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 530.9234,
+      "completionMs": 546.6767,
+      "firstPcmMs": 193.88629999999998
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 7,
+      "firstUsefulAudioMs": 191.4013,
+      "completionMs": 543.1961,
+      "firstPcmMs": 191.3935
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 193.168,
+      "completionMs": 544.5321,
+      "firstPcmMs": 193.1645
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 8,
+      "firstUsefulAudioMs": 532.0535000000001,
+      "completionMs": 548.3765000000001,
+      "firstPcmMs": 193.23669999999998
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 8,
+      "firstUsefulAudioMs": 671.3293,
+      "completionMs": 686.9594,
+      "firstPcmMs": 528.6514000000001
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 9,
+      "firstUsefulAudioMs": 669.0598,
+      "completionMs": 685.1887,
+      "firstPcmMs": 524.3719
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 531.177,
+      "completionMs": 547.6213,
+      "firstPcmMs": 192.3206
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 9,
+      "firstUsefulAudioMs": 192.2508,
+      "completionMs": 547.4688,
+      "firstPcmMs": 192.2466
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 194.3407,
+      "completionMs": 546.9827,
+      "firstPcmMs": 194.3363
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 10,
+      "firstUsefulAudioMs": 524.2988,
+      "completionMs": 540.0996,
+      "firstPcmMs": 189.4246
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 10,
+      "firstUsefulAudioMs": 670.7053000000001,
+      "completionMs": 686.9285000000001,
+      "firstPcmMs": 527.519
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 11,
+      "firstUsefulAudioMs": 673.3484000000001,
+      "completionMs": 689.1464000000001,
+      "firstPcmMs": 528.2917
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 528.4753999999999,
+      "completionMs": 544.6789,
+      "firstPcmMs": 193.505
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 11,
+      "firstUsefulAudioMs": 192.7413,
+      "completionMs": 546.7002,
+      "firstPcmMs": 192.7362
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 192.58010000000002,
+      "completionMs": 546.3746,
+      "firstPcmMs": 192.5765
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 12,
+      "firstUsefulAudioMs": 533.1441,
+      "completionMs": 549.3956000000001,
+      "firstPcmMs": 193.5634
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 12,
+      "firstUsefulAudioMs": 674.1805999999999,
+      "completionMs": 690.3973,
+      "firstPcmMs": 529.0627999999999
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 13,
+      "firstUsefulAudioMs": 677.5257,
+      "completionMs": 693.8078,
+      "firstPcmMs": 532.0632999999999
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 530.2229,
+      "completionMs": 546.4748000000001,
+      "firstPcmMs": 191.5122
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 13,
+      "firstUsefulAudioMs": 193.34390000000002,
+      "completionMs": 543.2126000000001,
+      "firstPcmMs": 193.3399
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 188.4478,
+      "completionMs": 537.0377,
+      "firstPcmMs": 188.4457
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 14,
+      "firstUsefulAudioMs": 521.0694,
+      "completionMs": 536.777,
+      "firstPcmMs": 189.4563
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 14,
+      "firstUsefulAudioMs": 670.4528,
+      "completionMs": 686.6075000000001,
+      "firstPcmMs": 528.4767
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 15,
+      "firstUsefulAudioMs": 668.9572999999999,
+      "completionMs": 685.0649,
+      "firstPcmMs": 526.2429
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 523.725,
+      "completionMs": 539.7603,
+      "firstPcmMs": 190.28209999999999
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 15,
+      "firstUsefulAudioMs": 190.3699,
+      "completionMs": 544.8295,
+      "firstPcmMs": 190.3672
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 192.3855,
+      "completionMs": 547.3054,
+      "firstPcmMs": 192.3817
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 16,
+      "firstUsefulAudioMs": 530.4191999999999,
+      "completionMs": 546.502,
+      "firstPcmMs": 192.1
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 16,
+      "firstUsefulAudioMs": 675.8718,
+      "completionMs": 692.0702,
+      "firstPcmMs": 530.7647000000001
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 17,
+      "firstUsefulAudioMs": 679.5847,
+      "completionMs": 695.6416,
+      "firstPcmMs": 533.095
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 533.8492,
+      "completionMs": 550.1316,
+      "firstPcmMs": 193.2072
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 17,
+      "firstUsefulAudioMs": 192.8554,
+      "completionMs": 547.5283,
+      "firstPcmMs": 192.85080000000002
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 191.34070000000003,
+      "completionMs": 539.3506,
+      "firstPcmMs": 191.3369
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 18,
+      "firstUsefulAudioMs": 531.6801,
+      "completionMs": 547.7445,
+      "firstPcmMs": 193.7382
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 18,
+      "firstUsefulAudioMs": 676.7506000000001,
+      "completionMs": 692.2453,
+      "firstPcmMs": 532.3965999999999
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "buffered",
+      "repetition": 19,
+      "firstUsefulAudioMs": 671.9471,
+      "completionMs": 687.9923,
+      "firstPcmMs": 526.1903
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-buffered-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 529.4828,
+      "completionMs": 545.3947,
+      "firstPcmMs": 192.2716
+    },
+    {
+      "scenario": "long-reply",
+      "mode": "overlap-streaming-transport",
+      "repetition": 19,
+      "firstUsefulAudioMs": 192.2882,
+      "completionMs": 548.0047999999999,
+      "firstPcmMs": 192.2852
+    }
+  ]
+}

@@ -1,0 +1,1486 @@
+[
+  {
+    "runId": "b6e74428-ffeb-463f-b213-94addfc5fc1b",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 9.3244,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 2.1191,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1648,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3673.3213,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0482,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "c50101a3-9948-492a-87dd-633f8088e42b",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0721,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.044,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1933,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3905.3966,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0602,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "9dc14315-7a43-416e-8709-6b6cae7b136c",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0695,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9259,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1407,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3632.0878,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0593,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "f08626bc-6042-4780-86db-246f6b7fa815",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0786,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9225,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.2126,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3723.5321,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0476,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "7ccc5f0c-929f-4fbf-9ebc-6b4261a3ec47",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0536,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8786,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1424,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3887.7391,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0633,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "916b5a43-a177-47e7-821b-9f62c8941f62",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0833,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9341,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1785,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3739.6619,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0464,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "436ffdbb-1dd3-4586-998d-8b139dedc646",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0583,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8685,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1313,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3726.4197,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1181,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "e497d1f8-2d14-4ad3-a192-ecb668f661da",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0648,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.0344,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1561,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3745.0326,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0691,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "34338fc4-c1f1-4803-852a-6d47100157bc",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0579,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.4152,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1349,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3765.1867,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0471,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "16ea42e2-daac-4db2-974d-fa12b04c4e80",
+    "scenario": "short-knowledge",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.061,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9259,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1317,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "succeeded",
+        "durationMilliseconds": 3788.5114,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.9511,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "b2b99ce4-0389-4925-8216-f4da7c3c9506",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0694,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8617,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1372,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3636.3605,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.1012,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.087,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "381f1d4d-ace6-4c9d-87c4-d5970070125f",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0533,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.7804,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1378,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3636.2268,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.1177,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.061,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "81b0f94d-d6b8-47f0-94d2-063c867a3b11",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0666,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8323,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1311,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3557.1304,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.1318,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0605,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "a2ab4cc3-6cfe-439d-9633-a925389faf43",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0664,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8561,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1864,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3550.5325,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.0902,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0383,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "5a07b0ef-f2a1-45a3-ac18-6b6b337f614b",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0953,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8796,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1565,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3929.1778,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.1003,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0414,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "2a905a0c-0396-4d11-a3ce-811811d10029",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0805,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9576,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1881,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3564.7267,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.0834,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1294,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "110ad1c9-6f78-46bc-ae3e-9f6418a84159",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0549,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8697,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1537,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3655.869,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.0906,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0438,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "fe161dd4-2245-49f1-ae47-6e1689aacb14",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1155,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.3609,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.2155,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3799.3792,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.202,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1328,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "ad50c636-0ddf-4144-89c0-36e71318d69a",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.111,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.3031,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1942,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 3532.3372,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.0741,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0615,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "d49c1557-6e66-4405-942b-e36c668f0640",
+    "scenario": "long-reply",
+    "outcome": "unavailable",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0773,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.3546,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.2065,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 2246.8662,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 55.6162,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "interrupted-or-failed",
+        "durationMilliseconds": 4936.8747,
+        "failureCategory": null
+      },
+      {
+        "kind": "Error",
+        "name": "Language model failure",
+        "status": "failed",
+        "durationMilliseconds": 0.0668,
+        "failureCategory": "InvalidOperationException"
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0396,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "850ef41f-9f4e-41c4-bbb8-4e4a6d5307a4",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0782,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9338,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1674,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4075.1073,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 37.4065,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 10087.884,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1328,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "a0149aee-8651-49f1-a033-2c1285c05657",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1565,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.5137,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.2203,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4099.7746,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 24.0814,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 13929.5876,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0562,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "745b494b-0a24-41ee-b98e-122d9ab988f0",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0615,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 1.0324,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1473,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4093.5338,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 25.5258,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 13932.4714,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0388,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "5a2ce44f-e516-4169-aac0-06f59d277fb8",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0607,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.7867,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1407,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4099.8166,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 22.5574,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 13941.3008,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0455,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "e1151dcc-6a3c-45a4-807d-025431959c68",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0759,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8832,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1506,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4086.4758,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 29.5898,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 13960.2091,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.048,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "5d20bb22-d56d-4c0b-8b7e-0b28babb7fc5",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0944,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9926,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1382,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4081.1053,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 36.0522,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 14972.7335,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0589,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "5317318c-524b-403f-8cd2-4dee2dfdaada",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0789,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.9902,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1809,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4126.0498,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 27.4145,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 14922.299,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0731,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "5dc7ab6b-2f0d-4338-b4d3-242e647d83f7",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0659,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.949,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.134,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4174.345,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 23.1553,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 14820.1311,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0421,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "4ca41a4e-69e9-4c06-9ba1-0374ad420da2",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0552,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.8392,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1738,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4083.7893,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 30.7774,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 16955.185,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0425,
+        "failureCategory": null
+      }
+    ]
+  },
+  {
+    "runId": "666564ad-6716-4d4a-bd00-8df91d9b259b",
+    "scenario": "tool-readonly",
+    "outcome": "succeeded",
+    "steps": [
+      {
+        "kind": "Input",
+        "name": "Text input",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0654,
+        "failureCategory": null
+      },
+      {
+        "kind": "IntentClassification",
+        "name": "Intent classification",
+        "status": "unmatched",
+        "durationMilliseconds": 0.84,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolSelection",
+        "name": "Tool selection",
+        "status": "succeeded",
+        "durationMilliseconds": 0.1594,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 1",
+        "status": "tool-call",
+        "durationMilliseconds": 4072.7242,
+        "failureCategory": null
+      },
+      {
+        "kind": "ToolCall",
+        "name": "ha_search",
+        "status": "succeeded",
+        "durationMilliseconds": 49.7454,
+        "failureCategory": null
+      },
+      {
+        "kind": "LanguageModel",
+        "name": "LLM Round 2",
+        "status": "succeeded",
+        "durationMilliseconds": 15950.1343,
+        "failureCategory": null
+      },
+      {
+        "kind": "ResponseFormatting",
+        "name": "Response formatting",
+        "status": "succeeded",
+        "durationMilliseconds": 0.0599,
+        "failureCategory": null
+      }
+    ]
+  }
+]
