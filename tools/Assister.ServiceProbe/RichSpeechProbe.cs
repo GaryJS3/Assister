@@ -41,7 +41,8 @@ static class RichSpeechProbe
             Guid? RunId = null; string Outcome = "missing-terminal"; bool StreamCompleted = false;
             using var Socket = new ClientWebSocket();
             Socket.Options.SetRequestHeader("Authorization", "Bearer " + Credential);
-            var StreamUrl = new UriBuilder(new Uri(Http.BaseAddress, $"api/client/interactions/{Item.Id}/stream")) { Scheme = Http.BaseAddress.Scheme == "https" ? "wss" : "ws" };
+            // Keep the server side open until this observer has drained audio downloads and the terminal event.
+            var StreamUrl = new UriBuilder(new Uri(Http.BaseAddress, $"api/client/interactions/{Item.Id}/stream?followPlayback=true")) { Scheme = Http.BaseAddress.Scheme == "https" ? "wss" : "ws" };
             await Socket.ConnectAsync(StreamUrl.Uri, Deadline.Token);
             while (Socket.State == WebSocketState.Open)
             {

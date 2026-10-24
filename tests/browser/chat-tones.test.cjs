@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function client() {
+function client(cryptoOverride) {
   const elements = new Map(), played = [];
   class Audio {
     constructor(url) { this.src = url; this.ended = false; }
@@ -16,10 +16,10 @@ function client() {
   const document = { getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
     createElement(type) { return type === 'audio' ? new Audio() : element(); } };
   const context = vm.createContext({ document, Audio, setTimeout, clearTimeout, clearInterval,
-    window: { addEventListener() {} }, crypto: { randomUUID: () => 'playback-id' },
+    window: { addEventListener() {} }, crypto: cryptoOverride || { randomUUID: () => 'playback-id' },
     fetch: async () => ({ ok: true, text: async () => '' }) });
   const source = fs.readFileSync(path.join(__dirname, '../../src/Assister/wwwroot/chat.js'), 'utf8');
-  vm.runInContext(source.replace('load().catch(error);', `globalThis.hooks = { apply, stopTones, setup() {
+  vm.runInContext(source.replace('load().catch(error);', `globalThis.hooks = { apply, stopTones, newId, setup() {
     active = 'request'; const v = { cursor: 0, row: { append() {} }, mediaStatus: {}, status: {} }; views.set(active, v); return v;
   }, enableStreaming() { speechContext = { state: 'running' }; window.AssisterSpeechPlayer = class {
     constructor(ctx, options) { this.options = options; this.segments = []; }
@@ -35,6 +35,13 @@ function client() {
   return { ...context.hooks, view, played, send, cue, elements };
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
+test('private HTTP origins generate valid version-four identifiers without randomUUID', () => {
+  let seed = 0;
+  const c = client({ getRandomValues(bytes) { for (let i = 0; i < bytes.length; i++) bytes[i] = (seed++ * 17) & 255; return bytes; } });
+  const first = c.newId(), second = c.newId();
+  assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(first, second);
+});
 
 test('live cues serialize before speech and Goodbye follows speech only once', async () => {
   const c = client();

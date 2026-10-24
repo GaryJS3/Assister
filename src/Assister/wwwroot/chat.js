@@ -1,6 +1,14 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
+  // randomUUID needs a secure context; getRandomValues also works on private HTTP origins.
+  function newId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
   let conversation, socket, reconnect, generation = 0, active, pendingSubmission;
   let attachments = [], uploads = 0, executing = false;
   let recording, pendingAudio, registrationTimer;
@@ -154,7 +162,7 @@
     if (event.type === 'tts.failed') { v.stream?.stop('failed'); v.goodbye = null; v.mediaStatus.textContent = data.message; }
     if (event.type === 'tts.segment' && !replaying && item.id === active && $('speak').checked && speechContext?.state === 'running') {
       if (!v.stream) {
-        const playbackId = crypto.randomUUID();
+        const playbackId = newId();
         v.stream = new window.AssisterSpeechPlayer(speechContext, {
           ready: toneQueue,
           report: state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error),
@@ -172,11 +180,11 @@
       let playbackId;
       const report = state => api(`/interactions/${item.id}/playback`, 'POST', { state, playbackId }).catch(error);
       v.mediaStatus.textContent = 'Audio ready';
-      audio.onplaying = () => { if (v.stream && !v.stream.ended) { v.goodbye = null; v.stream.stop(); } if (!playbackId) { playbackId = crypto.randomUUID(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
+      audio.onplaying = () => { if (v.stream && !v.stream.ended) { v.goodbye = null; v.stream.stop(); } if (!playbackId) { playbackId = newId(); report('started'); } v.mediaStatus.textContent = 'Speaking'; };
       audio.onended = () => { if (playbackId) report('completed'); playbackId = null; v.mediaStatus.textContent = 'Playback complete';
         if (v.goodbye) { const cue = v.goodbye; v.goodbye = null; playTone({ ...cue, expiresAt: new Date(Date.now() + 5000).toISOString() }, item.id); } };
       audio.onpause = () => { if (!audio.ended && playbackId) { v.goodbye = null; report('stopped'); playbackId = null; v.mediaStatus.textContent = 'Playback stopped'; } };
-      audio.onerror = () => { playbackId ||= crypto.randomUUID(); report('failed'); playbackId = null; v.mediaStatus.textContent = 'Playback failed; text remains available'; };
+      audio.onerror = () => { playbackId ||= newId(); report('failed'); playbackId = null; v.mediaStatus.textContent = 'Playback failed; text remains available'; };
       if (!replaying && !v.stream && item.id === active && $('speak').checked) {
         const epoch = toneEpoch;
         toneQueue.then(() => { if (epoch === toneEpoch && item.id === active && $('speak').checked) return audio.play(); })
@@ -279,8 +287,8 @@
         streamSpeech = speechContext.state === 'running';
       } catch {}
     }
-    pendingSubmission = pendingSubmission?.message === message ? pendingSubmission : { message, idempotencyKey: crypto.randomUUID(), attachmentIds: attachments.map(a => a.id), audioAttachmentId: pendingAudio, speak: $('speak').checked, streamSpeech };
     try {
+      pendingSubmission = pendingSubmission?.message === message ? pendingSubmission : { message, idempotencyKey: newId(), attachmentIds: attachments.map(a => a.id), audioAttachmentId: pendingAudio, speak: $('speak').checked, streamSpeech };
       const item = await api(`/conversations/${conversation}/interactions`, 'POST', pendingSubmission);
       pendingSubmission = null; pendingAudio = null; attachments = []; renderAttachments(); $('message').value = ''; $('activity').replaceChildren(); active = item.id;
       if (!views.has(item.id)) view(item);
