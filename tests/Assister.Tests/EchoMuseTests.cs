@@ -12,6 +12,26 @@ namespace Assister.Tests;
 public sealed class EchoMuseTests
 {
     [Fact]
+    public async Task SilentAcknowledgementTurnWaitsForCleanupBeforeReopening()
+    {
+        using var Audio = new VoiceAudioStore();
+        var Manager = new SatelliteManager();
+        var Device = new EchoMuseConnection("device", "logical", "Office", null,
+            (_, _) => Task.CompletedTask, Audio, Config, Manager);
+        using var Previous = Device.Start("no-speech", null, default)!;
+        var Session = Guid.NewGuid();
+        Assert.True(Manager.BeginSession("logical", Session));
+        Previous.Handle(Message(new { type = "audio_end", reason = "no_speech_timeout" }));
+        Assert.True(Previous.IsCancelled);
+        var Reopening = Device.StartAsync("next-listen", null, default);
+        Assert.False(Reopening.IsCompleted);
+        Manager.EndSession("logical", Session);
+        Device.Release(Previous);
+        using var Next = await Reopening.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.NotNull(Next);
+        Assert.Equal("next-listen", Next.SessionId);
+    }
+    [Fact]
     public async Task AcknowledgementListeningRequiresCapabilityAndMatchingRequest()
     {
         using var Audio = new VoiceAudioStore();

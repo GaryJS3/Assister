@@ -80,7 +80,11 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
     {
         Task? PreviousRelease;
-        lock (Gate) { PreviousRelease = Voice is { CanHandOff: true } Previous ? Previous.Released.Task : null; }
+        lock (Gate)
+        {
+            PreviousRelease = Voice is { } Previous && (Previous.CanHandOff || Previous.IsCancelled || Previous.PipelineFinished)
+                ? Previous.Released.Task : null;
+        }
         if (PreviousRelease is not null)
         {
             // The controller can send its next turn immediately after play_finished/turn_finished.
