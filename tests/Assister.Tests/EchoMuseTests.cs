@@ -11,6 +11,51 @@ namespace Assister.Tests;
 
 public sealed class EchoMuseTests
 {
+    [Fact]
+    public async Task ImmediateContinuationWaitsForAcknowledgedTurnCleanup()
+    {
+        using var Audio = new VoiceAudioStore(); var Manager = new SatelliteManager();
+        var Device = new EchoMuseConnection("device", "logical", "Kitchen", null, (_, _) => Task.CompletedTask, Audio, Config, Manager);
+        Manager.Register(Device);
+        using var First = Device.Start("first", "jarvis", CancellationToken.None)!;
+        var Session = Guid.NewGuid();
+        Assert.True(Manager.BeginSession("logical", Session));
+        // An active turn cannot be replaced, even by a purported follow-up.
+        Assert.Null(await Device.StartAsync("too-early", null, CancellationToken.None));
+        Assert.True(Device.Handle(Message(new { type = "play_finished", deviceId = "device", sessionId = "first" })));
+        Assert.True(Device.Handle(Message(new { type = "turn_finished", deviceId = "device", sessionId = "first" })));
+        Assert.Null(Device.Start("old-admission-path", null, CancellationToken.None));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var FollowUp = Device.StartAsync("follow-up", null, Deadline.Token);
+        Assert.False(FollowUp.IsCompleted);
+        Assert.True(Manager.IsBusy("logical"));
+        // Reproduce slow post-playback persistence: the controller is finished before the pipeline is.
+        Manager.EndSession("logical", Session);
+        Device.Release(First);
+        using var Next = await FollowUp;
+        Assert.NotNull(Next);
+        Assert.Equal("follow-up", Next.SessionId);
+        Assert.Null(Next.Activation.WakeWord);
+        Assert.True(Manager.BeginSession("logical", Guid.NewGuid()));
+        Assert.False(Device.Handle(Message(new { type = "turn_cancel", deviceId = "device", sessionId = "first" })));
+        Assert.False(Next.IsCancelled);
+        Device.Release(Next);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedOrCancelledPlaybackDoesNotQualifyForContinuation(bool Cancel)
+    {
+        using var Audio = new VoiceAudioStore(); var Manager = new SatelliteManager();
+        var Device = new EchoMuseConnection("device", "logical", "Kitchen", null, (_, _) => Task.CompletedTask, Audio, Config, Manager);
+        using var First = Device.Start("first", null, CancellationToken.None)!;
+        Assert.True(Manager.BeginSession("logical", Guid.NewGuid()));
+        Assert.True(Device.Handle(Message(new { type = Cancel ? "turn_cancel" : "play_failed", deviceId = "device", sessionId = "first" })));
+        Assert.Null(await Device.StartAsync("follow-up", null, CancellationToken.None));
+        Device.Release(First);
+    }
+
     [Theory]
     [InlineData("processing", false)]
     [InlineData("synthesis", false)]

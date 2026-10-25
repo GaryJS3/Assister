@@ -111,6 +111,16 @@ public sealed class EchoMuseProviderTests
         }
         Assert.Equal(Tones ? 6 : 0, CueCount);
         Assert.Equal(2, Targets.Count); Assert.Equal(1, Logins); Assert.Equal(1, Connections);
+        // No idle wait: the real controller starts continuation immediately after its completion messages.
+        await Send(Socket, new { type = "turn_start", deviceId = "second", sessionId = "immediate-continuation",
+            audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
+        await Send(Socket, new { type = "audio", deviceId = "second", sessionId = "immediate-continuation", data = "AAA=" });
+        await Send(Socket, new { type = "audio_end", deviceId = "second", sessionId = "immediate-continuation", reason = "speech_end" });
+        var ContinuationReply = await NextResponse();
+        Assert.Equal("turn_response", ContinuationReply.GetProperty("type").GetString());
+        Assert.Equal("immediate-continuation", ContinuationReply.GetProperty("sessionId").GetString());
+        await Send(Socket, new { type = "play_finished", deviceId = "second", sessionId = "immediate-continuation" });
+        await Send(Socket, new { type = "turn_finished", deviceId = "second", sessionId = "immediate-continuation", outcome = "ok" });
         while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
         Assert.Equal(VoiceOwnership.OwnedByAssister, Manager.State("echomuse-first").VoiceOwnership);
         // Cancel through the public API during capture, then prove the next turn can play.

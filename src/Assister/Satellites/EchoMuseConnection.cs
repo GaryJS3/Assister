@@ -35,7 +35,29 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             return Voice = new(this, SessionId, WakeWord, Token);
         }
     }
-    public void Release(Turn Turn) { lock (Gate) { if (ReferenceEquals(Voice, Turn)) { Voice = null; } } }
+    public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token)
+    {
+        Task? PreviousRelease;
+        lock (Gate) { PreviousRelease = Voice is { CanHandOff: true } Previous ? Previous.Released.Task : null; }
+        if (PreviousRelease is not null)
+        {
+            // The controller can send its next turn immediately after play_finished/turn_finished.
+            // Let the acknowledged turn finish conversation persistence and release Manager's session.
+            // No further controller messages are needed by that turn, so the socket reader can wait here.
+            Manager.Record(SatelliteId, "Waiting for completed turn cleanup");
+            try { await PreviousRelease.WaitAsync(TimeSpan.FromSeconds(5), Token); }
+            catch (TimeoutException) { return null; }
+        }
+        return Start(SessionId, WakeWord, Token);
+    }
+    public void Release(Turn Turn)
+    {
+        lock (Gate)
+        {
+            if (ReferenceEquals(Voice, Turn)) { Voice = null; }
+            Turn.Released.TrySetResult();
+        }
+    }
     public bool Handle(JsonElement Message)
     {
         if (Text(Message, "deviceId") != DeviceId) { return false; }
@@ -172,6 +194,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         private readonly Channel<AudioChunk> Input = Channel.CreateBounded<AudioChunk>(64);
         private readonly TaskCompletionSource<string> End = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> Playback = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource Released { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal bool CanHandOff => ControllerEnded && !IsCancelled && Playback.Task.IsCompletedSuccessfully && Playback.Task.Result;
         private readonly CancellationTokenSource Lifetime;
         private long Bytes;
         private string Response = "";

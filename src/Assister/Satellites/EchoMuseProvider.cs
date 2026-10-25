@@ -127,7 +127,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 if (Full) { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 var WakeWord = EchoMuseConnection.Text(Message, "wakeWord");
                 WakeWord = WakeWord is null ? null : new Diagnostics.DiagnosticSanitizer(Configuration).Text(WakeWord, 128);
-                var Turn = Device.Start(Session, WakeWord, Lifetime.Token);
+                var Turn = await Device.StartAsync(Session, WakeWord, Lifetime.Token);
                 if (Turn is null)
                 { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 Manager.Update(Device.SatelliteId, State => State with { WakeWord = WakeWord ?? State.WakeWord });
