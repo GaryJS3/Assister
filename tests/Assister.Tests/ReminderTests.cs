@@ -8,6 +8,31 @@ namespace Assister.Tests;
 public sealed class ReminderTests
 {
     [Fact]
+    public async Task BroadcastRetriesOfflineDestinationWithoutRepeatingSuccessfulPlayback()
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('broadcast','Stretch','all','America/New_York',20,0,NULL,0,'active')", default);
+        foreach (var Id in new[] { "kitchen", "office" })
+            await Store.ExecuteAsync("INSERT INTO Satellites VALUES($p0,$p0,NULL,'test','',1,'','', '')", default, Id);
+        var Manager = new Assister.Satellites.SatelliteManager();
+        var Kitchen = new Satellite();
+        Manager.Register(Kitchen);
+        Manager.Update("kitchen", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Equal(1, Kitchen.Deliveries);
+        Assert.Equal("0", Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]);
+        var Office = new Satellite("office");
+        Manager.Register(Office);
+        Manager.Update("office", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Equal(1, Kitchen.Deliveries);
+        Assert.Equal(1, Office.Deliveries);
+        Assert.NotEqual("0", Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]);
+    }
+    [Fact]
     public async Task OfflineReminderSurvivesRestartThenDeliversAndAdvancesOnce()
     {
         var PathName = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".db");
@@ -46,9 +71,9 @@ public sealed class ReminderTests
         }
     }
 
-    private sealed class Satellite : Assister.Satellites.ISatelliteConnection
+    private sealed class Satellite(string Id = "kitchen") : Assister.Satellites.ISatelliteConnection
     {
-        public string SatelliteId => "kitchen";
+        public string SatelliteId => Id;
         public string Name => "Kitchen";
         public string? Area => null;
         public int Deliveries { get; private set; }

@@ -10,7 +10,7 @@
 <label for="message">Remind me to<textarea id="message" required maxlength="500" rows="3" placeholder="Take my vitamin"></textarea></label>
 <div class="schedule-fields"><label for="weekday">Repeat<select id="weekday"><option value="">Every day</option><option value="0">Every Sunday</option><option value="1">Every Monday</option><option value="2">Every Tuesday</option><option value="3">Every Wednesday</option><option value="4">Every Thursday</option><option value="5">Every Friday</option><option value="6">Every Saturday</option></select></label><label for="time">At<input id="time" type="time" value="20:00" required></label></div>
 <label for="zone">Time zone<input id="zone" required maxlength="100" placeholder="America/New_York"></label>
-<label for="satellite">Announce on satellite<input id="satellite" list="satellite-options" required maxlength="128" placeholder="Satellite ID"><datalist id="satellite-options"></datalist></label>
+<label for="satellite">Announce on<select id="satellite" required><option value="all">All satellites</option></select></label>
 <p class="hint">Announcements wait while the satellite is busy or offline. Times follow the selected time zone.</p>
 <div class="form-actions"><button id="save" type="submit">Add reminder</button><button id="cancel" type="button" hidden>Cancel edit</button></div>
 </form></section></div>

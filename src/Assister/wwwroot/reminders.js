@@ -31,6 +31,11 @@
     $('time').value = String(item.hour).padStart(2, '0') + ':' + String(item.minute).padStart(2, '0');
     $('zone').value = item.timeZone;
     $('satellite').value = item.satelliteId;
+    if (!$('satellite').value) {
+      const option = new Option(item.satelliteId, item.satelliteId);
+      $('satellite').append(option);
+      $('satellite').value = item.satelliteId;
+    }
     $('editor-title').textContent = 'Edit reminder';
     $('save').textContent = 'Save changes';
     $('cancel').hidden = false;
@@ -57,7 +62,7 @@
       try { next = new Intl.DateTimeFormat(undefined, { timeZone: item.timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(item.nextDueAt)); }
       catch { next = new Date(item.nextDueAt).toISOString(); }
       content.append(text('p', 'Next: ' + next + ' · ' + item.timeZone));
-      content.append(text('p', 'Announcement → ' + item.satelliteId));
+      content.append(text('p', 'Announcement → ' + (item.satelliteId === 'all' ? 'All satellites' : item.satelliteId)));
       const actions = document.createElement('div');
       actions.className = 'reminder-actions';
       const editButton = text('button', 'Edit');
@@ -131,8 +136,8 @@
       for (const entry of satellites) {
         const option = document.createElement('option');
         option.value = entry.device.id;
-        option.label = entry.device.name;
-        $('satellite-options').append(option);
+        option.textContent = entry.device.name;
+        if (![...$('satellite').options].some(existing => existing.value === option.value)) $('satellite').append(option);
       }
     } catch { /* Manual satellite IDs remain available. */ }
   }

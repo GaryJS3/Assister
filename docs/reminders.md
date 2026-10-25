@@ -166,3 +166,9 @@ sha256:6a89d758a8136e0661b7986c0c8dfafd7b2e05c9373be655000f65a1d443e107.
 The image revision label matched the full runtime revision above. Health was Healthy,
 with zero restarts, unchanged environment, and preserved assister_assister-data volume.
 ESPHome bridge and EchoMuse container IDs were unchanged.
+
+## All-satellite reminder delivery
+
+The reminder editor's **Announce on** selector starts with **All satellites**, followed by individual satellite names. Edit an existing reminder, choose its destination, and save; changing only its destination preserves the next scheduled time. The API represents all satellites as `satelliteId: "all"`. AI reminder create/edit tools accept `all_satellites: true`; omitting it on edit preserves the existing destination.
+
+Each broadcast occurrence snapshots enabled registered satellites. Busy or offline destinations wait for retry, while successful destinations are recorded in SQLite and are not repeated on subsequent ticks or after a restart. The recurrence advances after every recipient completes. Delivery remains at least once if the process stops between playback completion and recording that completion.

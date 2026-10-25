@@ -11,6 +11,29 @@ namespace Assister.Tests;
 public sealed class ReminderToolTests
 {
     [Fact]
+    public async Task DestinationEditPreservesScheduleAndBroadcastRemainsVisibleFromOtherSatellites()
+    {
+        await using var Database = new AssisterDbContext(new DbContextOptionsBuilder<AssisterDbContext>().UseSqlite("Data Source=:memory:").Options);
+        await Database.Database.OpenConnectionAsync();
+        await Database.Database.MigrateAsync();
+        var Store = new LocalStore(Database);
+        var Config = new ConfigurationBuilder().Build();
+        var Id = Guid.NewGuid().ToString();
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES($p0,'Stretch','desk','America/New_York',20,0,NULL,12345,'active')", default, Id);
+        var Edit = new ReminderTool("reminder_edit", Store, Config);
+        var Result = await Edit.ExecuteAsync(JsonSerializer.SerializeToElement(new { id = Id, all_satellites = true }),
+            new(new("Change my reminder to all satellites", "desk"), []), default);
+        Assert.Contains("updated", Result);
+        var Row = Assert.Single(await Store.QueryAsync("SELECT SatelliteId,NextDueAt FROM Reminders", default));
+        Assert.Equal("all", Row[0]);
+        Assert.Equal("12345", Row[1]);
+        var Get = new ReminderTool("reminder_get", Store, Config);
+        Assert.Contains(Id, await Get.ExecuteAsync(JsonSerializer.SerializeToElement(new { }), new(new("list reminders", "kitchen"), []), default));
+        await Edit.ExecuteAsync(JsonSerializer.SerializeToElement(new { id = Id, message = "Stretch again" }), new(new("Edit reminder message", "kitchen"), []), default);
+        Assert.Equal("all", Assert.Single(await Store.QueryAsync("SELECT SatelliteId FROM Reminders", default))[0]);
+    }
+
+    [Fact]
     public async Task ModelCannotClaimReminderCancellationWithoutExecutingTool()
     {
         var Config = new ConfigurationBuilder().Build();

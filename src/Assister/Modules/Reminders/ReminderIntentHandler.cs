@@ -37,7 +37,7 @@ public sealed partial class ReminderIntentHandler(LocalStore Store, IConfigurati
         if (!Recognizes(Text)) { return null; }
         if (!Text.StartsWith("remind me", StringComparison.OrdinalIgnoreCase))
         {
-            var Rows = await Store.QueryAsync("SELECT Id,Message,NextDueAt FROM Reminders WHERE SatelliteId=$p0 AND Status='active' ORDER BY NextDueAt LIMIT 100", Token, Request.SatelliteId);
+            var Rows = await Store.QueryAsync("SELECT Id,Message,NextDueAt FROM Reminders WHERE (SatelliteId=$p0 OR SatelliteId='all') AND Status='active' ORDER BY NextDueAt LIMIT 100", Token, Request.SatelliteId);
             var Cancel = Regex.Match(Text, @"^cancel (?:my )?reminder (?<name>.+?)[.!]?$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
             if (Cancel.Success)
             {
@@ -71,7 +71,7 @@ public sealed partial class ReminderIntentHandler(LocalStore Store, IConfigurati
         var Zone = TimeZoneInfo.FindSystemTimeZoneById(Configuration["Assister:TimeZone"] ?? "America/New_York");
         var Message = Match.Groups["message"].Value.Trim();
         if (Message.Length > 500) { return "Please keep the reminder message under 500 characters."; }
-        var Count = await Store.QueryAsync("SELECT Id FROM Reminders WHERE SatelliteId=$p0 AND Status='active' LIMIT 100", Token, Request.SatelliteId);
+        var Count = await Store.QueryAsync("SELECT Id FROM Reminders WHERE (SatelliteId=$p0 OR SatelliteId='all') AND Status='active' LIMIT 100", Token, Request.SatelliteId);
         if (Count.Count >= 100) { return "This satellite already has 100 reminders. Cancel one first."; }
         var Next = new ReminderSchedule(Hour, Minute, Weekday).Next(DateTimeOffset.UtcNow, Zone);
         await Store.ExecuteAsync("INSERT INTO Reminders(Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt) VALUES($p0,$p1,$p2,$p3,$p4,$p5,$p6,$p7)", Token,

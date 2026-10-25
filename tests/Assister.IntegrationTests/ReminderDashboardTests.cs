@@ -27,7 +27,7 @@ public sealed class ReminderDashboardTests
             var List = await Http.GetFromJsonAsync<JsonElement>("/api/reminders");
             var Row = Assert.Single(List.GetProperty("items").EnumerateArray());
             Assert.Equal("Take vitamin", Row.GetProperty("message").GetString());
-            var Changed = Input with { Message = "Take out trash", Hour = 18, Weekday = 0 };
+            var Changed = Input with { Message = "Take out trash", Hour = 18, Weekday = 0, SatelliteId = "all" };
             Assert.Equal(HttpStatusCode.NoContent, (await Http.PutAsJsonAsync("/api/reminders/" + Id, Changed)).StatusCode);
         }
         await using (var Factory = new Application(PathName))
@@ -36,6 +36,7 @@ public sealed class ReminderDashboardTests
             var List = await Http.GetFromJsonAsync<JsonElement>("/api/reminders");
             var Row = Assert.Single(List.GetProperty("items").EnumerateArray());
             Assert.Equal("Take out trash", Row.GetProperty("message").GetString());
+            Assert.Equal("all", Row.GetProperty("satelliteId").GetString());
             Assert.Equal(18, Row.GetProperty("hour").GetInt32());
             Assert.Equal(0, Row.GetProperty("weekday").GetInt32());
             Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync("/api/reminders/" + Id)).StatusCode);
