@@ -156,7 +156,8 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
             {
                 await using var Scope = Scopes.CreateAsyncScope();
                 var Result = await Scope.ServiceProvider.GetRequiredService<VoicePipeline>().RunAsync(Turn, null, Turn.Token);
-                if (Result.Outcome is "acknowledged" or "ignored")
+                if (Result.Outcome is "acknowledged" or "ignored"
+                    || Result.Outcome == "no-speech" && Turn.AcknowledgementRequestId is not null && !Turn.NoReply && !Turn.ControllerEnded)
                 {
                     if (Turn.AcknowledgementRequestId is not null)
                         await Turn.CompleteAcknowledgementAsync(Result.Outcome == "acknowledged", Turn.Token);

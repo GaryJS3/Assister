@@ -177,10 +177,11 @@ public sealed class EchoMuseProviderTests
         await Send(Socket, new { type = "acknowledgement_listen_result", deviceId = "first", requestId = ListenId, status = "started" });
         using var AlertResult = await Alert;
         Assert.True(AlertResult.IsSuccessStatusCode);
-        foreach (var Acknowledged in new[] { false, true })
+        foreach (var Transcript in new[] { "turn the light off", "", "I heard it" })
         {
-            Factory.Transcript = Acknowledged ? "I heard it" : "turn the light off";
-            var Session = Acknowledged ? "ack-accepted" : "ack-ignored";
+            var Acknowledged = Transcript == "I heard it";
+            Factory.Transcript = Transcript;
+            var Session = Acknowledged ? "ack-accepted" : Transcript.Length == 0 ? "ack-empty-transcript" : "ack-ignored";
             await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = Session, acknowledgementRequestId = ListenId,
                 audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
             await Send(Socket, new { type = "audio", deviceId = "first", sessionId = Session, data = "AAA=" });
