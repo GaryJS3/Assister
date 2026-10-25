@@ -1,0 +1,2197 @@
+{
+  "scope": "STT-only retained-audio replay; no routing, controls or playback. No raw audio or transcript text committed. Original transcripts are agreement references, not human ground truth.",
+  "combinedFinal": [
+    {
+      "mode": "wyoming-large",
+      "count": 22,
+      "medianMs": 999.4107999999997,
+      "p95Ms": 1107.8723,
+      "exactReferenceMatches": 22
+    },
+    {
+      "mode": "wyoming-large-overlap",
+      "count": 22,
+      "medianMs": 858.3801999999996,
+      "p95Ms": 1101.6395000000002,
+      "exactReferenceMatches": 22
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "initial-comparison",
+      "measuredAt": "2026-10-24T20:47:08.9906492-04:00",
+      "samplesPerClipMode": 3,
+      "paced": false,
+      "quietMilliseconds": null,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 24,
+          "postCaptureMedianMs": 985.7639,
+          "postCaptureP95Ms": 1031.4692,
+          "exactReferenceMatches": 24,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "Systran/faster-whisper-small",
+          "count": 24,
+          "postCaptureMedianMs": 505.63259999999997,
+          "postCaptureP95Ms": 580.2373,
+          "exactReferenceMatches": 15,
+          "meanReferenceWordErrorRate": 0.21875
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 994.3673,
+          "totalMs": 1002.6123,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 587.2063,
+          "totalMs": 587.2916,
+          "referenceWordErrorRate": 0.5
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 518.0752000000001,
+          "totalMs": 518.1678,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1011.8876,
+          "totalMs": 1020.2573,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1031.9568,
+          "totalMs": 1038.3584,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 546.2898,
+          "totalMs": 546.4036,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 513.1456000000001,
+          "totalMs": 514.0969,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 976.2743,
+          "totalMs": 983.1008,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 984.5973,
+          "totalMs": 992.295,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 502.0537,
+          "totalMs": 502.1077,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 411.3887,
+          "totalMs": 411.4372,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 997.9789,
+          "totalMs": 1006.3722,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 979.6476,
+          "totalMs": 987.1998,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 507.01779999999997,
+          "totalMs": 507.0999,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 504.0673,
+          "totalMs": 505.7216,
+          "referenceWordErrorRate": 1
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 914.1311999999999,
+          "totalMs": 920.5299,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 536.0758999999999,
+          "totalMs": 536.2042,
+          "referenceWordErrorRate": 0.5
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 946.2109,
+          "totalMs": 955.2188,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 991.8591,
+          "totalMs": 999.5819,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 540.206,
+          "totalMs": 540.3561,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 580.2373,
+          "totalMs": 580.3417,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1026.3306,
+          "totalMs": 1035.1533,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 995.8541,
+          "totalMs": 1003.6521,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 540.2805,
+          "totalMs": 541.0654,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 504.74010000000004,
+          "totalMs": 504.787,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 993.4647,
+          "totalMs": 1001.7569,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 976.4902000000001,
+          "totalMs": 983.6313,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 389.7901,
+          "totalMs": 389.836,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 450.6247,
+          "totalMs": 450.6696,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 977.3247,
+          "totalMs": 984.0651,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 921.5976,
+          "totalMs": 925.6041,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 461.44719999999995,
+          "totalMs": 462.7973,
+          "referenceWordErrorRate": 1
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 4320,
+          "postCaptureMs": 958.7412999999999,
+          "totalMs": 965.8781,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 4320,
+          "postCaptureMs": 505.63259999999997,
+          "totalMs": 505.7927,
+          "referenceWordErrorRate": 0.5
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 470.4644,
+          "totalMs": 470.5632,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 990.1827999999999,
+          "totalMs": 998.387,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 4240,
+          "postCaptureMs": 1031.4692,
+          "totalMs": 1039.4472,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 4240,
+          "postCaptureMs": 566.4695999999999,
+          "totalMs": 566.6159,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 460.1321,
+          "totalMs": 461.1211,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 985.7639,
+          "totalMs": 993.6684,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3360,
+          "postCaptureMs": 988.2396,
+          "totalMs": 994.2293,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 3360,
+          "postCaptureMs": 512.627,
+          "totalMs": 512.6829,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 3600,
+          "postCaptureMs": 438.0098,
+          "totalMs": 438.0515,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3600,
+          "postCaptureMs": 986.0639,
+          "totalMs": 992.8286,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3280,
+          "postCaptureMs": 981.6443999999999,
+          "totalMs": 986.0769,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 3280,
+          "postCaptureMs": 522.3836,
+          "totalMs": 522.4735,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "Systran/faster-whisper-small",
+          "sample": 2,
+          "audioMs": 2640,
+          "postCaptureMs": 474.8614,
+          "totalMs": 475.8381,
+          "referenceWordErrorRate": 1
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 2640,
+          "postCaptureMs": 934.4546,
+          "totalMs": 940.6575,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "small-novad-comparison",
+      "measuredAt": "2026-10-24T20:50:06.4287148-04:00",
+      "samplesPerClipMode": 1,
+      "paced": false,
+      "quietMilliseconds": null,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 8,
+          "postCaptureMedianMs": 991.4773,
+          "postCaptureP95Ms": 1470.3927999999999,
+          "exactReferenceMatches": 8,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "count": 8,
+          "postCaptureMedianMs": 478.2821,
+          "postCaptureP95Ms": 563.1853,
+          "exactReferenceMatches": 6,
+          "meanReferenceWordErrorRate": 0.09375
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 956.6199,
+          "totalMs": 964.0894,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 475.4005,
+          "totalMs": 475.5036,
+          "referenceWordErrorRate": 0.5
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 480.1696,
+          "totalMs": 480.2533,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 991.4773,
+          "totalMs": 1009.2807,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1037.6714,
+          "totalMs": 1044.631,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 478.2821,
+          "totalMs": 478.4339,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 486.0163,
+          "totalMs": 486.8595,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1123.7117999999998,
+          "totalMs": 1132.0761,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 1470.3927999999999,
+          "totalMs": 1477.2955,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 563.1853,
+          "totalMs": 563.2454,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 439.4404,
+          "totalMs": 439.5171,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 998.7158000000001,
+          "totalMs": 1006.0655,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 972.2131,
+          "totalMs": 978.8615,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 482.2079,
+          "totalMs": 482.3128,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "Systran/faster-whisper-small/vad-off",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 476.9769,
+          "totalMs": 477.9633,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 922.8092999999999,
+          "totalMs": 927.6699,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "turbo-comparison",
+      "measuredAt": "2026-10-24T20:51:50.1548122-04:00",
+      "samplesPerClipMode": 3,
+      "paced": false,
+      "quietMilliseconds": null,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 24,
+          "postCaptureMedianMs": 990.3922,
+          "postCaptureP95Ms": 1028.6369,
+          "exactReferenceMatches": 24,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "count": 24,
+          "postCaptureMedianMs": 954.9258,
+          "postCaptureP95Ms": 1036.8482999999999,
+          "exactReferenceMatches": 21,
+          "meanReferenceWordErrorRate": 0.03125
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 943.1227,
+          "totalMs": 949.4536,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 936.7053,
+          "totalMs": 936.8003,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 995.5716,
+          "totalMs": 995.6668,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1008.7844,
+          "totalMs": 1017.285,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1024.7308,
+          "totalMs": 1031.3653,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1065.7923,
+          "totalMs": 1065.972,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 969.3159,
+          "totalMs": 970.1006,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1004.9480000000001,
+          "totalMs": 1013.3977,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 990.3922,
+          "totalMs": 995.8846,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 960.3434000000001,
+          "totalMs": 960.4166,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 928.9082000000001,
+          "totalMs": 928.9495,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 991.1408,
+          "totalMs": 997.9178,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 1001.3108,
+          "totalMs": 1006.5234,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 956.9895,
+          "totalMs": 957.0375,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 910.8738,
+          "totalMs": 911.9049,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 925.3391,
+          "totalMs": 930.0045,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 984.5989999999999,
+          "totalMs": 984.6723,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 931.7515,
+          "totalMs": 939.9791,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 992.9052,
+          "totalMs": 1000.1658,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 841.1225000000001,
+          "totalMs": 841.2541,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 886.4934,
+          "totalMs": 886.5887,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1043.9639,
+          "totalMs": 1050.49,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 991.6009,
+          "totalMs": 998.4829,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 976.551,
+          "totalMs": 977.5546,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 1036.8482999999999,
+          "totalMs": 1036.9015,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 1026.8442,
+          "totalMs": 1040.1133,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 986.047,
+          "totalMs": 996.9748,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 957.5576,
+          "totalMs": 957.6445,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 992.5531,
+          "totalMs": 992.61,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 982.9443,
+          "totalMs": 988.7634,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 922.7456,
+          "totalMs": 927.5821,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 925.982,
+          "totalMs": 927.7,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 4320,
+          "postCaptureMs": 926.1247000000001,
+          "totalMs": 934.0906,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 4320,
+          "postCaptureMs": 954.9258,
+          "totalMs": 955.0738,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 968.3472,
+          "totalMs": 968.4304,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 1010.5488,
+          "totalMs": 1018.3147,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 4240,
+          "postCaptureMs": 1028.6369,
+          "totalMs": 1035.7248,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 4240,
+          "postCaptureMs": 960.9542,
+          "totalMs": 961.0681,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 910.0726000000001,
+          "totalMs": 911.0774,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3840,
+          "postCaptureMs": 971.8198,
+          "totalMs": 978.6224,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3360,
+          "postCaptureMs": 982.2988,
+          "totalMs": 991.4745,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 3360,
+          "postCaptureMs": 872.6861,
+          "totalMs": 872.746,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 3600,
+          "postCaptureMs": 936.3678,
+          "totalMs": 936.4123,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3600,
+          "postCaptureMs": 1015.3363,
+          "totalMs": 1020.2647,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 3280,
+          "postCaptureMs": 988.0169999999999,
+          "totalMs": 993.5646,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 3280,
+          "postCaptureMs": 947.764,
+          "totalMs": 947.8131,
+          "referenceWordErrorRate": 0.25
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "deepdml/faster-whisper-large-v3-turbo-ct2/vad-off",
+          "sample": 2,
+          "audioMs": 2640,
+          "postCaptureMs": 911.0889999999999,
+          "totalMs": 912.1701,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 2,
+          "audioMs": 2640,
+          "postCaptureMs": 908.6385,
+          "totalMs": 912.9018,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "overlap-comparison",
+      "measuredAt": "2026-10-24T20:57:47.1906691-04:00",
+      "samplesPerClipMode": 2,
+      "paced": true,
+      "quietMilliseconds": 240,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 16,
+          "postCaptureMedianMs": 989.3697999999999,
+          "postCaptureP95Ms": 1066.2689,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "wyoming-large-overlap",
+          "count": 16,
+          "postCaptureMedianMs": 568.7383999999997,
+          "postCaptureP95Ms": 1298.0902999999998,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 936.7284,
+          "totalMs": 5655.0898,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 954.8382999999994,
+          "totalMs": 5681.7858,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 315.33979999999974,
+          "totalMs": 4505.174,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 999.6044999999995,
+          "totalMs": 5193.1251,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1066.2689,
+          "totalMs": 5682.7547,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1281.6481999999996,
+          "totalMs": 5918.6776,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 294.2514000000001,
+          "totalMs": 4496.9129,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 990.634,
+          "totalMs": 5171.4568,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 988.9016000000006,
+          "totalMs": 4661.5929,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 1009.7943,
+          "totalMs": 4656.0781,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 565.7181,
+          "totalMs": 4492.9456,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 995.4312,
+          "totalMs": 4917.5089,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 989.3697999999999,
+          "totalMs": 4568.8337,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 973.4344999999998,
+          "totalMs": 4565.9736,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 0.1529000000000451,
+          "totalMs": 2873.3771,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 959.0504999999998,
+          "totalMs": 3831.7941,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 953.5032000000001,
+          "totalMs": 5673.2952,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 938.9704000000002,
+          "totalMs": 5665.5707,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 993.9120999999996,
+          "totalMs": 5176.6505,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 295.6374999999998,
+          "totalMs": 4486.4776,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1298.0902999999998,
+          "totalMs": 5926.1073,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1034.8984,
+          "totalMs": 5657.7757,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 980.7993999999999,
+          "totalMs": 5166.6475,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 299.6955000000007,
+          "totalMs": 4493.8577,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 997.5247999999997,
+          "totalMs": 4664.5602,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 1026.7277000000004,
+          "totalMs": 4677.31,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 992.8460999999998,
+          "totalMs": 4912.5432,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 568.7383999999997,
+          "totalMs": 4503.4523,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 979.8486999999996,
+          "totalMs": 4567.4222,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 970.5196000000001,
+          "totalMs": 4545.4479,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 925.3303000000001,
+          "totalMs": 3800.7628,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 0.012200000000120781,
+          "totalMs": 2887.5121,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "overlap-400-comparison",
+      "measuredAt": "2026-10-24T21:02:16.9879635-04:00",
+      "samplesPerClipMode": 2,
+      "paced": true,
+      "quietMilliseconds": 400,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 16,
+          "postCaptureMedianMs": 1007.1149000000005,
+          "postCaptureP95Ms": 1094.1488,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "wyoming-large-overlap",
+          "count": 16,
+          "postCaptureMedianMs": 447.6351999999997,
+          "postCaptureP95Ms": 1430.8363,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 942.2421999999997,
+          "totalMs": 5657.8808,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 956.4525999999996,
+          "totalMs": 5662.6567,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 417.1037000000006,
+          "totalMs": 4620.7852,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1027.8895000000002,
+          "totalMs": 5222.9271,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1047.6251000000002,
+          "totalMs": 5672.0369,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1430.8363,
+          "totalMs": 6043.3135,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 447.6351999999997,
+          "totalMs": 4630.2994,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1001.5681000000004,
+          "totalMs": 5192.2488,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 1094.1488,
+          "totalMs": 4758.5916,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 0.014500000000225555,
+          "totalMs": 3679.9786,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 712.9505000000004,
+          "totalMs": 4652.4129,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 1029.2146999999995,
+          "totalMs": 4956.762,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 979.2431999999999,
+          "totalMs": 4548.2465,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 974.1811000000002,
+          "totalMs": 4566.4166,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 0.13979999999992287,
+          "totalMs": 2871.4989,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 930.4775,
+          "totalMs": 3809.6565,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 944.0699000000004,
+          "totalMs": 5666.9988,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 926.7510000000002,
+          "totalMs": 5659.9097,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 1014.8800000000001,
+          "totalMs": 5218.6875,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 398.28219999999965,
+          "totalMs": 4587.3372,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1407.3765999999996,
+          "totalMs": 6037.5904,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1050.9855000000007,
+          "totalMs": 5677.877,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 1006.6922999999997,
+          "totalMs": 5190.9283,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 411.4259000000002,
+          "totalMs": 4587.4811,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 0.027100000000245927,
+          "totalMs": 3643.3079,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 1012.8964999999998,
+          "totalMs": 4667.8336,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 1007.1149000000005,
+          "totalMs": 4927.2871,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 685.6860999999999,
+          "totalMs": 4611.3147,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 1008.1191000000003,
+          "totalMs": 4600.1006,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 1023.5292999999997,
+          "totalMs": 4607.3462,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 930.9969000000001,
+          "totalMs": 3807.2432,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 0.02959999999984575,
+          "totalMs": 2892.802,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "overlap-800-comparison",
+      "measuredAt": "2026-10-24T21:07:18.2907042-04:00",
+      "samplesPerClipMode": 2,
+      "paced": true,
+      "quietMilliseconds": 800,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 16,
+          "postCaptureMedianMs": 995.3135000000002,
+          "postCaptureP95Ms": 1049.5643999999993,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "wyoming-large-overlap",
+          "count": 16,
+          "postCaptureMedianMs": 799.7049999999999,
+          "postCaptureP95Ms": 1063.5463,
+          "exactReferenceMatches": 16,
+          "meanReferenceWordErrorRate": 0
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 965.5252999999993,
+          "totalMs": 5679.7189,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4320,
+          "postCaptureMs": 0.037400000000161526,
+          "totalMs": 4727.3627,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 850.0870999999997,
+          "totalMs": 5048.7866,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 1032.4656000000004,
+          "totalMs": 5221.9551,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1048.7384999999995,
+          "totalMs": 5668.2639,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 4240,
+          "postCaptureMs": 1063.5463,
+          "totalMs": 5699.0581,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 831.4624999999996,
+          "totalMs": 5028.3083,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3840,
+          "postCaptureMs": 999.4107999999997,
+          "totalMs": 5178.4367,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 990.5670000000005,
+          "totalMs": 4654.427,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3360,
+          "postCaptureMs": 395.9711000000002,
+          "totalMs": 4045.1107,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 1047.0648,
+          "totalMs": 4976.746,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3600,
+          "postCaptureMs": 1001.9226000000003,
+          "totalMs": 4913.9039,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 969.5257999999999,
+          "totalMs": 4556.3847,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 3280,
+          "postCaptureMs": 799.7049999999999,
+          "totalMs": 4381.2981,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 0.07690000000002328,
+          "totalMs": 2887.1957,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2640,
+          "postCaptureMs": 996.0193000000004,
+          "totalMs": 3879.0106,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 0.02580000000034488,
+          "totalMs": 4724.9735,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4320,
+          "postCaptureMs": 946.5192999999999,
+          "totalMs": 5664.5771,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 995.3135000000002,
+          "totalMs": 5188.6819,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 858.3801999999996,
+          "totalMs": 5051.2852,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1041.1016,
+          "totalMs": 5676.0732,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "96c87c58-a965-49ab-a531-cde68c92e07f",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 4240,
+          "postCaptureMs": 1049.5643999999993,
+          "totalMs": 5673.6809,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 1005.3401000000003,
+          "totalMs": 5199.0577,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3840,
+          "postCaptureMs": 883.0243,
+          "totalMs": 5092.5444,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 411.5401999999999,
+          "totalMs": 4070.529,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3360,
+          "postCaptureMs": 993.2466000000004,
+          "totalMs": 4653.7475,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 1034.6635999999994,
+          "totalMs": 4968.1792,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3600,
+          "postCaptureMs": 999.3701999999994,
+          "totalMs": 4916.4962,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 787.8485999999998,
+          "totalMs": 4360.2994,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 3280,
+          "postCaptureMs": 977.3879999999995,
+          "totalMs": 4553.4172,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 919.9480000000003,
+          "totalMs": 3800.4088,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 2640,
+          "postCaptureMs": 0.015100000000074942,
+          "totalMs": 2897.3792,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    },
+    {
+      "name": "overlap-holdout-comparison",
+      "measuredAt": "2026-10-24T21:10:24.2157211-04:00",
+      "samplesPerClipMode": 2,
+      "paced": true,
+      "quietMilliseconds": 800,
+      "scope": "Retained PCM replay; STT only, no routing, device actions or playback. First pass per clip/mode discarded; rotating order. Reference is original transcript, not independent human ground truth.",
+      "summary": [
+        {
+          "mode": "wyoming-large",
+          "count": 6,
+          "postCaptureMedianMs": 1071.9549000000006,
+          "postCaptureP95Ms": 1113.2079999999996,
+          "exactReferenceMatches": 6,
+          "meanReferenceWordErrorRate": 0
+        },
+        {
+          "mode": "wyoming-large-overlap",
+          "count": 6,
+          "postCaptureMedianMs": 1056.3359999999993,
+          "postCaptureP95Ms": 1112.2286999999997,
+          "exactReferenceMatches": 6,
+          "meanReferenceWordErrorRate": 0
+        }
+      ],
+      "measurements": [
+        {
+          "clip": "fd134f48-6586-45b1-a8f4-dce30eade9f3",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 6480,
+          "postCaptureMs": 1107.8723,
+          "totalMs": 8178.8371,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "fd134f48-6586-45b1-a8f4-dce30eade9f3",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 6480,
+          "postCaptureMs": 1112.2286999999997,
+          "totalMs": 8195.099,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ee180411-f82e-4b46-b3bb-9c07a33af60d",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 5920,
+          "postCaptureMs": 1064.0650999999998,
+          "totalMs": 7523.2725,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ee180411-f82e-4b46-b3bb-9c07a33af60d",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 5920,
+          "postCaptureMs": 1088.7015000000001,
+          "totalMs": 7554.7033,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "2c82a12e-d7dc-4514-9096-7abdeb769cfd",
+          "mode": "wyoming-large",
+          "sample": 0,
+          "audioMs": 2960,
+          "postCaptureMs": 973.7215000000001,
+          "totalMs": 4210.5111,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "2c82a12e-d7dc-4514-9096-7abdeb769cfd",
+          "mode": "wyoming-large-overlap",
+          "sample": 0,
+          "audioMs": 2960,
+          "postCaptureMs": 981.0063000000005,
+          "totalMs": 4194.2335,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "fd134f48-6586-45b1-a8f4-dce30eade9f3",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 6480,
+          "postCaptureMs": 1101.6395000000002,
+          "totalMs": 8192.6835,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "fd134f48-6586-45b1-a8f4-dce30eade9f3",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 6480,
+          "postCaptureMs": 1113.2079999999996,
+          "totalMs": 8182.2709,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ee180411-f82e-4b46-b3bb-9c07a33af60d",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 5920,
+          "postCaptureMs": 1071.9549000000006,
+          "totalMs": 7536.5229,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "ee180411-f82e-4b46-b3bb-9c07a33af60d",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 5920,
+          "postCaptureMs": 1056.3359999999993,
+          "totalMs": 7512.9258,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "2c82a12e-d7dc-4514-9096-7abdeb769cfd",
+          "mode": "wyoming-large-overlap",
+          "sample": 1,
+          "audioMs": 2960,
+          "postCaptureMs": 987.1434000000004,
+          "totalMs": 4219.5783,
+          "referenceWordErrorRate": 0
+        },
+        {
+          "clip": "2c82a12e-d7dc-4514-9096-7abdeb769cfd",
+          "mode": "wyoming-large",
+          "sample": 1,
+          "audioMs": 2960,
+          "postCaptureMs": 1011.7619000000004,
+          "totalMs": 4231.3032,
+          "referenceWordErrorRate": 0
+        }
+      ]
+    }
+  ]
+}

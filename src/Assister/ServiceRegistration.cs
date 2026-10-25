@@ -68,7 +68,10 @@ public static class ServiceRegistration
         Services.AddTransient<ISpeechToTextProvider>(Services =>
         {
             var Config = Services.GetRequiredService<IConfiguration>();
-            return new WyomingSpeechToTextProvider(new(Config["SpeechToText:Host"] ?? "", Config.GetValue("SpeechToText:Port", 10300)));
+            ISpeechToTextProvider Provider = new WyomingSpeechToTextProvider(new(Config["SpeechToText:Host"] ?? "", Config.GetValue("SpeechToText:Port", 10300)));
+            return Config.GetValue("SpeechToText:OverlapEnabled", false)
+                ? new OverlappingSpeechToTextProvider(Provider, Config.GetValue("SpeechToText:OverlapQuietThreshold", .003),
+                    Config.GetValue("SpeechToText:OverlapQuietMilliseconds", 800)) : Provider;
         });
         Services.AddTransient<ITextToSpeechProvider>(Services =>
         {

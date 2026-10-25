@@ -9,6 +9,43 @@ using Microsoft.Extensions.Configuration;
 
 // Offline orchestration benchmark: actual VoicePipeline, deterministic simulated providers.
 // Does not connect to Home Assistant, inference servers or physical audio devices.
+if (args.FirstOrDefault() == "--stt-analyze")
+{
+    var Config = System.Text.Json.JsonSerializer.Deserialize<SttBenchmark.Settings>(await File.ReadAllTextAsync(args[1]), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+    foreach (var Clip in Config.Clips)
+    {
+        var Pcm = SttBenchmark.ReadPcm(await File.ReadAllBytesAsync(Clip.Path));
+        var Energy = Enumerable.Range(0, Pcm.Length / 640).Select(Index =>
+        {
+            double Sum = 0;
+            for (var Offset = Index * 640; Offset < Index * 640 + 640; Offset += 2)
+            {
+                var Sample = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(Pcm.AsSpan(Offset)) / 32768.0;
+                Sum += Sample * Sample;
+            }
+            return Math.Sqrt(Sum / 320);
+        }).ToArray();
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { Clip.Name, durationMs = Pcm.Length / 32.0,
+            peakRms = Energy.Max(), trailing = new[] { .003, .005, .01, .015 }.Select(Threshold => new { Threshold, quietMs = Energy.Reverse().TakeWhile(Rms => Rms < Threshold).Count() * 20 }),
+            preparations = new[] { 240, 400, 600, 800 }.Select(Window =>
+            {
+                int Voiced = 0, Quiet = 0; int? Started = null, Invalidated = null;
+                for (var Index = 0; Index < Energy.Length; Index++)
+                {
+                    if (Energy[Index] >= .003) { Voiced += 20; Quiet = 0; if (Started is not null) Invalidated ??= Index * 20; }
+                    else Quiet += 20;
+                    if (Started is null && Voiced >= 100 && Quiet >= Window) Started = (Index + 1) * 20;
+                }
+                return new { Window, Started, Invalidated };
+            }) }));
+    }
+    return;
+}
+if (args.FirstOrDefault() == "--stt")
+{
+    await SttBenchmark.RunAsync(args);
+    return;
+}
 if (args.FirstOrDefault() == "--browser-harness")
 {
     using var Listener = new System.Net.HttpListener();

@@ -1,0 +1,42 @@
+[
+  {
+    "runId": "4f984ba2-014c-430a-96c8-6b0323a9fc1f",
+    "postCaptureMs": 1369.7412,
+    "audioMs": 4320
+  },
+  {
+    "runId": "a3f08ae6-c4dd-4c30-b7cf-11ff4dd1d98f",
+    "postCaptureMs": 1011.8743,
+    "audioMs": 3840
+  },
+  {
+    "runId": "96c87c58-a965-49ab-a531-cde68c92e07f",
+    "postCaptureMs": 1126.2864,
+    "audioMs": 4240
+  },
+  {
+    "runId": "ad3c3eee-92d4-4f6e-855d-b6ef14be35eb",
+    "postCaptureMs": 1012.8726,
+    "audioMs": 3840
+  },
+  {
+    "runId": "af751ccb-7639-4a4c-ad14-1d36a4ee5a75",
+    "postCaptureMs": 1447.5914,
+    "audioMs": 3360
+  },
+  {
+    "runId": "941a1158-7c82-4bd6-94be-3a9f99e7e20a",
+    "postCaptureMs": 1039.0179,
+    "audioMs": 3600
+  },
+  {
+    "runId": "6b42d0ca-75e7-4a55-90a1-782121aad1a7",
+    "postCaptureMs": 1011.2573,
+    "audioMs": 3280
+  },
+  {
+    "runId": "8a23ccd8-7928-40b6-aad1-7f76fa3e59ee",
+    "postCaptureMs": 963.8234,
+    "audioMs": 2640
+  }
+]
