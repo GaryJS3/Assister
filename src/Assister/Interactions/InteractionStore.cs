@@ -132,6 +132,15 @@ public sealed class InteractionStore : IDisposable
             return Items;
         }
     }
+    public string? ConversationOwner(Guid Id)
+    {
+        lock (Gate)
+        {
+            using var Query = Command("SELECT Owner FROM ClientConversations WHERE Id=$id", ("$id", Id.ToString()));
+            return Query.ExecuteScalar() as string;
+        }
+    }
+
     public bool OwnsConversation(Guid Id, string Owner)
     {
         lock (Gate)

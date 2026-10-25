@@ -90,7 +90,7 @@ public static class ServiceRegistration
         Services.AddTransient<IAssisterTool, SatelliteAnnouncementTool>();
         foreach (var Name in new[] { "reminder_get", "reminder_create", "reminder_edit", "reminder_cancel" })
         {
-            Services.AddTransient<IAssisterTool>(Services => new ReminderTool(Name, Services.GetRequiredService<LocalStore>(), Services.GetRequiredService<IConfiguration>()));
+            Services.AddTransient<IAssisterTool>(Services => new ReminderTool(Name, Services.GetRequiredService<LocalStore>(), Services.GetRequiredService<IConfiguration>(), Services.GetRequiredService<RichNotificationBridge>()));
         }
         foreach (var Name in new[] { "memory_store", "memory_search", "memory_delete" })
         {
@@ -114,6 +114,8 @@ public static class ServiceRegistration
         Services.AddSingleton<ClientAuthentication>();
         Services.AddSingleton<ClientSignals>();
         Services.AddSingleton<InteractionStore>();
+        Services.AddSingleton<NotificationStore>();
+        Services.AddSingleton<RichNotificationBridge>();
         Services.AddHostedService<InteractionRetentionService>();
         Services.AddSingleton<InteractionRunner>();
         Services.AddScoped<RichSpeech>();

@@ -73,6 +73,7 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             var Database = Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
             // Rich-client conversations have a server-created routing identity; callers cannot impersonate satellites.
             var Satellite = "client-conversation-" + Item.ConversationId.ToString("N");
+            Scope.ServiceProvider.GetRequiredService<RichNotificationBridge>().Owner(Satellite);
             if (!await Database.Conversations.AnyAsync(Row => Row.Id == Item.ConversationId, Source.Token))
             {
                 Database.Conversations.Add(new() { Id = Item.ConversationId, SatelliteId = Satellite, UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });

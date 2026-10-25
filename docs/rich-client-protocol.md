@@ -84,6 +84,126 @@ Environment variables use double underscores, for example `RichClients__Retentio
 
 Idempotency applies while an interaction is retained; clients must not retry expired requests expecting deduplication. After audio expiry, the download returns 404 even if older replay events still reference it. Unused uploads can be deleted immediately through `DELETE /attachments/{id}` or the .NET client's `DeleteAttachmentAsync`; the web attachment Remove button also releases the stored upload. If an upload quota is full, upload retries run cleanup before rejecting the request.
 
+## Timers, alarms, reminders and announcements
+
+The additive `notifications` and `notifications.receipts` features provide durable,
+structured notices independent of conversation/interaction lifetime. Clients choose
+whether to display text, play audio, schedule a local alert, acknowledge, dismiss,
+or ignore a notice. Importance is advisory; even `acknowledge` and `alarm` never
+require a response, force playback, or block another client. There is no automatic
+server repeat-until-ack policy.
+
+| Method | Route under `/api/client` | Behavior |
+|---|---|---|
+| POST | `/notifications` | Create an immediate or scheduled notice; owner-scoped idempotency |
+| GET | `/notifications` | List retained notices visible to this client, including future/cancelled/expired records |
+| GET | `/notifications?dueOnly=true` | Active, due, unexpired notices; useful for polling/recovery |
+| GET | `/notifications/{id}` | Retrieve a visible notice |
+| DELETE | `/notifications/{id}` | Idempotently cancel a visible notice for all its recipients |
+| POST | `/notifications/{id}/receipts` | Optional per-client receipt; no global delivery state change |
+
+```json
+{
+  "kind": "timer",
+  "text": "Your tea timer has finished.",
+  "idempotencyKey": "tea-timer-2026-10-25-1",
+  "dueAt": "2026-10-25T18:03:00Z",
+  "expiresAt": "2026-10-26T18:03:00Z",
+  "importance": "alarm",
+  "targetClientId": null
+}
+```
+
+Kinds are `timer`, `alarm`, `reminder`, `announcement`, and generic `notification`.
+Importance is `notify` (default), `high-importance`, `acknowledge`, or `alarm`.
+Text is 1–2000 characters; retry keys are 1–128. Omitted `dueAt` means now;
+omitted `expiresAt` means one day after due time. Due times can be at most 365
+days ahead; expiry must be after both due time and creation time, at most 30 days
+after due time. Use ISO-8601 timestamps with an explicit UTC offset. These are
+one-shot instants; producers must resolve local time zones and recurrence before
+submission. For countdowns send an absolute due instant so reconnect does not
+restart the timer.
+
+A null target broadcasts to clients sharing the authenticated owner, including
+clients connecting later before expiry. A target must be a configured client of
+that same owner. Targeted notices are visible only to that client. Shared-owner
+clients may cancel a broadcast; unrelated owners cannot read, cancel or report
+receipts. Creation returns the notice with a stable `id`, timestamps and `status`
+(`active` or `cancelled`). Expiry is derived from `expiresAt`, not a stored status.
+The same retry key and request returns the original record, including after
+cancellation/expiry; a different request with that key returns 409.
+
+Registered clients receive `notification.available` with the full notice as `data`
+on `/device/stream` when it becomes due (checked approximately once per second).
+No notification capability or playback permission is required. A connection sends
+each outstanding ID once and reconnect replays all due, active, unexpired notices.
+`notification.resolved` carries `notificationId` when a previously sent notice is
+cancelled or expires; clients should stop any associated alert. This signal has no
+interaction sequence cursor; recover authoritative state with the HTTP list.
+Clients may also fetch future notices to manage their own local schedules. Offline
+push/wakeup is not provided. Ignore unknown kinds/events for forward compatibility.
+
+Receipts use `{ "state": "received" }`, `displayed`, `acknowledged`, `dismissed`,
+or `ignored`. The server retains the latest receipt per notice/client and returns
+its timestamp; an identical repeated state returns the same receipt. Reports are
+accepted only while the notice is due, active and unexpired. Receipts never remove
+a notice from polling/replay, including for the reporting client. Persist handled
+IDs locally to avoid repeating presentation across reconnect/restart, and always
+check expiry before alerting. Transport delivery is not evidence of presentation
+or user acknowledgement.
+
+The .NET SDK provides `CreateNotificationAsync`, `GetNotificationsAsync`,
+`GetNotificationAsync`, `CancelNotificationAsync`, `ReportNotificationAsync`, and
+`ObserveNotificationsAsync`. The notification iterator polls once per second,
+deduplicates during its lifetime, and needs no client registration. The existing
+device-request iterator ignores notification signals; consumers of the raw device
+stream can handle both types over one connection.
+
+Records and receipts persist in `notifications.db`. Each owner can retain 1000
+notices; creation prunes records more than 30 days past expiry and their receipts.
+Keys cease deduplicating once pruned. Client UI, audio and operating-system alarm
+integrations are left to consumers.
+
+### Command and scheduler bridge
+
+Timers and recurring reminders created through rich interactions use the same
+commands and source records as satellite requests. When due, their schedulers
+persist `timer` / `reminder` notifications for the conversation's authenticated
+owner, including clients offline at the time. Timer importance is `alarm`;
+reminder importance is `acknowledge`. Delivery completes when the notification
+is durably accepted, without waiting for client receipts. Recurring reminders
+then advance using their existing daily/weekly time-zone rules. Missed occurrences
+produce one catch-up notification, rather than replaying every missed day.
+
+Timer cancellation and reminder edits/cancellation before delivery act on the
+existing source records; they do not pre-schedule a second copy in the notification
+store. Cancelling a recurring reminder stops future occurrences, while an already
+delivered occurrence remains available until expiry or explicit notification
+cancellation. Keys include the source timer ID, or reminder ID plus occurrence,
+so retry after a crash between publishing and updating the source does not duplicate
+delivery. The notification's due time is its acceptance time for catch-up delivery.
+
+Rich conversation routing bindings are persisted in `notifications.db` and survive
+conversation-history retention and restart. Routes are resolved from server-owned
+conversation metadata, never from an owner supplied in a command. Previously
+created rich timer/reminder records are picked up when their retained conversation
+can still resolve an owner. Physical satellite deliveries retain their existing
+playback behavior; global native `all` reminders are not exposed to rich clients.
+
+`announce` / `broadcast` commands and the `satellite_announce` tool route rich
+requests to configured clients belonging to the same owner. Registered device
+names or configured client IDs can select a target. An unspecified/ambiguous
+destination prompts for a numbered selection; `all`, `all clients`, and the legacy
+`all satellites` spelling broadcast within this owner. Offline configured clients
+remain selectable. Replies say the notification was sent, without claiming display
+or playback. Importance is preserved as an advisory value.
+
+The existing reminder tools also use the bridge. For rich requests their legacy
+`all_satellites` option stays within the current conversation's owner; it never
+creates a global satellite broadcast. Rich timer/reminder commands currently notify
+all clients of their owner by default; native requests continue using their original
+satellite destinations. Presentation and acknowledgement policy remain client choices.
+
 ## Voice and playback
 
 The additive `audio.tones` feature sends `tone.play` on the ordinary interaction

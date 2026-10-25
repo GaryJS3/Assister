@@ -6,7 +6,7 @@ namespace Assister.Interactions;
 public static class ClientSignalStream
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    public static async Task HandleAsync(HttpContext Http, ClientSignals Signals, ClientAuthentication Auth)
+    public static async Task HandleAsync(HttpContext Http, ClientSignals Signals, ClientAuthentication Auth, NotificationStore Notifications)
     {
         var ClientId = (string)Http.Items["ClientId"]!;
         var Owner = (string)Http.Items["ClientOwner"]!;
@@ -15,6 +15,8 @@ public static class ClientSignalStream
         using var Lifetime = CancellationTokenSource.CreateLinkedTokenSource(Http.RequestAborted);
         var Receive = ReceiveAsync();
         var Sent = new HashSet<Guid>();
+        var Notices = new HashSet<Guid>();
+        var NextNoticeCheck = DateTimeOffset.MinValue;
         var LastHeartbeat = DateTimeOffset.UtcNow;
         try
         {
@@ -23,6 +25,18 @@ public static class ClientSignalStream
             {
                 if (Auth.Authenticate(Http) != ClientId || Auth.Owner(ClientId) != Owner || !Signals.Heartbeat(ClientId)) break;
                 var Pending = Signals.Pending(ClientId);
+                if (DateTimeOffset.UtcNow >= NextNoticeCheck)
+                {
+                    var Due = Notifications.List(Owner, ClientId, true);
+                    foreach (var Notice in Due)
+                        if (Notices.Add(Notice.Id)) await SendAsync(new { type = "notification.available", data = Notice });
+                    foreach (var Resolved in Notices.Except(Due.Select(Item => Item.Id)).ToArray())
+                    {
+                        await SendAsync(new { type = "notification.resolved", notificationId = Resolved });
+                        Notices.Remove(Resolved);
+                    }
+                    NextNoticeCheck = DateTimeOffset.UtcNow.AddSeconds(1);
+                }
                 foreach (var Request in Pending)
                     if (Sent.Add(Request.RequestId)) await SendAsync(new { type = "device.request", data = Request });
                 foreach (var Resolved in Sent.Except(Pending.Select(Item => Item.RequestId)).ToArray())

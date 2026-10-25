@@ -8,7 +8,7 @@ public sealed class SatelliteAnnouncementTool(AnnouncementHandler Announcements)
 {
     public bool StateChanging => true;
     public LlmTool Definition => new(new("satellite_announce",
-        "Announce a message only when the current user requests it. target is the explicit satellite name or all. Omit target when unspecified; return the resulting numbered destination question verbatim and wait for the user's selection. Never default to the current satellite or all. Report playback failures accurately. importance defaults to notify; high-importance adds beeps and repeats once; acknowledge repeats every ten minutes until acknowledged; alarm repeats every ten seconds until acknowledged.",
+        "Announce a message only when the current user requests it. target is the explicit destination name or all. Rich requests send notifications to clients of the same owner; satellite requests use speakers. Omit target when unspecified; return the resulting numbered destination question verbatim and wait for the user's selection. Never default to the current destination or all. Rich delivery means stored notification, not confirmed display or playback, and importance is advisory. For satellites, high-importance adds beeps and repeats once; acknowledge repeats every ten minutes until acknowledged; alarm repeats every ten seconds until acknowledged.",
         JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{"message":{"type":"string"},"target":{"type":"string"},"importance":{"type":"string","enum":["notify","high-importance","acknowledge","alarm"]}},"required":["message"],"additionalProperties":false}""")));
     public async Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken Token)
     {

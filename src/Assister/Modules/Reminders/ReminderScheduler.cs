@@ -5,7 +5,8 @@ using Assister.Satellites;
 
 namespace Assister.Modules.Reminders;
 
-public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteManager Satellites, ILogger<ReminderScheduler> Logger) : BackgroundService
+public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteManager Satellites, ILogger<ReminderScheduler> Logger,
+    Assister.Interactions.RichNotificationBridge? Rich = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken Token)
     {
@@ -24,6 +25,28 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
 
     public async Task TickAsync(LocalStore Store, ITextToSpeechProvider Speech, DateTimeOffset Now, CancellationToken Token)
     {
+        if (Rich is not null)
+        {
+            var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt FROM Reminders WHERE Status='active' AND SatelliteId LIKE 'client-conversation-%' AND NextDueAt <= $p0 ORDER BY NextDueAt,Id LIMIT 100", Token, Now.ToUnixTimeSeconds());
+            foreach (var Row in Rows)
+            {
+                Token.ThrowIfCancellationRequested();
+                try
+                {
+                    if (!Rich.Publish(Row[2], "reminder", "Reminder: " + Row[1] + ".", "reminder:" + Row[0] + ":" + Row[7], "acknowledge")) continue;
+                }
+                catch (InvalidOperationException Error)
+                {
+                    Logger.LogWarning(Error, "Rich reminder delivery deferred for {ReminderId}.", Row[0]);
+                    continue;
+                }
+                var Schedule = new ReminderSchedule(int.Parse(Row[4], CultureInfo.InvariantCulture), int.Parse(Row[5], CultureInfo.InvariantCulture),
+                    Row[6].Length == 0 ? null : (DayOfWeek)int.Parse(Row[6], CultureInfo.InvariantCulture));
+                var Next = Schedule.Next(DateTimeOffset.UtcNow > Now ? DateTimeOffset.UtcNow : Now, TimeZoneInfo.FindSystemTimeZoneById(Row[3]));
+                await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0 WHERE Id=$p1 AND Status='active' AND NextDueAt=$p2", Token,
+                    Next.ToUnixTimeSeconds(), Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture));
+            }
+        }
         await BroadcastsAsync(Store, Speech, Now, Token);
         var Candidates = new List<string[]>();
         foreach (var Id in Satellites.ConnectedIds)

@@ -37,6 +37,41 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
         => Http.GetFromJsonAsync<ClientAttachment[]>($"api/client/interactions/{InteractionId}/attachments", Token);
     public Task<RegisteredClient[]?> GetClientsAsync(CancellationToken Token = default) => Http.GetFromJsonAsync<RegisteredClient[]>("api/client/clients", Token);
     public Task<DeviceRequest[]?> GetDeviceRequestsAsync(CancellationToken Token = default) => Http.GetFromJsonAsync<DeviceRequest[]>("api/client/device/requests", Token);
+    public Task<ClientNotification[]?> GetNotificationsAsync(bool DueOnly = false, CancellationToken Token = default)
+        => Http.GetFromJsonAsync<ClientNotification[]>($"api/client/notifications?dueOnly={DueOnly.ToString().ToLowerInvariant()}", Token);
+    public Task<ClientNotification?> GetNotificationAsync(Guid Id, CancellationToken Token = default)
+        => Http.GetFromJsonAsync<ClientNotification>($"api/client/notifications/{Id}", Token);
+    // Polling works without capability registration and replays outstanding notices after reconnect.
+    // Persist handled IDs in the application if deduplication must survive observer recreation.
+    public async IAsyncEnumerable<ClientNotification> ObserveNotificationsAsync([EnumeratorCancellation] CancellationToken Token = default)
+    {
+        var Seen = new HashSet<Guid>();
+        while (true)
+        {
+            var Due = await GetNotificationsAsync(true, Token) ?? [];
+            Seen.IntersectWith(Due.Select(Item => Item.Id));
+            foreach (var Item in Due)
+                if (Seen.Add(Item.Id)) yield return Item;
+            await Task.Delay(1000, Token);
+        }
+    }
+    public async Task<ClientNotification> CreateNotificationAsync(CreateNotification Request, CancellationToken Token = default)
+    {
+        using var Response = await Http.PostAsJsonAsync("api/client/notifications", Request, Token);
+        Response.EnsureSuccessStatusCode();
+        return (await Response.Content.ReadFromJsonAsync<ClientNotification>(Token))!;
+    }
+    public async Task CancelNotificationAsync(Guid Id, CancellationToken Token = default)
+    {
+        using var Response = await Http.DeleteAsync($"api/client/notifications/{Id}", Token);
+        Response.EnsureSuccessStatusCode();
+    }
+    public async Task<NotificationReceipt> ReportNotificationAsync(Guid Id, string State, CancellationToken Token = default)
+    {
+        using var Response = await Http.PostAsJsonAsync($"api/client/notifications/{Id}/receipts", new NotificationAcknowledgement(State), Token);
+        Response.EnsureSuccessStatusCode();
+        return (await Response.Content.ReadFromJsonAsync<NotificationReceipt>(Token))!;
+    }
     public Task<DeviceResponse?> GetDeviceOutcomeAsync(Guid Id, CancellationToken Token = default) => Http.GetFromJsonAsync<DeviceResponse>($"api/client/device/responses/{Id}", Token);
     public async Task RegisterAsync(ClientRegistration Registration, CancellationToken Token = default)
     { using var Response = await Http.PostAsJsonAsync("api/client/clients/register", Registration, Token); Response.EnsureSuccessStatusCode(); }

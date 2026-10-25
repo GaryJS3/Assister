@@ -26,6 +26,7 @@ public static class InteractionEndpoints
             return await Next(Context);
         });
         Assister.Diagnostics.RunAudioEndpoints.MapClientRunAudio(Group);
+        NotificationEndpoints.MapNotifications(Group);
         Group.MapPost("/session", (ClientLogin Login, ClientAuthentication Auth, HttpContext Http) =>
         {
             if (Login.Token is null || Auth.Identify(Login.Token) is not { } Owner) return Results.Unauthorized();
@@ -36,7 +37,7 @@ public static class InteractionEndpoints
         Group.MapGet("/protocol", () => new { protocolVersion = 1, eventDelivery = "at_least_once", maxMessageCharacters = 1000, heartbeatSeconds = 15,
             maxAttachmentBytes = 1048576, maxAttachments = 8, maxAttachmentContextCharacters = 12000,
             inputAudioFormat = "pcm_s16le_16000_mono", outputAudioFormat = "wav", voiceInputMode = "buffered_upload",
-            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "audio.output.segments", "audio.tones", "client.capabilities", "device.requests" } });
+            features = new[] { "text.input", "text.output", "events.replay", "interaction.cancel", "execution.steps", "reasoning.stream", "model.output.stream", "execution.details", "context.inspect", "attachments.text", "attachments.image.storage", "audio.input", "audio.output", "audio.output.segments", "audio.tones", "client.capabilities", "device.requests", "notifications", "notifications.receipts" } });
         Group.MapPost("/attachments", AttachmentUpload.ReceiveAsync);
         Group.MapDelete("/attachments/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) =>
         {

@@ -4,7 +4,8 @@ using Assister.Satellites;
 
 namespace Assister.Modules.Timers;
 
-public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteManager Satellites, ILogger<TimerExpiryService> Logger) : BackgroundService
+public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteManager Satellites, ILogger<TimerExpiryService> Logger,
+    Assister.Interactions.RichNotificationBridge? Rich = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken StoppingToken)
     {
@@ -27,6 +28,20 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
     public async Task TickAsync(LocalStore Store, ITextToSpeechProvider Tts, CancellationToken Token)
     {
         await Store.ExecuteAsync("UPDATE Timers SET Status='notification-pending' WHERE Status='active' AND DueAt <= $p0", Token, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        if (Rich is not null)
+        {
+            var RichTimers = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' AND SatelliteId LIKE 'client-conversation-%' ORDER BY DueAt,Id LIMIT 100", Token);
+            foreach (var Row in RichTimers)
+            {
+                Token.ThrowIfCancellationRequested();
+                try
+                {
+                    if (Rich.Publish(Row[2], "timer", $"Your {Row[1]} has finished.", "timer:" + Row[0], "alarm"))
+                        await Store.ExecuteAsync("UPDATE Timers SET Status='completed' WHERE Id=$p0 AND Status='notification-pending'", Token, Row[0]);
+                }
+                catch (InvalidOperationException Error) { Logger.LogWarning(Error, "Rich timer delivery deferred for {TimerId}.", Row[0]); }
+            }
+        }
         // Query each connected satellite separately: an offline backlog cannot occupy the entire batch.
         var Candidates = new List<string[]>();
         foreach (var Id in Satellites.ConnectedIds)

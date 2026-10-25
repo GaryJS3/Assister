@@ -17,6 +17,172 @@ public sealed class RichClientTests
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     [Fact]
+    public async Task RealCommandsDeliverTimersRemindersAndAnnouncementsWithoutASatellite()
+    {
+        using var App = new TestApplication(UseFake: false);
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        using var TabletHttp = App.CreateClient(); TabletHttp.DefaultRequestHeaders.Authorization = new("Bearer", "tablet-client-test-credential-123456789");
+        using var OtherHttp = App.CreateClient(); OtherHttp.DefaultRequestHeaders.Authorization = new("Bearer", "other-client-test-credential-123456789");
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Tablet = new Assister.Client.AssisterClient(TabletHttp);
+        var Other = new Assister.Client.AssisterClient(OtherHttp);
+        var Conversation = await Client.CreateConversationAsync();
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        async Task<InteractionSnapshot> Send(string Text)
+        {
+            var Item = await Client.SubmitAsync(Conversation.Id, Text, Guid.NewGuid().ToString(), Deadline.Token);
+            var Final = await WaitTerminal(Http, Item.Id, Deadline.Token);
+            Assert.Equal("completed", Final.Status);
+            return Final;
+        }
+        Assert.Contains("Started", (await Send("set a tea timer for 1 second")).Response);
+        ClientNotification[] Due;
+        do { Due = (await Tablet.GetNotificationsAsync(true, Deadline.Token))!; if (Due.Length == 0) await Task.Delay(50, Deadline.Token); } while (Due.Length == 0);
+        var Timer = Assert.Single(Due);
+        Assert.Equal("timer", Timer.Kind); Assert.Equal("alarm", Timer.Importance);
+        Assert.Contains("tea", Timer.Text);
+        Assert.Empty((await Other.GetNotificationsAsync(true))!);
+        await Send("set a toast timer for 1 hour");
+        Assert.Contains("Cancelled", (await Send("cancel the toast timer")).Response);
+
+        Assert.Contains("by notification to your clients", (await Send("remind me to stretch every day at 20:00")).Response);
+        var Route = "client-conversation-" + Conversation.Id.ToString("N");
+        await using (var Scope = App.Services.CreateAsyncScope())
+        {
+            var Store = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.LocalStore>();
+            await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=0 WHERE SatelliteId=$p0", Deadline.Token, Route);
+            // The same production scheduler is also running; replaying a tick must not duplicate delivery.
+            var Scheduler = ActivatorUtilities.CreateInstance<Assister.Modules.Reminders.ReminderScheduler>(Scope.ServiceProvider);
+            await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow, Deadline.Token);
+            await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow, Deadline.Token);
+            // Simulate a crash after notification persistence but before updating the source ledger.
+            await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=0 WHERE SatelliteId=$p0", Deadline.Token, Route);
+            await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow, Deadline.Token);
+            await Store.ExecuteAsync("UPDATE Timers SET Status='notification-pending' WHERE SatelliteId=$p0 AND Name='tea'", Deadline.Token, Route);
+            var Expiry = ActivatorUtilities.CreateInstance<Assister.Modules.Timers.TimerExpiryService>(Scope.ServiceProvider);
+            await Expiry.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), Deadline.Token);
+        }
+        Assert.Single((await Tablet.GetNotificationsAsync(true))!, Item => Item.Kind == "timer");
+        var Reminder = Assert.Single((await Tablet.GetNotificationsAsync(true))!, Item => Item.Kind == "reminder");
+        Assert.Equal("acknowledge", Reminder.Importance);
+        await Tablet.ReportNotificationAsync(Reminder.Id, "ignored");
+        Assert.Contains((await Client.GetNotificationsAsync(true))!, Item => Item.Id == Reminder.Id);
+        await Send("cancel my reminder stretch");
+
+        await Tablet.RegisterAsync(new("tablet", "Kitchen tablet", []));
+        var Choice = await Send("announce dinner is ready");
+        Assert.Contains("Which client", Choice.Response);
+        Assert.DoesNotContain((await Client.GetNotificationsAsync())!, Item => Item.Kind == "announcement");
+        Assert.Contains("Sent announcement", (await Send("Kitchen tablet")).Response);
+        var Announcement = Assert.Single((await Tablet.GetNotificationsAsync(true))!, Item => Item.Kind == "announcement");
+        Assert.Equal("tablet", Announcement.TargetClientId);
+        Assert.DoesNotContain((await Client.GetNotificationsAsync(true))!, Item => Item.Id == Announcement.Id);
+        Assert.Contains("Sent announcement to your clients", (await Send("announce alarm to all: Wake up")).Response);
+        Assert.Contains((await Client.GetNotificationsAsync(true))!, Item => Item.Kind == "announcement" && Item.Importance == "alarm" && Item.TargetClientId is null);
+        var Ws = App.Server.CreateWebSocketClient(); Ws.ConfigureRequest = Request => Request.Headers.Authorization = "Bearer tablet-client-test-credential-123456789";
+        using (var Socket = await Ws.ConnectAsync(new Uri("ws://localhost/api/client/device/stream"), Deadline.Token))
+        {
+            Assert.Equal("connection.ready", (await Receive(Socket, Deadline.Token)).GetProperty("type").GetString());
+            JsonElement Signal;
+            do { Signal = await Receive(Socket, Deadline.Token); }
+            while (Signal.GetProperty("type").GetString() != "notification.available" || Signal.GetProperty("data").GetProperty("text").GetString() != "Wake up");
+            Assert.Equal("alarm", Signal.GetProperty("data").GetProperty("importance").GetString());
+            await Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", Deadline.Token);
+        }
+        Assert.Empty((await Other.GetNotificationsAsync(true))!);
+    }
+
+    [Fact]
+    public async Task RichReminderToolsKeepBroadcastsScopedAndRespectEditsAndCancellation()
+    {
+        using var App = new TestApplication();
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Conversation = await Client.CreateConversationAsync();
+        var Route = "client-conversation-" + Conversation.Id.ToString("N");
+        await using var Scope = App.Services.CreateAsyncScope();
+        var Store = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.LocalStore>();
+        var Bridge = Scope.ServiceProvider.GetRequiredService<Assister.Interactions.RichNotificationBridge>();
+        Assert.Equal("local", Bridge.Owner(Route));
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('native','Native only','all','America/New_York',20,0,NULL,0,'active')", default);
+        async Task<JsonElement> Call(string Name, object Args)
+        {
+            var Tool = Scope.ServiceProvider.GetServices<Assister.Tools.IAssisterTool>().Single(Tool => Tool.Definition.Function.Name == Name);
+            return JsonSerializer.Deserialize<JsonElement>(await Tool.ExecuteAsync(JsonSerializer.SerializeToElement(Args),
+                new(new("Change my reminder schedule", Route), []), default));
+        }
+        Assert.Empty((await Call("reminder_get", new { })).GetProperty("items").EnumerateArray());
+        var Created = await Call("reminder_create", new { message = "Stretch", hour = 20, minute = 0, weekday = -1, all_satellites = true });
+        var Id = Created.GetProperty("reminder").GetProperty("Id").GetString()!;
+        Assert.Equal(Route, Created.GetProperty("reminder").GetProperty("SatelliteId").GetString());
+        await Call("reminder_edit", new { id = Id, message = "Walk instead", hour = 21 });
+        var Row = Assert.Single(await Store.QueryAsync("SELECT Message,Hour FROM Reminders WHERE Id=$p0", default, Id));
+        Assert.Equal("Walk instead", Row[0]); Assert.Equal("21", Row[1]);
+        await Call("reminder_cancel", new { id = Id });
+        await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=0 WHERE Id=$p0", default, Id);
+        var Scheduler = ActivatorUtilities.CreateInstance<Assister.Modules.Reminders.ReminderScheduler>(Scope.ServiceProvider);
+        await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow, default);
+        Assert.Empty((await Client.GetNotificationsAsync(true))!);
+        Assert.Equal("active", Assert.Single(await Store.QueryAsync("SELECT Status FROM Reminders WHERE Id='native'", default))[0]);
+        Assert.Null(Bridge.Owner("client-conversation-" + Guid.NewGuid().ToString("N")));
+        // Routing survives rich conversation cleanup and a new bridge instance.
+        var Config = Scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        using (var Connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            { DataSource = Path.Combine(Config["Assister:DataPath"]!, "interactions.db"), Pooling = false }.ToString()))
+        {
+            Connection.Open();
+            using var Delete = Connection.CreateCommand();
+            Delete.CommandText = "DELETE FROM ClientConversations WHERE Id=$id";
+            Delete.Parameters.AddWithValue("$id", Conversation.Id.ToString());
+            Delete.ExecuteNonQuery();
+        }
+        Assert.Null(Scope.ServiceProvider.GetRequiredService<Assister.Interactions.InteractionStore>().ConversationOwner(Conversation.Id));
+        using var Reopened = new Assister.Interactions.NotificationStore(Config);
+        Assert.Equal("local", ActivatorUtilities.CreateInstance<Assister.Interactions.RichNotificationBridge>(Scope.ServiceProvider, Reopened).Owner(Route));
+    }
+    [Fact]
+    public async Task NotificationsSupportOptionalReceiptsOwnerIsolationAndReconnectReplay()
+    {
+        using var App = new TestApplication();
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        using var Other = App.CreateClient(); Other.DefaultRequestHeaders.Authorization = new("Bearer", "other-client-test-credential-123456789");
+        using var TabletHttp = App.CreateClient(); TabletHttp.DefaultRequestHeaders.Authorization = new("Bearer", "tablet-client-test-credential-123456789");
+        using var Anonymous = App.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Anonymous.GetAsync("/api/client/notifications")).StatusCode);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Tablet = new Assister.Client.AssisterClient(TabletHttp);
+        var Request = new CreateNotification("announcement", "Dinner is ready", "dinner", Importance: "acknowledge");
+        var Item = await Client.CreateNotificationAsync(Request);
+        Assert.Equal(Item, await Client.CreateNotificationAsync(Request));
+        Assert.Equal(HttpStatusCode.Conflict, (await Http.PostAsJsonAsync("/api/client/notifications", Request with { Text = "Changed" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Other.GetAsync($"/api/client/notifications/{Item.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Other.PostAsJsonAsync($"/api/client/notifications/{Item.Id}/receipts", new NotificationAcknowledgement("ignored"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Other.DeleteAsync($"/api/client/notifications/{Item.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.PostAsJsonAsync("/api/client/notifications", Request with { IdempotencyKey = "wrong-owner", TargetClientId = "other" })).StatusCode);
+        await Client.ReportNotificationAsync(Item.Id, "ignored");
+        Assert.Single((await Tablet.GetNotificationsAsync(true))!);
+        await Tablet.RegisterAsync(new("tablet", "Kitchen", []));
+        var Ws = App.Server.CreateWebSocketClient(); Ws.ConfigureRequest = Request => Request.Headers.Authorization = "Bearer tablet-client-test-credential-123456789";
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        for (var Attempt = 0; Attempt < 2; Attempt++)
+        {
+            using var Socket = await Ws.ConnectAsync(new Uri("ws://localhost/api/client/device/stream"), Deadline.Token);
+            Assert.Equal("connection.ready", (await Receive(Socket, Deadline.Token)).GetProperty("type").GetString());
+            var Signal = await Receive(Socket, Deadline.Token);
+            Assert.Equal("notification.available", Signal.GetProperty("type").GetString());
+            Assert.Equal(Item.Id, Signal.GetProperty("data").GetProperty("id").GetGuid());
+            if (Attempt == 1)
+            {
+                await Tablet.ReportNotificationAsync(Item.Id, "acknowledged");
+                await Client.CancelNotificationAsync(Item.Id);
+                Assert.Equal("notification.resolved", (await Receive(Socket, Deadline.Token)).GetProperty("type").GetString());
+            }
+            await Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", Deadline.Token);
+        }
+        Assert.Empty((await Client.GetNotificationsAsync(true))!);
+        Assert.Equal("cancelled", (await Client.GetNotificationAsync(Item.Id))!.Status);
+    }
+    [Fact]
     public async Task ServerCanForceBufferedFallbackForAStreamingClient()
     {
         using var Base = new TestApplication();
