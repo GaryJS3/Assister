@@ -64,7 +64,9 @@ public static class AdaptiveEndpointing
                 {
                     var Snapshot = State.BeginScore(); Revision = Snapshot.Revision;
                     Analysis = CancellationTokenSource.CreateLinkedTokenSource(Lifetime.Token);
-                    Analysis.CancelAfter(Options.InferenceTimeoutMs);
+                    // Observation on slower CPUs needs a useful score, while active commits
+                    // retain the stricter deadline. Neither mode blocks capture on inference.
+                    Analysis.CancelAfter(Shadow ? Math.Max(1000, Options.InferenceTimeoutMs) : Options.InferenceTimeoutMs);
                     Calls++;
                     try { Pending = Classifier.ScoreAsync(Snapshot.Pcm, Analysis.Token); }
                     catch (Exception Error) when (!Token.IsCancellationRequested && Error is not OutOfMemoryException)
