@@ -1,0 +1,12 @@
+{
+  "note": "Read-only diagnostic reused the installed controller Python runtime in a separate process, with identical workstation features and model supplied through stdin; no controller files or configuration changed. The remaining host/runtime numerical divergence is unresolved.",
+  "productionPythonProbability": 0.9282535910606384,
+  "workstationCSharpOrtVersion": "1.31.0",
+  "productionProbability": 0.8732463121414185,
+  "workstationProbability": 0.27983254194259644,
+  "productionCSharpOrtVersion": "1.31.0",
+  "productionPythonOrtVersion": "1.20.1",
+  "featureSha256": "C1086BCC606C25D65BF8221785D599EF3F3FDD1DFD21F31280CDC7936A9F5C54",
+  "modelSha256": "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+  "clipId": "012d34ed-a412-4e3b-94a4-01a04e929145"
+}

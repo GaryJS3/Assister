@@ -13,7 +13,7 @@ Implement one feature at a time in the order below. Each feature gets its own me
 | S0 | Establish comparable latency measurements | In progress — offline harness, server milestones and read-only live text baseline; physical timing pending | None |
 | S1 | Stream rich-client speech during response generation | Implemented and tested locally; browser scheduling verified; deployment and spoken-device measurement pending | S0 |
 | S2 | Stream satellite audio through to physical playback | Deployed 37ab58b for EchoMuse; real TTS/HTTP delivery measured; physical playback acceptance pending; ESPHome offline | S0; reuse S1 concepts where useful |
-| S3 | Add adaptive, semantic turn completion | Planned | S0; device capture support |
+| S3 | Add adaptive, semantic turn completion | C# implementation deployed in shadow; active blocked by quality, CPU budget and cross-host validation | S0; device capture support |
 | S4 | Prepare speculative replies during the end-of-turn pause | Planned | S3; provisional input and cancellable output |
 | S5 | Improve model context reuse and inference configuration | Planned | S0 |
 | S6 | Evaluate an optional direct-audio model backend | Research backlog | Earlier measurements |
@@ -73,6 +73,8 @@ Acceptance:
 - Measure separately for EchoMuse and ESPHome rather than assuming shared capabilities.
 
 ## S3 — Add adaptive, semantic turn completion
+
+Implementation, evaluation and shadow deployment: [voice-s3-adaptive-endpointing.md](voice-s3-adaptive-endpointing.md). Active acceptance remains open.
 
 The fallback energy VAD currently waits for 900 ms of silence. EchoMuse owns endpointing, so changing that fallback will not change EchoMuse timing.
 

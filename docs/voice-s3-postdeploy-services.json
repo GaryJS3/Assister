@@ -1,0 +1,53 @@
+{
+  "Results": [
+    {
+      "Name": "Assister health",
+      "Status": "Passed",
+      "Detail": "HTTP 200",
+      "DurationMs": 143
+    },
+    {
+      "Name": "Home Assistant authenticated REST",
+      "Status": "Passed",
+      "Detail": "Authenticated HTTP 200",
+      "DurationMs": 237
+    },
+    {
+      "Name": "Home Assistant WebSocket and registries",
+      "Status": "Passed",
+      "Detail": "{\u0022Authentication\u0022:\u0022OK\u0022,\u0022Counts\u0022:{\u0022get_states\u0022:1813,\u0022get_services\u0022:80,\u0022config/entity_registry/list\u0022:3123,\u0022config/device_registry/list\u0022:280,\u0022config/area_registry/list\u0022:22},\u0022StateChangedSubscription\u0022:\u0022Accepted; no state mutation performed\u0022}",
+      "DurationMs": 307
+    },
+    {
+      "Name": "Wyoming STT capability",
+      "Status": "Passed",
+      "Detail": "ASR capability advertised",
+      "DurationMs": 30
+    },
+    {
+      "Name": "Wyoming TTS synthesis",
+      "Status": "Passed",
+      "Detail": "{\u0022Bytes\u0022:106496,\u0022SampleRate\u0022:22050,\u0022SampleWidth\u0022:2,\u0022Channels\u0022:1}",
+      "DurationMs": 397
+    },
+    {
+      "Name": "TTS to STT round trip",
+      "Status": "Passed",
+      "Detail": " This is a test of the local voice assistant.",
+      "DurationMs": 1159
+    },
+    {
+      "Name": "LLM models and completion",
+      "Status": "Passed",
+      "Detail": "{\u0022AvailableModels\u0022:[\u0022Qwen3.6-35B-A3B-UD-Q4_K_XL\u0022],\u0022SelectedModel\u0022:\u0022Qwen3.6-35B-A3B-UD-Q4_K_XL\u0022,\u0022Reply\u0022:\u0022OK\u0022}",
+      "DurationMs": 2395
+    },
+    {
+      "Name": "EchoMuse controller web and setup API",
+      "Status": "Passed",
+      "Detail": "{\u0022Web\u0022:\u0022HTTP 200\u0022,\u0022NeedsSetup\u0022:false,\u0022AudioTransport\u0022:\u0022Not tested: controller adapter not implemented\u0022}",
+      "DurationMs": 11
+    }
+  ],
+  "Failures": 0
+}

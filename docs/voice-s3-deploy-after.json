@@ -1,0 +1,302 @@
+{
+  "health": {
+    "status": "Healthy",
+    "database": "Healthy",
+    "homeAssistant": "Connected",
+    "homeAssistantCache": {
+      "isStale": false,
+      "entityCount": 1813,
+      "stateEventCount": 6094,
+      "lastStateEventAt": "2026-10-25T11:35:01.1595183-04:00"
+    },
+    "components": [
+      {
+        "name": "Language model",
+        "status": "Healthy",
+        "detail": "Models endpoint HTTP 200; inference not tested by this probe."
+      },
+      {
+        "name": "Speech to text",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      },
+      {
+        "name": "Text to speech",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      }
+    ],
+    "satelliteCount": 3,
+    "activeVoiceSessions": 0,
+    "activeConversations": 0,
+    "implementationMilestone": 6
+  },
+  "modelSha256": "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+  "capturedAt": "2026-10-25T11:35:01.7230086-04:00",
+  "bridgeUnchanged": true,
+  "modelReadyAtStartup": true,
+  "originalEnvironmentPreserved": true,
+  "containerId": "a73770a39f2094d96bc27ef21ee71938cedbf054be17699fbbf283000f48b03e",
+  "endpointSettings": [
+    "Voice__Endpointing__Enabled=true",
+    "Voice__Endpointing__Shadow=true"
+  ],
+  "controllerUnchanged": true,
+  "originalEnvironmentFingerprint": "6B8B8CF058C9357DF26CE2DA072509DED6DE3AF992834B526DC9B62657F2FD62",
+  "image": "sha256:e1c1230e0749f5b6d93183818c4b9739cb2fdd415641402f838627294fea3b15",
+  "satellites": [
+    {
+      "device": {
+        "id": "ha-voice-0a587e",
+        "name": "HA Voice 0a587e",
+        "areaId": "",
+        "providerType": "ESPHome",
+        "endpoint": "10.44.65.164",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T01:32:29.055153-04:00",
+        "updatedAt": "2026-10-04T01:32:29.0551968-04:00"
+      },
+      "runtime": {
+        "endpointingPolicy": "Provider or manual",
+        "connectionState": "Offline",
+        "lastSeen": null,
+        "connectedAt": null,
+        "deviceName": "",
+        "model": "",
+        "firmwareVersion": "",
+        "espHomeVersion": "",
+        "apiVersion": "",
+        "voiceOwnership": 0,
+        "capabilities": {
+          "adaptiveEndpointing": false,
+          "streamingVoicePlayback": false,
+          "microphone": false,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": false,
+          "apiAudio": false,
+          "wakeWord": false,
+          "wakeWordConfiguration": false,
+          "speaker": false,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": false,
+          "volumeControl": false,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Unknown",
+        "currentVolume": null,
+        "muteState": null,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090L91181820LCV",
+        "name": "Kitchen",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T12:01:00.4750944-04:00",
+        "updatedAt": "2026-10-04T12:01:00.475138-04:00"
+      },
+      "runtime": {
+        "endpointingPolicy": "Semantic shadow; controller commits",
+        "connectionState": "Online",
+        "lastSeen": "2026-10-25T11:34:57.2619659-04:00",
+        "connectedAt": "2026-10-25T11:33:27.1718093-04:00",
+        "deviceName": "Kitchen",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.17.0",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "adaptiveEndpointing": false,
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_jarvis_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.8503937007874016,
+        "muteState": false,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090LF1182030WPN",
+        "name": "MBedroom",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T12:01:00.6801775-04:00",
+        "updatedAt": "2026-10-04T12:01:00.6801776-04:00"
+      },
+      "runtime": {
+        "endpointingPolicy": "Semantic shadow; controller commits",
+        "connectionState": "Online",
+        "lastSeen": "2026-10-25T11:34:57.2630947-04:00",
+        "connectedAt": "2026-10-25T11:33:27.1822618-04:00",
+        "deviceName": "MBedroom",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.17.0",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "adaptiveEndpointing": false,
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_mycroft_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.8740157480314961,
+        "muteState": false,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090LF1173730WP0",
+        "name": "Office",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-07T22:19:23.305076-04:00",
+        "updatedAt": "2026-10-07T22:19:23.3050761-04:00"
+      },
+      "runtime": {
+        "endpointingPolicy": "Semantic shadow; controller commits",
+        "connectionState": "Online",
+        "lastSeen": "2026-10-25T11:34:57.2639317-04:00",
+        "connectedAt": "2026-10-25T11:33:27.1853628-04:00",
+        "deviceName": "Office",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.18.0-ea.1",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "adaptiveEndpointing": false,
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_jarvis_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.7322834645669292,
+        "muteState": false,
+        "lastError": null
+      }
+    }
+  ],
+  "mounts": [
+    {
+      "Name": "assister_assister-data",
+      "Source": "/var/lib/docker/volumes/assister_assister-data/_data",
+      "Destination": "/data"
+    }
+  ],
+  "verifiedRevision": "04d39b33dc147dc267e65eba54f2edae27d365d8",
+  "restartCount": 0,
+  "gitStackLastCommit": "04d39b3",
+  "gitSyncStatus": "synced"
+}

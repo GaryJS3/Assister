@@ -1,0 +1,706 @@
+{
+  "productionRevision": "1457bea661ce18b432d20599d1f463382801ce1a",
+  "note": "Identical PCM hashes and pinned model; exact cause of host/runtime score differences is unresolved.",
+  "results": [
+    {
+      "absoluteDifference": 0.593413770198822,
+      "productionProbability": 0.8732463121414185,
+      "id": "012d34ed-a412-4e3b-94a4-01a04e929145",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.27983254194259644
+    },
+    {
+      "absoluteDifference": 0.5210126340389252,
+      "productionProbability": 0.4509245455265045,
+      "id": "03b75a3c-4a19-48b4-81a6-c79343ca8d25",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9719371795654297
+    },
+    {
+      "absoluteDifference": 0.50443035364151,
+      "productionProbability": 0.3126533627510071,
+      "id": "026d8bb8-1d65-4993-94c6-d2b5b5285049",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.8170837163925171
+    },
+    {
+      "absoluteDifference": 0.45043128728866577,
+      "productionProbability": 0.010262787342071533,
+      "id": "0159efcc-3a00-4d0c-80ee-af7fc750d575",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.4606940746307373
+    },
+    {
+      "absoluteDifference": 0.37760239839553833,
+      "productionProbability": 0.9557313919067383,
+      "id": "0000e086-fffb-4cde-818b-f4963bd68adc",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.5781289935112
+    },
+    {
+      "absoluteDifference": 0.37419408559799194,
+      "productionProbability": 0.6701734066009521,
+      "id": "01be66fc-f3c0-4b85-a77e-58085781b8d9",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.2959793210029602
+    },
+    {
+      "absoluteDifference": 0.3617537319660187,
+      "productionProbability": 0.012963265180587769,
+      "id": "00082f3f-8cc8-4a4b-9184-3230b3227cff",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.37471699714660645
+    },
+    {
+      "absoluteDifference": 0.32837140560150146,
+      "productionProbability": 0.0744141936302185,
+      "id": "0136df56-3b57-45fb-8205-aa4d4f1767b1",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.40278559923171997
+    },
+    {
+      "absoluteDifference": 0.23757821321487427,
+      "productionProbability": 0.6957479119300842,
+      "id": "0121aa47-025b-41ca-8a28-7a044a2e0d4a",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9333261251449585
+    },
+    {
+      "absoluteDifference": 0.23293399810791016,
+      "productionProbability": 0.4606940746307373,
+      "id": "012e52a1-22ef-4646-ace3-f3b018060d36",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.22776007652282715
+    },
+    {
+      "absoluteDifference": 0.21148613095283508,
+      "productionProbability": 0.24920794367790222,
+      "id": "01d3e1e6-6b4b-40c3-ae85-fbfbf7040f15",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.4606940746307373
+    },
+    {
+      "absoluteDifference": 0.19511348009109497,
+      "productionProbability": 0.8111233711242676,
+      "id": "02b52f9f-6e36-4af1-b2c5-53ea323f9eea",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.6160098910331726
+    },
+    {
+      "absoluteDifference": 0.13874071836471558,
+      "productionProbability": 0.828564465045929,
+      "id": "00da8ce0-d723-41f5-82c6-2beab9024ac9",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9673051834106445
+    },
+    {
+      "absoluteDifference": 0.0713377296924591,
+      "productionProbability": 0.12675365805625916,
+      "id": "00ad29e4-0aed-4ebb-99da-a6d17973f404",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.05541592836380005
+    },
+    {
+      "absoluteDifference": 0.060773611068725586,
+      "productionProbability": 0.9424859285354614,
+      "id": "01b1310c-cb4a-48f4-9f8a-a1681de1ac41",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.8817123174667358
+    },
+    {
+      "absoluteDifference": 0.050278425216674805,
+      "productionProbability": 0.9170267581939697,
+      "id": "017145bb-20b0-4d3d-8714-b9c13bbfcc4e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9673051834106445
+    },
+    {
+      "absoluteDifference": 0.043379902839660645,
+      "productionProbability": 0.03664523363113403,
+      "id": "01dcfe3b-05f5-4e61-9b72-95b2418e3e64",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.08002513647079468
+    },
+    {
+      "absoluteDifference": 0.04027414321899414,
+      "productionProbability": 0.015141785144805908,
+      "id": "00a65f08-15a3-465a-ab2d-79232faf258a",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.05541592836380005
+    },
+    {
+      "absoluteDifference": 0.03752151131629944,
+      "productionProbability": 0.008443742990493774,
+      "id": "01e7374c-8fb6-403c-9150-08d2001245a1",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.04596525430679321
+    },
+    {
+      "absoluteDifference": 0.03700798749923706,
+      "productionProbability": 0.9170267581939697,
+      "id": "00b53923-5402-4e87-9552-5fdda0797705",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9540347456932068
+    },
+    {
+      "absoluteDifference": 0.029703140258789062,
+      "productionProbability": 0.9854345321655273,
+      "id": "00486051-ed51-401d-8de6-ce2dcb086b4b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9557313919067383
+    },
+    {
+      "absoluteDifference": 0.026381701231002808,
+      "productionProbability": 0.027008235454559326,
+      "id": "01ea84df-a3f4-42de-b25e-54938b5c4265",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.053389936685562134
+    },
+    {
+      "absoluteDifference": 0.023634225130081177,
+      "productionProbability": 0.02063441276550293,
+      "id": "018679b5-e2aa-4f8e-9b33-40c699891613",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.044268637895584106
+    },
+    {
+      "absoluteDifference": 0.02363419532775879,
+      "productionProbability": 0.9793655872344971,
+      "id": "01bde439-f2c8-4e3a-b40a-b699e89fca5e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9557313919067383
+    },
+    {
+      "absoluteDifference": 0.018998265266418457,
+      "productionProbability": 0.0744141936302185,
+      "id": "004abbde-435d-4cdd-8cbe-26ed9253b312",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.05541592836380005
+    },
+    {
+      "absoluteDifference": 0.018821895122528076,
+      "productionProbability": 0.9660363793373108,
+      "id": "032307c2-bbab-4c52-85e4-824826b32ef2",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9848582744598389
+    },
+    {
+      "absoluteDifference": 0.017164230346679688,
+      "productionProbability": 0.9880069494247437,
+      "id": "02af8327-a404-4fff-a5d8-141356a04342",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.970842719078064
+    },
+    {
+      "absoluteDifference": 0.01296079158782959,
+      "productionProbability": 0.20124173164367676,
+      "id": "01463581-6c40-45ab-8bf2-7fabb2a74f7e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.21420252323150635
+    },
+    {
+      "absoluteDifference": 0.011675655841827393,
+      "productionProbability": 0.9777120351791382,
+      "id": "027bc5cf-2f79-4878-a22f-1cff502e48f2",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9660363793373108
+    },
+    {
+      "absoluteDifference": 0.01065295934677124,
+      "productionProbability": 0.9740077257156372,
+      "id": "0107095d-5126-4821-b30f-d3b832d07f86",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.963354766368866
+    },
+    {
+      "absoluteDifference": 0.008330196142196655,
+      "productionProbability": 0.01574048399925232,
+      "id": "029c3874-0624-4318-ac88-32da0b2531d8",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.024070680141448975
+    },
+    {
+      "absoluteDifference": 0.007615268230438232,
+      "productionProbability": 0.9816229939460754,
+      "id": "003dbc96-4c06-4c75-ab55-4383205c816f",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9740077257156372
+    },
+    {
+      "absoluteDifference": 0.007615208625793457,
+      "productionProbability": 0.9740077257156372,
+      "id": "024cfd2c-c3df-4e1b-84c9-bb0a5083b4bc",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9816229343414307
+    },
+    {
+      "absoluteDifference": 0.006623625755310059,
+      "productionProbability": 0.9859892129898071,
+      "id": "03103840-2efc-4479-82f7-a6f6e3d7a14a",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9793655872344971
+    },
+    {
+      "absoluteDifference": 0.004061341285705566,
+      "productionProbability": 0.9768375158309937,
+      "id": "0332c390-6660-4aa7-ace8-9e3115acd57d",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9808988571166992
+    },
+    {
+      "absoluteDifference": 0.0037658214569091797,
+      "productionProbability": 0.9823201894760132,
+      "id": "03c3163d-ad5b-4ece-b6bd-60e3f739ed11",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.978554368019104
+    },
+    {
+      "absoluteDifference": 0.0029546022415161133,
+      "productionProbability": 0.9823201894760132,
+      "id": "03ac12d7-f9d8-4b0c-a191-8042a8a272bd",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9793655872344971
+    },
+    {
+      "absoluteDifference": 0.0029161572456359863,
+      "productionProbability": 0.9889053702354431,
+      "id": "00da7dda-dd63-4098-aab9-f7c120cc8ac7",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9859892129898071
+    },
+    {
+      "absoluteDifference": 0.0028063058853149414,
+      "productionProbability": 0.9893293380737305,
+      "id": "02d11e9b-3351-427d-9f00-68f28ad79452",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9865230321884155
+    },
+    {
+      "absoluteDifference": 0.0024756193161010742,
+      "productionProbability": 0.9884648323059082,
+      "id": "0023bf2b-bb30-40ca-a1c2-b35fa716f65c",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9859892129898071
+    },
+    {
+      "absoluteDifference": 0.00220605731010437,
+      "productionProbability": 0.012468844652175903,
+      "id": "02fd4bef-96e9-4ae0-875f-27e21ec0d4e3",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.010262787342071533
+    },
+    {
+      "absoluteDifference": 0.0020925402641296387,
+      "productionProbability": 0.9829913973808289,
+      "id": "0185098b-1297-426b-8bea-f903c37b87c5",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9808988571166992
+    },
+    {
+      "absoluteDifference": 0.0019418001174926758,
+      "productionProbability": 0.9884648323059082,
+      "id": "02e7824e-0b7f-4bdf-b94d-268a4cf9e8ca",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9865230321884155
+    },
+    {
+      "absoluteDifference": 0.0019418001174926758,
+      "productionProbability": 0.9865230321884155,
+      "id": "0187c333-4bef-43ea-93be-5486b7cb588b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9884648323059082
+    },
+    {
+      "absoluteDifference": 0.0017296671867370605,
+      "productionProbability": 0.9859892129898071,
+      "id": "012b228c-3b1a-4a1b-ac96-8dfc7db5450c",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9842595458030701
+    },
+    {
+      "absoluteDifference": 0.0017296671867370605,
+      "productionProbability": 0.9859892129898071,
+      "id": "022b2a6a-cf64-4fca-a6cf-57e3e6b737f5",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9842595458030701
+    },
+    {
+      "absoluteDifference": 0.0015922784805297852,
+      "productionProbability": 0.978554368019104,
+      "id": "02a3819b-cf83-4d3d-88ef-48fa2520cea4",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9801466464996338
+    },
+    {
+      "absoluteDifference": 0.0015419721603393555,
+      "productionProbability": 0.9875311851501465,
+      "id": "01a2f125-c0a8-46cf-81a5-b9920a8d3fc3",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9859892129898071
+    },
+    {
+      "absoluteDifference": 0.0013741850852966309,
+      "productionProbability": 0.9889053702354431,
+      "id": "00bc421c-3105-4a54-b061-395e0be085a0",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9875311851501465
+    },
+    {
+      "absoluteDifference": 0.0012723803520202637,
+      "productionProbability": 0.9897372126579285,
+      "id": "000b426d-73eb-47d6-b152-c52841896d35",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9884648323059082
+    },
+    {
+      "absoluteDifference": 0.0012688040733337402,
+      "productionProbability": 0.9660363793373108,
+      "id": "01e38839-c1aa-463d-ac93-11e6aa8e9f88",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9673051834106445
+    },
+    {
+      "absoluteDifference": 0.0011753737926483154,
+      "productionProbability": 0.006944864988327026,
+      "id": "0046a354-daf4-4f63-a13e-fd17a99cc8f2",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.008120238780975342
+    },
+    {
+      "absoluteDifference": 0.0010462701320648193,
+      "productionProbability": 0.006175607442855835,
+      "id": "0242211f-84c1-430c-8ecd-58cb54499e85",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.007221877574920654
+    },
+    {
+      "absoluteDifference": 0.001008152961730957,
+      "productionProbability": 0.9865230321884155,
+      "id": "03299ea6-8dfe-439b-b1a7-a8ae5251645c",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9875311851501465
+    },
+    {
+      "absoluteDifference": 0.001008152961730957,
+      "productionProbability": 0.9875311851501465,
+      "id": "03313e4b-1518-4894-86b1-72c67845a138",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9865230321884155
+    },
+    {
+      "absoluteDifference": 0.0009679198265075684,
+      "productionProbability": 0.0057104527950286865,
+      "id": "014d6c69-7e4e-4303-a17e-a1c25e5f8af3",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006678372621536255
+    },
+    {
+      "absoluteDifference": 0.0008313953876495361,
+      "productionProbability": 0.007509768009185791,
+      "id": "012ab047-cbdb-4774-be4c-55b73ace5924",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006678372621536255
+    },
+    {
+      "absoluteDifference": 0.0007409155368804932,
+      "productionProbability": 0.009129464626312256,
+      "id": "00aaa57d-a9c4-485e-9683-4763e0abe9db",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.009870380163192749
+    },
+    {
+      "absoluteDifference": 0.0007116794586181641,
+      "productionProbability": 0.0057104527950286865,
+      "id": "018a6199-a5b5-469f-90ab-285a7efbc53d",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006422132253646851
+    },
+    {
+      "absoluteDifference": 0.0006857812404632568,
+      "productionProbability": 0.008443742990493774,
+      "id": "00d8ee40-acf1-48f3-8c51-9673bd74eb47",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.009129524230957031
+    },
+    {
+      "absoluteDifference": 0.0006844103336334229,
+      "productionProbability": 0.005491197109222412,
+      "id": "0054b6b4-7854-45d5-b84b-9e1800ee8434",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.0006844103336334229,
+      "productionProbability": 0.005491197109222412,
+      "id": "0127d424-d58e-4597-a226-e0f20ab50e3b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.0006844103336334229,
+      "productionProbability": 0.005491197109222412,
+      "id": "01bdb51e-6029-4674-a2cc-cc4fdd291ef5",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.0006461739540100098,
+      "productionProbability": 0.9836375713348389,
+      "id": "00ffbce7-0e05-40d4-af01-9c76d7c4981b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9829913973808289
+    },
+    {
+      "absoluteDifference": 0.0006220340728759766,
+      "productionProbability": 0.9842594861984253,
+      "id": "0218a3db-7c2f-4c44-ad15-1a8cb02a89eb",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9836374521255493
+    },
+    {
+      "absoluteDifference": 0.0005762577056884766,
+      "productionProbability": 0.9854345321655273,
+      "id": "01b724a1-3706-42ba-9743-1a4287f3ec67",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9848582744598389
+    },
+    {
+      "absoluteDifference": 0.0005649030208587646,
+      "productionProbability": 0.007509768009185791,
+      "id": "00523363-9c6c-44c9-97ee-5c7a79350846",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006944864988327026
+    },
+    {
+      "absoluteDifference": 0.000543445348739624,
+      "productionProbability": 0.007221817970275879,
+      "id": "000caa19-eec6-4fb3-81fd-4df344def97d",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006678372621536255
+    },
+    {
+      "absoluteDifference": 0.0005227327346801758,
+      "productionProbability": 0.006422132253646851,
+      "id": "027d1f81-cdfc-4bbf-b5f5-1027cda85242",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006944864988327026
+    },
+    {
+      "absoluteDifference": 0.0005027651786804199,
+      "productionProbability": 0.006175607442855835,
+      "id": "023fe30f-d721-45f4-8650-6e2777af3e5b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006678372621536255
+    },
+    {
+      "absoluteDifference": 0.0004944801330566406,
+      "productionProbability": 0.9870367050170898,
+      "id": "0000945c-2d2c-442a-b677-42ddd81f56ca",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9875311851501465
+    },
+    {
+      "absoluteDifference": 0.00047576427459716797,
+      "productionProbability": 0.9875311851501465,
+      "id": "01a52579-c91c-43e5-aec5-9af7df718560",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9880069494247437
+    },
+    {
+      "absoluteDifference": 0.00046515464782714844,
+      "productionProbability": 0.0057104527950286865,
+      "id": "00b81c7f-9fa6-4640-8d28-18830402521b",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.00046515464782714844,
+      "productionProbability": 0.0057104527950286865,
+      "id": "02be3396-7052-48ec-adb0-94aab90bcf0e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.00046515464782714844,
+      "productionProbability": 0.0057104527950286865,
+      "id": "018469bc-f236-456b-95a2-0c37a88f9010",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006175607442855835
+    },
+    {
+      "absoluteDifference": 0.0004578828811645508,
+      "productionProbability": 0.9880069494247437,
+      "id": "017d4b94-85ce-454d-8877-44735cbdde3a",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9884648323059082
+    },
+    {
+      "absoluteDifference": 0.00044733285903930664,
+      "productionProbability": 0.005491197109222412,
+      "id": "027ad0cd-0daf-4690-a04a-3e9447878170",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005938529968261719
+    },
+    {
+      "absoluteDifference": 0.0004405379295349121,
+      "productionProbability": 0.9884648323059082,
+      "id": "01581aaa-a054-4128-b577-043c85cfa4da",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9889053702354431
+    },
+    {
+      "absoluteDifference": 0.00043022632598876953,
+      "productionProbability": 0.005280286073684692,
+      "id": "02400686-9f8e-47b6-b10b-bd522ed824f4",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005710512399673462
+    },
+    {
+      "absoluteDifference": 0.00043022632598876953,
+      "productionProbability": 0.005280286073684692,
+      "id": "02d66f1a-d9b8-49dd-9366-a519814614f9",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005710512399673462
+    },
+    {
+      "absoluteDifference": 0.00043022632598876953,
+      "productionProbability": 0.005280286073684692,
+      "id": "00ed15ce-0563-49c4-8d83-41915e67f12a",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005710512399673462
+    },
+    {
+      "absoluteDifference": 0.0004239678382873535,
+      "productionProbability": 0.9893293380737305,
+      "id": "0073d3a7-9315-4065-b57d-e2ffe1fbd6d6",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9889053702354431
+    },
+    {
+      "absoluteDifference": 0.0004239678382873535,
+      "productionProbability": 0.9889053702354431,
+      "id": "02230843-f3b0-4561-b30a-5b9c5f2d6126",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9893293380737305
+    },
+    {
+      "absoluteDifference": 0.0004139244556427002,
+      "productionProbability": 0.005077272653579712,
+      "id": "0116ce48-2d31-4246-8732-0ae7bbac88a5",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005491197109222412
+    },
+    {
+      "absoluteDifference": 0.0004139244556427002,
+      "productionProbability": 0.005077272653579712,
+      "id": "028631a0-d69c-4ddb-8328-73f390fe69b4",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005491197109222412
+    },
+    {
+      "absoluteDifference": 0.00040787458419799805,
+      "productionProbability": 0.9897372126579285,
+      "id": "0016920a-93fd-4351-87db-a81abb527cfb",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9893293380737305
+    },
+    {
+      "absoluteDifference": 0.00040787458419799805,
+      "productionProbability": 0.9893293380737305,
+      "id": "037602d7-9598-4716-bc3b-494b9eed9698",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9897372126579285
+    },
+    {
+      "absoluteDifference": 0.00040787458419799805,
+      "productionProbability": 0.9897372126579285,
+      "id": "035a9f86-ac92-494e-8108-11922539da10",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9893293380737305
+    },
+    {
+      "absoluteDifference": 0.0002993345260620117,
+      "productionProbability": 0.007809102535247803,
+      "id": "02cf7371-8da0-4f8e-b59d-30fd0764d6c1",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.007509768009185791
+    },
+    {
+      "absoluteDifference": 0.00027695298194885254,
+      "productionProbability": 0.007221817970275879,
+      "id": "00a9e2a5-bf81-46cc-ab6a-2b82e4b31331",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006944864988327026
+    },
+    {
+      "absoluteDifference": 0.0002562403678894043,
+      "productionProbability": 0.006422132253646851,
+      "id": "005a1740-ba14-40fa-bc62-21662e35723d",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006678372621536255
+    },
+    {
+      "absoluteDifference": 0.0002465248107910156,
+      "productionProbability": 0.006175607442855835,
+      "id": "019c4ebd-8eec-4644-a7bd-c19a963180b9",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.006422132253646851
+    },
+    {
+      "absoluteDifference": 0.00022807717323303223,
+      "productionProbability": 0.0057104527950286865,
+      "id": "02ba50b3-5be0-4966-8453-9a04b82cb793",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005938529968261719
+    },
+    {
+      "absoluteDifference": 0.0002193152904510498,
+      "productionProbability": 0.005491197109222412,
+      "id": "021a65a1-0ecc-4285-8f08-065557b4dccb",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.005710512399673462
+    },
+    {
+      "absoluteDifference": 1.1920928955078125E-07,
+      "productionProbability": 0.9901297092437744,
+      "id": "034fab3e-4f95-4529-8f70-bba6591cb60e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9901295900344849
+    },
+    {
+      "absoluteDifference": 5.960464477539063E-08,
+      "productionProbability": 0.007221817970275879,
+      "id": "00c9d1f1-09df-491c-b1a1-789227e4abba",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.007221877574920654
+    },
+    {
+      "absoluteDifference": 5.960464477539063E-08,
+      "productionProbability": 0.9848582148551941,
+      "id": "00641c7b-8154-4673-8b34-dd1bfd11d449",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9848582744598389
+    },
+    {
+      "absoluteDifference": 0.0,
+      "productionProbability": 0.9897372126579285,
+      "id": "039217d8-f3d7-4042-815c-08228656f75e",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9897372126579285
+    },
+    {
+      "absoluteDifference": 0.0,
+      "productionProbability": 0.975929319858551,
+      "id": "03059331-9619-420d-a150-29c9d3eabee3",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.975929319858551
+    },
+    {
+      "absoluteDifference": 0.0,
+      "productionProbability": 0.9897372126579285,
+      "id": "0334f046-2d49-4ca7-abca-c4cb22b102ff",
+      "pcmHashMatches": true,
+      "workstationProbability": 0.9897372126579285
+    }
+  ]
+}

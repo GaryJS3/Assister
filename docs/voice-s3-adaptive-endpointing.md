@@ -24,7 +24,7 @@ configurable options under `Voice:Endpointing`.
 
 Audio is evaluated in 20 ms frames independent of transport chunk boundaries.
 Only the last eight seconds are retained for the classifier. Inference runs off
-the capture path with one shared inference slot, a 400 ms analysis deadline and
+the capture path with one shared inference slot, a 400 ms active analysis deadline (1000 ms in shadow) and
 bounded cleanup. Resumed speech invalidates/cancels the old score. Startup warmup
 avoids paying initial model loading on the first pause. Missing/corrupt models,
 model errors, saturation, cancellation and incomplete results preserve fallback.
@@ -63,7 +63,7 @@ clipping and Whisper scaling. Output shape is [1,80,800].
 Against the independently installed upstream `WhisperFeatureExtractor` on a real
 speech clip, maximum absolute feature error was 1.9431e-5 and mean error 9.93e-8.
 A checked-in synthetic golden fixture tests 99 reference values across frequency
-bins, padding, speech boundaries and quiet frames. Silence, resampling-independent
+bins, padding, speech boundaries and quiet frames. Silence, transport-independent
 frame handling and bounded context are also tested. See
 [model provenance](voice-s3-model-provenance.json).
 
@@ -145,3 +145,92 @@ state. Push-to-talk/manual capture is not implicitly converted to automatic VAD.
 Active enablement requires resolving the failure cases and validating on fresh
 complete/incomplete speech, real pauses/background noise and actual household
 microphones. Physical EchoMuse timing and ESPHome hardware acceptance remain open.
+
+## Production verification and acceptance decision
+
+The production evaluation repeated all 100 clips inside the packaged application
+container, using the same pinned model and identical PCM hashes:
+[production measurements](voice-s3-production-model-evaluation.json).
+On Automation, 47/50 complete clips scored >= 0.8 and **4/50 incomplete clips
+also scored >= 0.8**. Forty-two incomplete clips scored <= 0.2. The quality gate
+therefore remains closed on the actual target host as well as the workstation.
+
+| Production model call | Median | Nearest-rank p95 |
+| --- | ---: | ---: |
+| Feature extraction | 159.37 ms | 196.44 ms |
+| ONNX inference | 364.05 ms | 401.16 ms |
+| Total wall time | **525.79 ms** | 581.49 ms |
+| Process CPU time | 926.41 ms | 1048.29 ms |
+
+All 100 measured calls exceeded the active policy's 400 ms deadline. These are
+standalone full-clip-plus-quiet model calls; the live pause context can differ.
+Nevertheless, they do not demonstrate a useful production gain under the current
+active budget. Shadow analysis now has a separate bounded **1000 ms observation
+budget**, so slower-host scores can be recorded without changing capture commits.
+Active mode retains its stricter deadline. The workstation replay saving is not
+an enabled live speedup, nor a prediction of the production host's speedup.
+
+Scores also differ substantially across host/runtime combinations. Every PCM
+hash matched, but the maximum probability difference was 0.5934:
+[cross-host comparison](voice-s3-cross-host-comparison.json). A separate read-only
+diagnostic supplied the exact workstation feature tensor and model bytes to the
+installed controller's Python ONNX Runtime 1.20.1 in an isolated process. On the
+selected incomplete clip it returned 0.9283, versus workstation C# / ORT 1.31.0
+at 0.2798 and production C# / ORT 1.31.0 at 0.8732. See
+[cross-runtime reference](voice-s3-cross-runtime-reference.json).
+This confirms the large difference cannot be dismissed as a clip/PCM mismatch;
+the precise execution/runtime cause remains unresolved. No controller files,
+configuration or live voice connection were changed by that diagnostic.
+
+Final application source revision:
+`04d39b33dc147dc267e65eba54f2edae27d365d8`.
+It is deployed through Dockhand Git stack 10 in Automation environment 8, with
+both `VOICE_ADAPTIVE_ENDPOINTING_ENABLED=true` and
+`VOICE_ADAPTIVE_ENDPOINTING_SHADOW=true`. The existing 32 stack variables are
+preserved; the container's full original environment fingerprint matches after
+excluding the two newly added flags. The data volume, EchoMuse controller and
+ESPHome bridge containers are unchanged. All three EchoMuse devices remain
+online with S2 streaming enabled and report `Semantic shadow; controller commits`.
+ESPHome remains offline.
+
+[Before](voice-s3-deploy-before.json) and [after](voice-s3-deploy-after.json) record
+container/image/revision, environment fingerprints, mount identity, health,
+restart count and satellite state. The final image was built from an exact Git
+archive, with a verified revision label. The previous S2 image is retained as
+`assister-assister:rollback-s3-37ab58b`. Dockhand's deploy-stream response again
+said `success:false, error:"No result"`; actual image identity and health establish
+the running result instead.
+
+Production testing caught a packaging error in the initial S3 image: remote ADD
+set the model directory to mode 0444, preventing traversal by the application
+user. The service remained available and failed back. Revision `cf8a133` corrected
+the directory to 0755 and added an image-build readability check executed as the
+application user. Live SHA256 verification and the `Semantic endpoint model ready;
+shadow mode: True` startup event confirmed the repaired model loads and runs.
+The subsequent shadow-budget and local-VAD fixes are included in the final source.
+
+The 100-clip production measurement was taken at `1457bea`; the final change only
+preserves the local conservative VAD as the source for shadow observation. Model,
+feature extraction, packages and model-call benchmark code are unchanged. Shadow
+therefore preserves both controller-owned endpoints and the existing C# local
+endpoint behavior, rather than bypassing local VAD. A regression compares exactly
+the same conservative source with and without shadow observation.
+
+Final validation: **526 .NET tests** (464 unit, 62 integration), **18 browser
+regressions**, and **70 focused controller tests** passed. One earlier integration
+run had a transient failure in the unrelated rich-client device-request test;
+the targeted rerun and later full integration runs passed without changing that
+feature. Eight deployed dependency checks passed, including real TTS, TTS-to-STT,
+model completion and authenticated Home Assistant access:
+[service results](voice-s3-postdeploy-services.json).
+
+S3 is not marked complete for active capture: quality failures, CPU budget,
+cross-host/runtime numerical validation and real microphone cutoff testing remain
+open. The deployed result provides safe observation and a tested protocol path
+for a later qualified active rollout; it does not change current household
+capture decisions or claim an actual household response-speed gain.
+
+The final immediate restart probe reached `/health` before the listener was
+ready; its health check returned HttpRequestException while the other checks
+passed. After independently waiting for Healthy, all eight service checks passed
+on the final container. No latency result was taken from that startup interval.
