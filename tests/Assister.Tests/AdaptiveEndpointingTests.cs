@@ -47,6 +47,19 @@ public sealed class AdaptiveEndpointingTests
         Assert.Equal(120, Count); Assert.Equal(0, Model.Calls); Assert.Equal(0, Satellite.EndRequests);
     }
     [Fact]
+    public async Task ShadowPreservesAnExistingLocalConservativeEndpoint()
+    {
+        var Satellite = new FakeSatellite(false);
+        var Count = 0;
+        var ReferenceCount = 0;
+        await foreach (var _ in VoiceActivityDetector.UntilSilenceAsync(new FakeSatellite(false), .004, default)) ReferenceCount++;
+        var Baseline = VoiceActivityDetector.UntilSilenceAsync(Satellite, .004, default);
+        await foreach (var _ in AdaptiveEndpointing.CaptureAsync(Satellite, new FakeClassifier(.99), new(), true, default, Source: Baseline)) Count++;
+        Assert.Equal(ReferenceCount, Count);
+        Assert.Equal(1, Satellite.LocalEnds);
+        Assert.Equal(0, Satellite.EndRequests);
+    }
+    [Fact]
     public async Task UnsupportedProviderCannotBeControlled()
     {
         var Satellite = new FakeSatellite(true) { SupportsAdaptiveEndpointing = false };

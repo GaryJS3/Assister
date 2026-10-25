@@ -15,7 +15,8 @@ public interface IAdaptiveEndpointingControl
 public static class AdaptiveEndpointing
 {
     public static async IAsyncEnumerable<AudioChunk> CaptureAsync(ISatelliteConnection Satellite, ITurnCompletionClassifier Classifier,
-        AdaptiveTurnOptions Options, bool Shadow, [EnumeratorCancellation] CancellationToken Token)
+        AdaptiveTurnOptions Options, bool Shadow, [EnumeratorCancellation] CancellationToken Token,
+        IAsyncEnumerable<AudioChunk>? Source = null)
     {
         var Control = Satellite as IAdaptiveEndpointingControl;
         var Remote = Satellite is IProviderEndpointing { OwnsEndpointing: true };
@@ -37,7 +38,7 @@ public static class AdaptiveEndpointing
         double FeatureMs = 0, InferenceMs = 0;
         try
         {
-            await foreach (var Chunk in Satellite.ReceiveAudioAsync(Token).WithCancellation(Token))
+            await foreach (var Chunk in (Source ?? Satellite.ReceiveAudioAsync(Token)).WithCancellation(Token))
             {
                 if (Chunk.SampleRate != 16000 || Chunk.SampleWidth != 2 || Chunk.Channels != 1)
                 {

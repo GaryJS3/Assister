@@ -67,11 +67,13 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             var CanControlEndpoint = Satellite is not IProviderEndpointing { OwnsEndpointing: true }
                 || Satellite is IAdaptiveEndpointingControl { SupportsAdaptiveEndpointing: true };
             var LocalVad = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true };
-            var Input = Adaptive && (LocalVad || Satellite is IProviderEndpointing { OwnsEndpointing: true }) && (ShadowEndpointing || CanControlEndpoint)
-                ? AdaptiveEndpointing.CaptureAsync(Satellite, TurnClassifier!, AdaptiveTurnOptions.FromConfiguration(Configuration), ShadowEndpointing, Timeout.Token)
-                : Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true }
+            IAsyncEnumerable<AudioChunk> ConservativeInput() => LocalVad
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
                 : Satellite.ReceiveAudioAsync(Timeout.Token);
+            var Input = Adaptive && (LocalVad || Satellite is IProviderEndpointing { OwnsEndpointing: true }) && (ShadowEndpointing || CanControlEndpoint)
+                ? AdaptiveEndpointing.CaptureAsync(Satellite, TurnClassifier!, AdaptiveTurnOptions.FromConfiguration(Configuration), ShadowEndpointing, Timeout.Token,
+                    Source: ShadowEndpointing ? ConservativeInput() : null)
+                : ConservativeInput();
             DateTimeOffset? AudioEnded = null;
             DateTimeOffset? FirstAudioAt = null;
             long PcmBytes = 0;
