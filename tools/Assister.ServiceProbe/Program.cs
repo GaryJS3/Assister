@@ -6,6 +6,7 @@ using Assister.Contracts;
 using Assister.Speech.Wyoming;
 
 if (args.Contains("--rich-speech")) return await RichSpeechProbe.RunAsync(args);
+if (args.Contains("--control-receipts")) return await ControlReceiptProbe.RunAsync();
 
 if (args.Contains("--control-language")) { return await ControlLanguageProbe.RunAsync(); }
 

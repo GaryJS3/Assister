@@ -35,6 +35,10 @@ public static class LanguageParser
             if (Value.StartsWith(Prefix, StringComparison.Ordinal)) { return Value[Prefix.Length..]; }
         return Value;
     }
+
+    public static string WithoutGroupQuantifier(string Target) => Regex.Replace(Noun(Target),
+        @"^(?:all|both)(?: of)? (?:the )?(?=.*\b(?:lights|switches|fans)$)", "",
+        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 }
 
 public sealed class IntentClassifier : IIntentEngine

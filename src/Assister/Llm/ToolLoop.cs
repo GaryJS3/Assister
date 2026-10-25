@@ -79,6 +79,21 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
         var SearchFailed = false;
         var ControlPrecondition = false;
         var SuccessfulSearches = new HashSet<string>();
+        var EntityNames = new Dictionary<string, string>();
+        string ConfirmedControlResponse()
+        {
+            var Names = string.Join(" and ", Context.CompletedControls.Order().Select(Id => EntityNames.GetValueOrDefault(Id, Id)));
+            var Confirmation = Context.Control?.Action switch
+            {
+                "turn_on" => "Turned on " + Names + ".",
+                "turn_off" => "Turned off " + Names + ".",
+                "set_brightness" => "Set " + Names + " to " + Context.Control.Brightness + " percent brightness.",
+                "set_fan_speed" => "Set " + Names + " to " + Context.Control.SpeedPercent + " percent speed.",
+                _ => "The action completed for " + Names + "."
+            };
+            return ControlConfirmed ? Confirmation : Confirmation
+                + " Completion of the remaining targets was not confirmed. Please check them before trying again.";
+        }
         for (var Index = 0; Index <= Iterations; Index++)
         {
             var RoundTools = ReminderMutation is not null && !ReminderConfirmed
@@ -115,20 +130,34 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
             LlmResponse Response;
             var CanSpeak = OnText is not null && (RoundTools.Length == 0 || Choice == "none") && (!Control || ControlConfirmed) && (ReminderMutation is null || ReminderConfirmed);
             await Assister.Voice.VoiceFeedback.EmitAsync("ai-think", Timeout.Token);
-            if (OnText is null) { Response = await Model.CompleteAsync(ModelRequest, Timeout.Token); }
-            else
+            try
             {
-                LlmResponse? Completed = null;
-                await foreach (var Event in Model.StreamAsync(ModelRequest, Timeout.Token).WithCancellation(Timeout.Token))
+                if (OnText is null) { Response = await Model.CompleteAsync(ModelRequest, Timeout.Token); }
+                else
                 {
-                    if (Completed is not null) { throw new InvalidOperationException("Model emitted data after completion."); }
-                    if (Event.ReasoningDelta is { } ReasoningDelta) Thinking.Delta(ReasoningDelta);
-                    if (Event.TextDelta is { } ModelText) ModelOutput.Delta(ModelText);
-                    if (CanSpeak && Event.TextDelta is { Length: > 0 } Delta) { await OnText(Delta, Timeout.Token); }
-                    Completed = Event.Completed;
+                    LlmResponse? Completed = null;
+                    await foreach (var Event in Model.StreamAsync(ModelRequest, Timeout.Token).WithCancellation(Timeout.Token))
+                    {
+                        if (Completed is not null) { throw new InvalidOperationException("Model emitted data after completion."); }
+                        if (Event.ReasoningDelta is { } ReasoningDelta) Thinking.Delta(ReasoningDelta);
+                        if (Event.TextDelta is { } ModelText) ModelOutput.Delta(ModelText);
+                        if (CanSpeak && Event.TextDelta is { Length: > 0 } Delta) { await OnText(Delta, Timeout.Token); }
+                        Completed = Event.Completed;
+                    }
+                    Response = Completed ?? throw new InvalidOperationException("Model stream did not complete.");
+                    if (CanSpeak && Response.ToolCalls.Count > 0) { throw new InvalidOperationException("Unexpected tool call in a speech-only round."); }
                 }
-                Response = Completed ?? throw new InvalidOperationException("Model stream did not complete.");
-                if (CanSpeak && Response.ToolCalls.Count > 0) { throw new InvalidOperationException("Unexpected tool call in a speech-only round."); }
+            }
+            catch (Exception Error) when (!CancellationToken.IsCancellationRequested && Context.CompletedControls.Count > 0
+                && Error is HttpRequestException or OperationCanceledException or InvalidOperationException or IOException or JsonException)
+            {
+                // The device action is already committed. A later prose-generation failure cannot undo its receipt.
+                Round.Detail("failureCategory", Error.GetType().Name);
+                Round.Detail("confirmedActionFallback", true);
+                Round.Complete("failed");
+                var Confirmation = ConfirmedControlResponse();
+                if (!ControlConfirmed) throw new ControlNotConfirmedException(Confirmation);
+                return Confirmation;
             }
             await Assister.Voice.VoiceFeedback.EmitAsync("ai-thought", Timeout.Token);
             if (OnText is null && Response.Reasoning is { } Reasoning) Thinking.Delta(Reasoning);
@@ -261,6 +290,7 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
                             if (Entity.ValueKind != JsonValueKind.Object || !Entity.TryGetProperty("entity_id", out var Id)
                                 || !Entity.TryGetProperty("name", out var Name)) { continue; }
                             var EntityId = Id.GetString()!;
+                            EntityNames[EntityId] = Name.GetString()!;
                             if (!EntityId.StartsWith("light.", StringComparison.Ordinal) && !EntityId.StartsWith("switch.", StringComparison.Ordinal) && !EntityId.StartsWith("fan.", StringComparison.Ordinal)) { continue; }
                             if (DeviceContext is not null && SuccessfulSearches.Count == 0) { DeviceContext.References = []; }
                             SuccessfulSearches.Add(EntityId);

@@ -17,6 +17,149 @@ namespace Assister.Tests;
 
 public sealed class DeviceInteractionTests
 {
+    private static void LoadAuditedKitchen(Fixture App)
+    {
+        App.Cache.Load(Json("""
+            [{"entity_id":"light.kitchen_main_lights","state":"on","attributes":{"friendly_name":"Main Lights","supported_color_modes":["brightness"]}},
+             {"entity_id":"light.kitchen_sink_light","state":"on","attributes":{"friendly_name":"Sink Light","supported_color_modes":["brightness"]}},
+             {"entity_id":"light.kitchen_living_room_lights","state":"on","attributes":{"friendly_name":"Living Room Lights","supported_color_modes":["brightness"]}}]
+            """), Json("{}"), Json("""
+            [{"entity_id":"light.kitchen_main_lights","area_id":"kitchen"},
+             {"entity_id":"light.kitchen_sink_light","area_id":"kitchen"},
+             {"entity_id":"light.kitchen_living_room_lights","area_id":"living_room"}]
+            """), Json("[]"), Json("""[{"area_id":"kitchen","name":"Kitchen"},{"area_id":"living_room","name":"Living Room"}]"""));
+        App.Cache.SetStale(false);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AuditedSemanticControlConfirmsOnlyKitchenTargets(bool FailingReply)
+    {
+        await using var App = await Fixture.Create(Semantic: true);
+        LoadAuditedKitchen(App);
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen light","area":"kitchen"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_ids":["light.kitchen_main_lights","light.kitchen_sink_light"],"action":"turn_off"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("interpret", "interpret_device_request", """{"action":"turn_off","target":"kitchen lights"}""")], "tool_calls"));
+        if (!FailingReply) App.Model.Responses.Enqueue(new("Turned off both kitchen lights.", [], "stop"));
+        // An empty response queue throws InvalidOperationException on the post-control model call.
+        var Result = await App.Send("Hey Jarvis, set kitchen lights to off.");
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.DoesNotContain("unavailable", Result.Response);
+        Assert.Equal("none", App.Model.Requests.Last().ToolChoice);
+        Assert.Equal(["light.kitchen_main_lights", "light.kitchen_sink_light"], Assert.Single(App.Actions.Calls).EntityIds);
+        if (FailingReply)
+        {
+            Assert.Contains("Main Lights", Result.Response);
+            Assert.Contains("Sink Light", Result.Response);
+            Assert.DoesNotContain("Living Room", Result.Response);
+        }
+    }
+
+    [Theory]
+    [InlineData("Hey Jarvis, turn off all kitchen lights.")]
+    [InlineData("turn off all the kitchen lights")]
+    [InlineData("turn off all of the kitchen lights")]
+    [InlineData("turn off both kitchen lights")]
+    [InlineData("turn off all lights in the kitchen")]
+    [InlineData("set all kitchen lights to 10 percent")]
+    public async Task AuditedGroupCommandStaysInKitchenAndAvoidsModel(string Message)
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        var Result = await App.Send(Message);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("direct-intent", Result.HandledBy);
+        Assert.Equal(["light.kitchen_main_lights", "light.kitchen_sink_light"], Assert.Single(App.Actions.Calls).EntityIds);
+        Assert.Empty(App.Model.Requests);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplyFailurePreservesOnlyConfirmedPartialControls(bool Streaming)
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights","area":"kitchen"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"light.kitchen_main_lights","action":"turn_off"}""")], "tool_calls"));
+        var Error = await Assert.ThrowsAsync<ControlNotConfirmedException>(() => App.Loop.RespondAsync(
+            new("turn off kitchen lights"), [], CancellationToken.None,
+            OnText: Streaming ? (_, _) => Task.CompletedTask : null));
+        Assert.Contains("Main Lights", Error.Response);
+        Assert.Contains("remaining", Error.Response);
+        Assert.Single(App.Actions.Calls);
+    }
+
+    [Theory]
+    [InlineData(false, "invalid-response")]
+    [InlineData(true, "invalid-response")]
+    [InlineData(false, "http")]
+    [InlineData(true, "http")]
+    [InlineData(false, "timeout")]
+    [InlineData(true, "timeout")]
+    public async Task CompletedActionSurvivesReplyProviderFailure(bool Streaming, string Failure)
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights","area":"kitchen"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_ids":["light.kitchen_main_lights","light.kitchen_sink_light"],"action":"turn_off"}""")], "tool_calls"));
+        App.Model.ReplyFailure = Failure switch
+        {
+            "http" => new HttpRequestException("Provider failed"),
+            "timeout" => new OperationCanceledException("Provider deadline"),
+            _ => new InvalidOperationException("Incomplete model response")
+        };
+        var Answer = await App.Loop.RespondAsync(new("turn off kitchen lights"), [], CancellationToken.None,
+            OnText: Streaming ? (_, _) => Task.CompletedTask : null);
+        Assert.Equal("Turned off Main Lights and Sink Light.", Answer);
+        Assert.Single(App.Actions.Calls);
+        Assert.Equal("none", App.Model.Requests.Last().ToolChoice);
+        Assert.Equal(3, App.Model.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CallerCancellationAfterControlStillCancelsTheRequest(bool Streaming)
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        using var Lifetime = new CancellationTokenSource();
+        App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights","area":"kitchen"}""")], "tool_calls"));
+        App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_ids":["light.kitchen_main_lights","light.kitchen_sink_light"],"action":"turn_off"}""")], "tool_calls"));
+        App.Model.BeforeReplyFailure = Lifetime.Cancel;
+        App.Model.ReplyFailure = new OperationCanceledException(Lifetime.Token);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => App.Loop.RespondAsync(new("turn off kitchen lights"), [], Lifetime.Token,
+            OnText: Streaming ? (_, _) => Task.CompletedTask : null));
+        Assert.Single(App.Actions.Calls);
+    }
+
+    [Fact]
+    public async Task KitchenToolCannotControlLivingRoomLightEvenAfterBroadSearch()
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        var Context = new ToolExecutionContext(new("turn off all kitchen lights"), []);
+        await App.Tool("ha_search").ExecuteAsync(Json("""{"query":"lights"}"""), Context, default);
+        var Result = await App.Tool("ha_control").ExecuteAsync(Json("""{"entity_id":"light.kitchen_living_room_lights","action":"turn_off"}"""), Context, default);
+        Assert.Contains("ambiguous_targets", Result);
+        Assert.Empty(App.Actions.Calls);
+    }
+
+    [Theory]
+    [InlineData("turn off kitchen light", "ambiguous")]
+    [InlineData("turn off all conservatory lights", "not-found")]
+    [InlineData("turn off all lights", "ambiguous")]
+    public async Task UnresolvedGroupScopeDoesNotWidenToOtherRooms(string Message, string Outcome)
+    {
+        await using var App = await Fixture.Create();
+        LoadAuditedKitchen(App);
+        Assert.Equal(Outcome, (await App.Send(Message)).Outcome);
+        Assert.Empty(App.Actions.Calls);
+        Assert.Empty(App.Model.Requests);
+    }
+
     [Fact]
     public async Task FoundDeviceWithUnresolvedControlIsClarificationNotSuccessOrMissingDevice()
     {
@@ -519,10 +662,20 @@ public sealed class DeviceInteractionTests
     }
     private sealed class FakeModel : ILanguageModel
     {
+        public Exception? ReplyFailure { get; set; }
+        public Action? BeforeReplyFailure { get; set; }
         public Queue<LlmResponse> Responses { get; } = [];
         public List<LlmRequest> Requests { get; } = [];
         public Task<LlmResponse> CompleteAsync(LlmRequest Request, CancellationToken Token)
-        { Requests.Add(Request with { Messages = Request.Messages.ToArray() }); return Task.FromResult(Responses.Dequeue()); }
+        {
+            Requests.Add(Request with { Messages = Request.Messages.ToArray() });
+            if (Responses.Count == 0 && ReplyFailure is not null)
+            {
+                BeforeReplyFailure?.Invoke();
+                throw ReplyFailure;
+            }
+            return Task.FromResult(Responses.Dequeue());
+        }
         public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest Request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken Token)
         {

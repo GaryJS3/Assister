@@ -38,8 +38,7 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     private EntityResolutionResult ResolveSingle(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
     {
         var Target = LanguageParser.Noun(Intent.Target);
-        Target = System.Text.RegularExpressions.Regex.Replace(Target, @"^(?:all|both)(?: of the)? (?=(?:lights|switches|fans)$)", "",
-            System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        Target = LanguageParser.WithoutGroupQuantifier(Target);
         var Candidates = Snapshot.Entities.Where(Entity => Eligible(Entity, Intent.Kind)).ToArray();
         var Area = Intent.ExplicitArea;
         var Domain = Intent.TargetDomain ?? (Intent.Kind == DirectIntentKind.SetBrightness ? "light" : Intent.Kind == DirectIntentKind.SetFanSpeed ? "fan" : null);

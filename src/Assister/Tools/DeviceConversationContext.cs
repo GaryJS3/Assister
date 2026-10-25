@@ -113,12 +113,23 @@ public sealed record ControlRequest(string Action, string Target, int? Brightnes
             if (ReferenceWords.Contains("switch")) { Resolved = Resolved.Where(Entity => Entity.Domain == "switch").ToArray(); }
             return Resolved.Length == References.Length ? Resolved : [];
         }
-        var NamedTarget = Regex.Replace(Target, @"^(?:both|all)\s+", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        var NamedTarget = LanguageParser.WithoutGroupQuantifier(Target);
+        NamedTarget = Regex.Replace(NamedTarget, @"^(?:both|all)\s+", "", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
         var Domain = Action == "set_fan_speed" ? "fan" : HomeAssistantEntitySearch.Words(NamedTarget).Contains("light") || Action == "set_brightness" ? "light"
             : HomeAssistantEntitySearch.Words(Target).Contains("switch") ? "switch" : null;
         var Generic = Domain is not null && HomeAssistantEntitySearch.Words(NamedTarget).SequenceEqual([Domain]);
         var EffectiveArea = Area ?? (Generic ? SatelliteArea : null);
         if (Generic && EffectiveArea is null && !Target.StartsWith("all ", StringComparison.Ordinal)) { return []; }
+        // An entity ID can contain an old room name. Use the same area-aware resolution as
+        // direct commands so incidental ID matches cannot expand the authorized target set.
+        var Scoped = Area is not null || Snapshot.Entities.Select(Entity => Entity.AreaName).OfType<string>()
+            .Any(Name => NamedTarget.StartsWith(LanguageParser.Normalize(Name) + " ", StringComparison.Ordinal));
+        if (Scoped)
+            return new HomeAssistantEntityResolver().Resolve(new(Action switch
+            {
+                "turn_on" => DirectIntentKind.TurnOn, "turn_off" => DirectIntentKind.TurnOff,
+                "set_fan_speed" => DirectIntentKind.SetFanSpeed, _ => DirectIntentKind.SetBrightness
+            }, NamedTarget, Brightness, Area, Domain, SpeedPercent), SatelliteArea, Snapshot).Entities.ToArray();
         var Parts = NormalizeTargetList(NamedTarget).Split(" and ", StringSplitOptions.None);
         var Whole = HomeAssistantEntitySearch.Find(Snapshot.Entities.Where(Entity => Entity.Domain is "light" or "switch" or "fan"), NamedTarget,
             EffectiveArea, Domain is null ? null : [Domain]);
