@@ -31,6 +31,7 @@ public sealed class AdaptiveTurnState(AdaptiveTurnOptions Options)
     public long AudioBytes { get; private set; }
     public int DurationMs { get; private set; }
     public int QuietMs { get; private set; }
+    public double? CompletionProbability => Probability;
     public bool SpeechSeen => ConfirmedSpeech;
     public bool ShouldScore => SpeechSeen && QuietMs >= Options.AnalysisQuietMs && ScoredRevision != SpeechRevision;
     public void Observe(ReadOnlySpan<byte> Pcm)

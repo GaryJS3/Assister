@@ -76,7 +76,8 @@ public static class AdaptiveEndpointing
                     if (!ShadowDecision)
                     {
                         Trace.Metadata(new { shadow = Shadow, decision = Decision, audioMilliseconds = State.DurationMs,
-                            quietMilliseconds = State.QuietMs, observedAudioBytes = State.AudioBytes, providerOwned = Remote });
+                            quietMilliseconds = State.QuietMs, completionProbability = State.CompletionProbability,
+                            decisionObservedAt = DateTimeOffset.UtcNow, observedAudioBytes = State.AudioBytes, providerOwned = Remote });
                         ShadowDecision = true;
                     }
                     if (!Shadow)
