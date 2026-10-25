@@ -1,0 +1,14 @@
+{
+  "reference": "Hugging Face transformers WhisperFeatureExtractor, installed 5.6.0.dev0",
+  "modelRevision": "f766f81d3cfdf7737ac64aad813d91bbfd56bf93",
+  "meanAbsoluteDifference": 9.930157318649435E-08,
+  "realClipId": "00082f3f-8cc8-4a4b-9184-3230b3227cff",
+  "maxAbsoluteDifference": 1.9431114196777344E-05,
+  "dataset": "pipecat-ai/smart-turn-data-v3.1-test",
+  "model": "smart-turn-v3.2-cpu.onnx",
+  "note": "Balanced first 50 complete and 50 incomplete English rows among the first 500 dataset rows; not proven independent of model training.",
+  "goldenFixture": "tests/Assister.Tests/Fixtures/smart-turn-features.json",
+  "sha256": "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+  "datasetRevision": "22b4ec796d222da74beac14245603fba7653ac3f",
+  "featureCount": 64000
+}

@@ -26,6 +26,8 @@ services:
       TextToSpeech__Host: ${TTS_HOST:-}
       TextToSpeech__Port: ${TTS_PORT:-10200}
       TextToSpeech__Voice: ${TTS_VOICE:-}
+      Voice__Endpointing__Enabled: ${VOICE_ADAPTIVE_ENDPOINTING_ENABLED:-false}
+      Voice__Endpointing__Shadow: ${VOICE_ADAPTIVE_ENDPOINTING_SHADOW:-true}
       EchoMuse__ControllerUrl: ${ECHOMUSE_CONTROLLER_URL:-}
       EchoMuse__Enabled: ${ECHOMUSE_ENABLED:-false}
       EchoMuse__StreamingPlaybackEnabled: ${ECHOMUSE_STREAMING_PLAYBACK_ENABLED:-false}

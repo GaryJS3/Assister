@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Assister\Assister.csproj" />
+    <Compile Include="../Assister.VoiceBench/EndpointBenchmark.cs" Link="EndpointBenchmark.cs" />
   </ItemGroup>
 
   <PropertyGroup>

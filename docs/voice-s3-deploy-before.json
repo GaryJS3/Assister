@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-10-25T10:55:19.7829215-04:00",
+  "containerId": "6c76fbdbb2ad0cd48a130ad444da359c2ab6aa807d202cb2ae493c867bc74203",
+  "mounts": [
+    {
+      "Name": "assister_assister-data",
+      "Source": "/var/lib/docker/volumes/assister_assister-data/_data",
+      "Destination": "/data"
+    }
+  ],
+  "controllerContainerId": "92ab5f43390755f7137ff7a9bb3cd95eebf5dcfec6f31208e7cafa34d41e3903",
+  "environmentFingerprint": "6B8B8CF058C9357DF26CE2DA072509DED6DE3AF992834B526DC9B62657F2FD62",
+  "controllerRuntime": "7be7df32b1481c93dfeb98c5dd43b54ee7d8973c",
+  "image": "sha256:7e9a46609b7bab68573f265fc790573c397253760346aa5ff30deb81eb70fa8c",
+  "bridgeContainerId": "e7a5273c0dfaa93913b8b7e6c2f60d3e03f3e05a21d22b2a5e3ed94914d27c19"
+}

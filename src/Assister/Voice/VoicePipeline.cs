@@ -11,7 +11,8 @@ public sealed record VoiceSession(Guid Id, string SatelliteId, string? Area, Gui
 public sealed record VoiceResult(VoiceSession Session, RequestResult? Request, string Outcome);
 
 public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvider Tts, IRequestCoordinator Coordinator,
-    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null, ToneCatalog? Tones = null, RunAudioStore? RunAudio = null)
+    SatelliteManager Satellites, IConfiguration Configuration, RunStore? Diagnostics = null, ToneCatalog? Tones = null, RunAudioStore? RunAudio = null,
+    ITurnCompletionClassifier? TurnClassifier = null)
 {
     public async Task<VoiceResult> RunAsync(ISatelliteConnection Satellite, Guid? ConversationId, CancellationToken CancellationToken)
     {
@@ -61,7 +62,14 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
         {
             await Feedback("awake", Timeout.Token);
             await Satellite.SendEventAsync(new("transcribing", SessionId: Session.Id), Timeout.Token);
-            var Input = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true }
+            var Adaptive = Configuration.GetValue("Voice:Endpointing:Enabled", false) && TurnClassifier is not null;
+            var ShadowEndpointing = Configuration.GetValue("Voice:Endpointing:Shadow", true);
+            var CanControlEndpoint = Satellite is not IProviderEndpointing { OwnsEndpointing: true }
+                || Satellite is IAdaptiveEndpointingControl { SupportsAdaptiveEndpointing: true };
+            var LocalVad = Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true };
+            var Input = Adaptive && (LocalVad || Satellite is IProviderEndpointing { OwnsEndpointing: true }) && (ShadowEndpointing || CanControlEndpoint)
+                ? AdaptiveEndpointing.CaptureAsync(Satellite, TurnClassifier!, AdaptiveTurnOptions.FromConfiguration(Configuration), ShadowEndpointing, Timeout.Token)
+                : Configuration.GetValue("SatelliteBridge:UseEnergyVad", false) && Satellite is not IProviderEndpointing { OwnsEndpointing: true }
                 ? VoiceActivityDetector.UntilSilenceAsync(Satellite, Configuration.GetValue("SatelliteBridge:VadThreshold", 0.015), Timeout.Token)
                 : Satellite.ReceiveAudioAsync(Timeout.Token);
             DateTimeOffset? AudioEnded = null;

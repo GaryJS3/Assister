@@ -63,6 +63,8 @@ public static class ServiceRegistration
         Services.AddScoped<SatelliteConfiguration>();
         Services.AddSingleton<Assister.Voice.ToneCatalog>();
         Services.AddScoped<VoicePipeline>();
+        Services.AddSingleton<ITurnCompletionClassifier, SmartTurnClassifier>();
+        Services.AddHostedService<SmartTurnWarmup>();
         Services.AddHttpClient("echomuse").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         Services.AddHostedService<EchoMuseProvider>();
         Services.AddTransient<ISpeechToTextProvider>(Services =>

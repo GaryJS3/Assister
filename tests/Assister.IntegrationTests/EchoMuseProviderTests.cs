@@ -16,11 +16,13 @@ namespace Assister.IntegrationTests;
 public sealed class EchoMuseProviderTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task OneAuthenticatedSocketMultiplexesDevicesAndExactSessionPairs(bool Tones, bool Streaming)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public async Task OneAuthenticatedSocketMultiplexesDevicesAndExactSessionPairs(bool Tones, bool Streaming, bool Shadow)
     {
         var Builder = WebApplication.CreateBuilder(); Builder.WebHost.UseUrls("http://127.0.0.1:0");
         await using var Controller = Builder.Build(); Controller.UseWebSockets();
@@ -46,7 +48,7 @@ public sealed class EchoMuseProviderTests
             Assert.Equal("Bearer test-controller-token", Context.Request.Headers.Authorization.ToString());
             Interlocked.Increment(ref Connections);
             using var Socket = await Context.WebSockets.AcceptWebSocketAsync();
-            await Send(Socket, new { type = "hello", protocolVersion = 1, voiceBackend = "external", feedbackPlayback = Tones });
+            await Send(Socket, new { type = "hello", protocolVersion = 1, voiceBackend = "external", feedbackPlayback = Tones, adaptiveEndpointing = true });
             SocketReady.TrySetResult(Socket);
             try
             {
@@ -63,7 +65,7 @@ public sealed class EchoMuseProviderTests
             catch (OperationCanceledException) { }
         });
         await Controller.StartAsync();
-        await using var Factory = new Application(Controller.Urls.Single(), Tones, Streaming);
+        await using var Factory = new Application(Controller.Urls.Single(), Tones, Streaming, Shadow);
         using var Http = Factory.CreateDefaultClient(); using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var Socket = await SocketReady.Task.WaitAsync(Timeout.Token);
         var Manager = Factory.Services.GetRequiredService<SatelliteManager>();
@@ -165,7 +167,7 @@ public sealed class EchoMuseProviderTests
         await Controller.StopAsync(Timeout.Token);
     }
     private static Task Send(WebSocket Socket, object Message) => Socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(Message), WebSocketMessageType.Text, true, CancellationToken.None);
-    private sealed class Application(string Base, bool Tones, bool Streaming) : WebApplicationFactory<Program>
+    private sealed class Application(string Base, bool Tones, bool Streaming, bool Shadow) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder Builder)
         {
@@ -174,6 +176,7 @@ public sealed class EchoMuseProviderTests
                 ["Assister:DataPath"] = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()),
                 ["EchoMuse:Enabled"] = "true", ["EchoMuse:ControllerUrl"] = Base,
                 ["Voice:Tones:Enabled"] = Tones.ToString(), ["EchoMuse:StreamingPlaybackEnabled"] = Streaming.ToString(),
+                ["Voice:Endpointing:Enabled"] = Shadow.ToString(), ["Voice:Endpointing:Shadow"] = "true",
                 ["EchoMuse:Username"] = "test-admin", ["EchoMuse:Password"] = "test-password", ["Assister:PublicUrl"] = "http://localhost"
             }));
             Builder.ConfigureServices(Services =>
@@ -181,8 +184,14 @@ public sealed class EchoMuseProviderTests
                 Services.RemoveAll<IRequestCoordinator>(); Services.AddScoped<IRequestCoordinator, Coordinator>();
                 Services.RemoveAll<ISpeechToTextProvider>(); Services.AddTransient<ISpeechToTextProvider, Stt>();
                 Services.RemoveAll<ITextToSpeechProvider>(); Services.AddTransient<ITextToSpeechProvider, Tts>();
+                Services.RemoveAll<Assister.Voice.ITurnCompletionClassifier>(); Services.AddSingleton<Assister.Voice.ITurnCompletionClassifier, Classifier>();
             });
         }
+    }
+    private sealed class Classifier : Assister.Voice.ITurnCompletionClassifier
+    {
+        public Task<Assister.Voice.TurnCompletionScore> ScoreAsync(ReadOnlyMemory<short> Pcm, CancellationToken Token)
+            => Task.FromResult(new Assister.Voice.TurnCompletionScore(.99, 1, 1));
     }
     private sealed class Coordinator : IRequestCoordinator
     {

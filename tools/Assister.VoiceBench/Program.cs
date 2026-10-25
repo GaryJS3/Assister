@@ -9,6 +9,16 @@ using Microsoft.Extensions.Configuration;
 
 // Offline orchestration benchmark: actual VoicePipeline, deterministic simulated providers.
 // Does not connect to Home Assistant, inference servers or physical audio devices.
+if (args.FirstOrDefault() == "--endpoint-eval")
+{
+    await EndpointBenchmark.RunAsync(args);
+    return;
+}
+if (args.FirstOrDefault() == "--endpoint-replay")
+{
+    await EndpointReplayBenchmark.RunAsync(args);
+    return;
+}
 if (args.FirstOrDefault() == "--stt-analyze")
 {
     var Config = System.Text.Json.JsonSerializer.Deserialize<SttBenchmark.Settings>(await File.ReadAllTextAsync(args[1]), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;

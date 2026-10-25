@@ -1,0 +1,36 @@
+{
+  "measurement": "20 ms paced recorded audio through actual C# capture policies; excludes device, endpoint transport, STT and playback",
+  "coldModelInitializationMs": 213.4975,
+  "results": [
+    {
+      "Id": "00082f3f-8cc8-4a4b-9184-3230b3227cff",
+      "Complete": false,
+      "adaptive": false,
+      "sourceAudioMs": 3735.625,
+      "deliveredAudioMs": 3820,
+      "finalVoicedMs": 2920,
+      "audioEndpointDelayMs": 900,
+      "measuredPauseToEndpointMs": 922.4645999999998,
+      "endedBeforeLastEnergyFrame": false,
+      "endpointReason": null,
+      "incompleteClassifiedComplete": false,
+      "wallMs": 3842.7238,
+      "cpuMs": 31.25
+    },
+    {
+      "Id": "00082f3f-8cc8-4a4b-9184-3230b3227cff",
+      "Complete": false,
+      "adaptive": true,
+      "sourceAudioMs": 3735.625,
+      "deliveredAudioMs": 3440,
+      "finalVoicedMs": 2920,
+      "audioEndpointDelayMs": 520,
+      "measuredPauseToEndpointMs": 531.7658999999999,
+      "endedBeforeLastEnergyFrame": false,
+      "endpointReason": "semantic-complete",
+      "incompleteClassifiedComplete": true,
+      "wallMs": 3452.7817,
+      "cpuMs": 312.5
+    }
+  ]
+}

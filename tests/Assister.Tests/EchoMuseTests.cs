@@ -11,6 +11,29 @@ namespace Assister.Tests;
 
 public sealed class EchoMuseTests
 {
+    [Fact]
+    public async Task InputEndAcknowledgementsMatchDeviceSessionAndRequest()
+    {
+        using var Audio = new VoiceAudioStore();
+        var Sent = new List<JsonElement>();
+        var Device = new EchoMuseConnection("device", "logical", "Office", null,
+            (Value, _) => { Sent.Add(Message(Value)); return Task.CompletedTask; }, Audio, Config, new SatelliteManager());
+        using var Turn = Device.Start("session", null, default)!;
+        Assert.False(Turn.SupportsAdaptiveEndpointing);
+        Device.AdaptiveEndpointingSupported = true;
+        Assert.True(Turn.SupportsAdaptiveEndpointing);
+        await Turn.ConfigureEndpointingAsync(1600, default);
+        Assert.Equal("turn_input_policy", Sent[0].GetProperty("type").GetString());
+        var Pending = Turn.RequestInputEndAsync(6400, default);
+        var Request = Sent[1].GetProperty("requestId").GetString();
+        Assert.False(Device.Handle(Message(new { type = "input_end_result", deviceId = "other", sessionId = "session", requestId = Request, accepted = true })));
+        Assert.False(Device.Handle(Message(new { type = "input_end_result", deviceId = "device", sessionId = "old", requestId = Request, accepted = true })));
+        Assert.False(Device.Handle(Message(new { type = "input_end_result", deviceId = "device", sessionId = "session", requestId = "old", accepted = true })));
+        Assert.False(Pending.IsCompleted);
+        Assert.True(Device.Handle(Message(new { type = "input_end_result", deviceId = "device", sessionId = "session", requestId = Request, accepted = true })));
+        Assert.True(await Pending);
+    }
+
     [Theory]
     [InlineData(false)] [InlineData(true)]
     public async Task StreamingRequiresCompletedTransferAndMatchingPlaybackAck(bool FailBeforeFetch)

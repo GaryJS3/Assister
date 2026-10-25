@@ -20,6 +20,7 @@ public sealed class Satellite
 
 public sealed record SatelliteCapabilities
 {
+    public bool AdaptiveEndpointing { get; init; }
     public bool StreamingVoicePlayback { get; init; }
     public bool Microphone { get; init; }
     public bool MultiChannelMicrophone { get; init; }
@@ -42,6 +43,7 @@ public sealed record WakeWord(string Id, string Name);
 public sealed record VoiceConfiguration(WakeWord[] AvailableWakeWords, string[] ActiveWakeWords, int MaxActiveWakeWords);
 public sealed record SatelliteRuntimeState
 {
+    public string EndpointingPolicy { get; init; } = "Provider or manual";
     public string ConnectionState { get; init; } = "Offline";
     public DateTimeOffset? LastSeen { get; init; }
     public DateTimeOffset? ConnectedAt { get; init; }

@@ -26,6 +26,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public string? Area => Room;
     public string ControllerDeviceId => DeviceId;
     public bool FeedbackPlaybackSupported { get; set; }
+    public bool AdaptiveEndpointingSupported { get; set; }
     public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token)
     {
         lock (Gate)
@@ -70,7 +71,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         }
         lock (Gate)
         {
-            if (Text(Message, "requestId") is null && Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
+            if ((Text(Message, "requestId") is null || Text(Message, "type") == "input_end_result")
+                && Text(Message, "sessionId") is { } Session && Voice?.SessionId == Session) { return Voice.Handle(Message); }
             if (Text(Message, "requestId") is { } Request && Announcement?.Id == Request && !Announcement.StopRequested)
             {
                 if (Announcement.SessionId is { } Expected && Text(Message, "sessionId") != Expected) { return false; }
@@ -189,7 +191,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, IStreamingAudioPlayback, Assister.Voice.ITonePlayback, IDisposable
+    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, IStreamingAudioPlayback, Assister.Voice.IAdaptiveEndpointingControl, Assister.Voice.ITonePlayback, IDisposable
     {
         private readonly EchoMuseConnection Owner;
         private readonly Channel<AudioChunk> Input = Channel.CreateBounded<AudioChunk>(64);
@@ -203,6 +205,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         private Guid? RunId;
         private Guid? VoiceSessionId;
         private bool PlaybackStarted;
+        private TaskCompletionSource<bool>? InputEndRequest;
+        private string? InputEndRequestId;
         public Turn(EchoMuseConnection Owner, string SessionId, string? WakeWord, CancellationToken Token)
         {
             this.Owner = Owner; this.SessionId = SessionId;
@@ -217,6 +221,23 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         public string? Area => Owner.Area;
         public VoiceActivation Activation { get; }
         public bool OwnsEndpointing => true;
+        public bool SupportsAdaptiveEndpointing => Owner.AdaptiveEndpointingSupported;
+        public Task ConfigureEndpointingAsync(int MaximumQuietMs, CancellationToken Token)
+            => Owner.WriteAsync(new { type = "turn_input_policy", sessionId = SessionId, deviceId = Owner.Device, maximumQuietMs = MaximumQuietMs }, Token);
+        public async Task<bool> RequestInputEndAsync(long ObservedAudioBytes, CancellationToken Token)
+        {
+            var Pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var RequestId = Guid.NewGuid().ToString("N");
+            InputEndRequest = Pending;
+            InputEndRequestId = RequestId;
+            try
+            {
+                await Owner.WriteAsync(new { type = "turn_input_end", sessionId = SessionId, deviceId = Owner.Device, requestId = RequestId, audioBytes = ObservedAudioBytes }, Token);
+                return await Pending.Task.WaitAsync(TimeSpan.FromSeconds(2), Token);
+            }
+            catch (TimeoutException) { return false; }
+            finally { InputEndRequest = null; InputEndRequestId = null; }
+        }
         public CancellationToken Token => Lifetime.Token;
         public bool IsCancelled => Lifetime.IsCancellationRequested;
         public bool PipelineFinished { get; private set; }
@@ -229,6 +250,10 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             if (Lifetime.IsCancellationRequested || ControllerEnded) { return false; }
             switch (Text(Message, "type"))
             {
+                case "input_end_result":
+                    if (Text(Message, "requestId") != InputEndRequestId) return false;
+                    InputEndRequest?.TrySetResult(Message.TryGetProperty("accepted", out var Accepted) && Accepted.ValueKind == JsonValueKind.True);
+                    return true;
                 case "audio":
                     if (End.Task.IsCompleted || Lifetime.IsCancellationRequested) { return false; }
                     var Data = Text(Message, "data");

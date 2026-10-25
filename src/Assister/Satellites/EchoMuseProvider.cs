@@ -72,6 +72,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
         var Devices = new Dictionary<string, EchoMuseConnection>(StringComparer.Ordinal);
         var FeedbackPlayback = false;
         var VolumeControl = false;
+        var AdaptiveEndpointing = false;
         var Tasks = new HashSet<Task>();
         using var SendGate = new SemaphoreSlim(1);
         async Task Send(object Message, CancellationToken CancellationToken)
@@ -102,6 +103,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                     EchoMuseConnection.Text(Hello.RootElement, "voiceBackend") != "external")
                     throw new IOException("Unsupported controller voice protocol or backend.");
                 VolumeControl = True(Hello.RootElement, "volumeControl");
+                AdaptiveEndpointing = True(Hello.RootElement, "adaptiveEndpointing");
                 FeedbackPlayback = Hello.RootElement.TryGetProperty("feedbackPlayback", out var Feedback) && Feedback.ValueKind == JsonValueKind.True;
             }
             await RefreshAsync();
@@ -221,6 +223,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 {
                     Connection = new(DeviceId, Id, Registration.Name, Registration.AreaId, Send, Audio, Configuration, Manager);
                     Connection.FeedbackPlaybackSupported = FeedbackPlayback;
+                    Connection.AdaptiveEndpointingSupported = AdaptiveEndpointing;
                     if (!Manager.Register(Connection)) { continue; }
                     lock (Devices) { Devices.Add(DeviceId, Connection); }
                 }
@@ -228,10 +231,13 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 Manager.Update(Id, State => State with { VoiceOwnership = VoiceOwnership.OwnedByAssister, Model = "EchoMuse satellite",
                     DeviceName = EchoMuseConnection.Text(Item, "label") ?? Registration.Name, FirmwareVersion = EchoMuseConnection.Text(Item, "firmware_ver") ?? "",
                     ApiVersion = "EchoMuse voice v1", MuteState = True(Item, "muted"),
+                    EndpointingPolicy = !Configuration.GetValue("Voice:Endpointing:Enabled", false) ? "Controller"
+                        : Configuration.GetValue("Voice:Endpointing:Shadow", true) ? "Semantic shadow; controller commits"
+                        : AdaptiveEndpointing ? "Semantic adaptive" : "Controller; adaptive unsupported",
                     CurrentVolume = Item.TryGetProperty("volume", out var Volume) && Volume.TryGetDouble(out var Level) ? Level : null,
                     CurrentPlaybackState = State.CurrentPlaybackState == "Unknown" ? "Assister output idle" : State.CurrentPlaybackState,
                     Capabilities = new() { VoiceAssistant = true, Microphone = true, Speaker = true, VolumeControl = VolumeControl, WakeWord = Wake is not null, AnnouncementPlayback = true,
-                        StreamingVoicePlayback = Configuration.GetValue("EchoMuse:StreamingPlaybackEnabled", false) },
+                        StreamingVoicePlayback = Configuration.GetValue("EchoMuse:StreamingPlaybackEnabled", false), AdaptiveEndpointing = AdaptiveEndpointing },
                     VoiceConfiguration = Wake is null ? new([], [], 0) : new([], [Wake], 0) });
             }
             EchoMuseConnection[] Removed;
