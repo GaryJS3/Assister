@@ -46,6 +46,8 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
+        if (Satellites is not null && await Satellites.AcknowledgeAsync(Request.SatelliteId, Request.Message, CancellationToken))
+            return Result("Acknowledged.", "succeeded", "satellite-acknowledgement");
         if (Announcements is not null && await Announcements.TryHandleAsync(Request, DeviceContext, CancellationToken) is { } AnnouncementResponse)
             return Result(AnnouncementResponse,
                 AnnouncementResponse.Contains("Which satellite") || AnnouncementResponse.Contains("What would you like") ? "ambiguous"

@@ -10,7 +10,7 @@ public interface IProviderEndpointing { bool OwnsEndpointing { get; } }
 // One logical endpoint on a multiplexed controller link. Each activation has its own audio queue.
 public sealed class EchoMuseConnection(string DeviceId, string Id, string Label, string? Room,
     Func<object, CancellationToken, Task> Send, VoiceAudioStore Audio, IConfiguration Configuration,
-    SatelliteManager Manager) : ISatelliteConnection
+    SatelliteManager Manager) : ISatelliteConnection, IAcknowledgementListener
 {
     private VoiceAudioStore Store => Audio;
     private bool StreamingPlaybackEnabled => Configuration.GetValue("EchoMuse:StreamingPlaybackEnabled", false);
@@ -27,17 +27,57 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public string ControllerDeviceId => DeviceId;
     public bool FeedbackPlaybackSupported { get; set; }
     public bool AdaptiveEndpointingSupported { get; set; }
-    public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token)
+    public bool SupportsAcknowledgementListening { get; set; }
+    private sealed record ListeningRequest(string Id, TaskCompletionSource<bool> Started, TaskCompletionSource Finished)
+    {
+        public bool Stopping { get; set; }
+    }
+    private ListeningRequest? Listening;
+    public async Task ListenForAcknowledgementAsync(TimeSpan Duration, CancellationToken Token)
+    {
+        if (!SupportsAcknowledgementListening) throw new InvalidOperationException("Acknowledgement listening is unsupported.");
+        var Request = new ListeningRequest(Guid.NewGuid().ToString("N"), new(TaskCreationOptions.RunContinuationsAsynchronously), new(TaskCreationOptions.RunContinuationsAsynchronously));
+        lock (Gate)
+        {
+            if (Listening is not null || Voice is not null || Announcement is not null) throw new IOException("Satellite is busy.");
+            Listening = Request;
+        }
+        try
+        {
+            await Send(new { type = "listen_for_acknowledgement", deviceId = DeviceId, requestId = Request.Id,
+                durationMs = Math.Clamp((int)Math.Ceiling(Duration.TotalMilliseconds), 1, 30000) }, Token);
+            if (!await Request.Started.Task.WaitAsync(TimeSpan.FromSeconds(5), Token)) throw new IOException("Controller rejected acknowledgement listening.");
+            Manager.Record(Id, "Acknowledgement microphone opened");
+        }
+        catch
+        {
+            await TryStopAsync(new { type = "stop_acknowledgement_listen", deviceId = DeviceId, requestId = Request.Id });
+            lock (Gate) { if (ReferenceEquals(Listening, Request)) Listening = null; }
+            throw;
+        }
+    }
+    public async Task StopAcknowledgementListeningAsync(CancellationToken Token)
+    {
+        ListeningRequest? Request;
+        lock (Gate) { Request = Listening; if (Request is not null) Request.Stopping = true; }
+        if (Request is not null)
+        {
+            await Send(new { type = "stop_acknowledgement_listen", deviceId = DeviceId, requestId = Request.Id }, Token);
+            await Request.Finished.Task.WaitAsync(TimeSpan.FromSeconds(5), Token);
+        }
+    }
+    public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
     {
         lock (Gate)
         {
+            if (AcknowledgementRequestId is not null && (Listening?.Id != AcknowledgementRequestId || Listening.Stopping)) return null;
             // Pipeline cleanup may finish just before the provider releases its old turn.
             if (Voice is { } Previous && (Previous.IsCancelled || Previous.PipelineFinished) && !Manager.IsBusy(SatelliteId)) { Voice = null; }
             if (Voice is not null || Announcement is not null || Manager.IsBusy(SatelliteId)) { return null; }
-            return Voice = new(this, SessionId, WakeWord, Token);
+            return Voice = new(this, SessionId, WakeWord, Token, AcknowledgementRequestId);
         }
     }
-    public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token)
+    public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
     {
         Task? PreviousRelease;
         lock (Gate) { PreviousRelease = Voice is { CanHandOff: true } Previous ? Previous.Released.Task : null; }
@@ -50,7 +90,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             try { await PreviousRelease.WaitAsync(TimeSpan.FromSeconds(5), Token); }
             catch (TimeoutException) { return null; }
         }
-        return Start(SessionId, WakeWord, Token);
+        return Start(SessionId, WakeWord, Token, AcknowledgementRequestId);
     }
     public void Release(Turn Turn)
     {
@@ -63,6 +103,17 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     public bool Handle(JsonElement Message)
     {
         if (Text(Message, "deviceId") != DeviceId) { return false; }
+        if (Text(Message, "type") is "acknowledgement_listen_result" or "acknowledgement_listen_finished")
+        {
+            lock (Gate)
+            {
+                if (Listening is not { } Request || Request.Id != Text(Message, "requestId")) return false;
+                if (Text(Message, "type") == "acknowledgement_listen_result")
+                    Request.Started.TrySetResult(Text(Message, "status") == "started");
+                else { Listening = null; Request.Finished.TrySetResult(); Manager.Record(Id, "Acknowledgement microphone closed"); }
+                return true;
+            }
+        }
         if (Text(Message, "type") == "volume_result" && Text(Message, "requestId") is { } VolumeId
             && VolumeRequests.TryGetValue(VolumeId, out var Pending))
         {
@@ -90,7 +141,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     }
     public void Disconnect()
     {
-        lock (Gate) { Voice?.Cancel(); Announcement?.Done.TrySetException(new IOException("Controller disconnected.")); }
+        lock (Gate) { Listening?.Started.TrySetResult(false); Listening?.Finished.TrySetResult(); Listening = null;
+            Voice?.Cancel(); Announcement?.Done.TrySetException(new IOException("Controller disconnected.")); }
     }
     public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new InvalidOperationException("An activation is required.");
     public Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token) => PlayAsync(Chunks, false, Token);
@@ -207,15 +259,22 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         private bool PlaybackStarted;
         private TaskCompletionSource<bool>? InputEndRequest;
         private string? InputEndRequestId;
-        public Turn(EchoMuseConnection Owner, string SessionId, string? WakeWord, CancellationToken Token)
+        public Turn(EchoMuseConnection Owner, string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
         {
             this.Owner = Owner; this.SessionId = SessionId;
             Lifetime = CancellationTokenSource.CreateLinkedTokenSource(Token);
             Lifetime.CancelAfter(TimeSpan.FromSeconds(120));
-            Activation = new(SessionId, WakeWord, DateTimeOffset.UtcNow);
+            this.AcknowledgementRequestId = AcknowledgementRequestId;
+            Activation = new(SessionId, WakeWord, DateTimeOffset.UtcNow, AcknowledgementRequestId is not null);
             _ = InputDeadlineAsync();
         }
         public string SessionId { get; }
+        public string? AcknowledgementRequestId { get; }
+        public Task CompleteAcknowledgementAsync(bool Acknowledged, CancellationToken Token) => Owner.WriteAsync(new
+        {
+            type = "turn_acknowledgement", deviceId = Owner.Device, sessionId = SessionId,
+            requestId = AcknowledgementRequestId, acknowledged = Acknowledged
+        }, Token);
         public string SatelliteId => Owner.SatelliteId;
         public string Name => Owner.Name;
         public string? Area => Owner.Area;

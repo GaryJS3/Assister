@@ -31,6 +31,20 @@ dispatch, not physical volume; inventory remains the source of reported volume.
 Older controllers continue to report volume control as unsupported. Wake-word and
 mute writes remain unsupported by this adapter.
 
+Controllers advertising `acknowledgementListening: true` also support bounded microphone
+windows after important announcements. Assister sends `listen_for_acknowledgement` with
+`deviceId`, a unique `requestId`, and `durationMs` (1–30000). The controller replies with
+`acknowledgement_listen_result` (`started` only after dispatching the microphone start,
+otherwise `rejected`). Captured `turn_start` messages include `acknowledgementRequestId`.
+Assister restricts those turns to acknowledgement matching and returns `turn_acknowledgement`
+with the matching device/session/request IDs and an `acknowledged` boolean. False reopens
+capture for the remaining window; true dismisses the alert and closes the window.
+`stop_acknowledgement_listen` stops the matching window. Closure is confirmed with
+`acknowledgement_listen_finished`; playback waits for that confirmation before reusing the
+device. The controller enforces the original deadline, ownership, mute, device availability
+and session limits. Silence never extends the window. Older controllers retain wake-word
+acknowledgement without automatic microphone opening.
+
 Direct commands include “volume 5” (0–10) and “set the volume to 50 percent”.
 The LLM's `satellite_set_volume` tool accepts either `percent` or `delta_percent`
 and always targets the request's current satellite. Relative changes require known

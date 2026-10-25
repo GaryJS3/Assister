@@ -13,6 +13,106 @@ namespace Assister.Tests;
 
 public sealed class AnnouncementTests
 {
+    [Theory]
+    [InlineData(AnnouncementImportance.HighImportance, 9)]
+    [InlineData(AnnouncementImportance.Alarm, 5)]
+    public async Task UrgentLevelsAddBeepsAndHighImportanceSpeaksTwice(AnnouncementImportance Importance, int Chunks)
+    {
+        var Manager = new SatelliteManager(Tones: new ToneCatalog(new ToneEnvironment(), new ConfigurationBuilder().Build()));
+        var Speaker = new Speaker("test", "Test");
+        Manager.Register(Speaker);
+        Manager.Update("test", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        Assert.True(await Manager.AnnounceAsync("test", "Hello", new Speech(), default, Importance: Importance));
+        Assert.Equal(Chunks, Speaker.Audio.Count);
+    }
+
+    [Theory]
+    [InlineData(AnnouncementImportance.Acknowledge, 600, 30)]
+    [InlineData(AnnouncementImportance.Alarm, 10, 10)]
+    public async Task RepeatsAtDeadlineUntilAcknowledged(AnnouncementImportance Importance, int Seconds, int ListenSeconds)
+    {
+        var Clock = new TestClock();
+        var Manager = new SatelliteManager(Clock: Clock);
+        var Speaker = new Speaker("test", "Test");
+        Manager.Register(Speaker);
+        Manager.Update("test", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync("test", "Hello", new Speech(), default, Importance: Importance);
+        Assert.True(Manager.IsAcknowledgementListening("test"));
+        Clock.Advance(ListenSeconds);
+        Assert.False(Manager.IsAcknowledgementListening("test"));
+        Clock.Advance(Seconds - ListenSeconds - 1);
+        await Manager.RepeatAnnouncementAsync("test", new Speech(), default);
+        Assert.Single(Speaker.Events, Event => Event.Type == "announcement");
+        Clock.Advance(1);
+        await Manager.RepeatAnnouncementAsync("test", new Speech(), default);
+        Assert.Equal(2, Speaker.Events.Count(Event => Event.Type == "announcement"));
+        Assert.False(await Manager.AcknowledgeAsync("other", "stop", default));
+        Assert.False(await Manager.AcknowledgeAsync("test", "turn on the lights", default));
+        Assert.True(await Manager.AcknowledgeAsync("test", "I heard it", default));
+        Clock.Advance(Seconds);
+        await Manager.RepeatAnnouncementAsync("test", new Speech(), default);
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        Assert.Equal(2, Speaker.Events.Count(Event => Event.Type == "announcement"));
+    }
+
+    [Theory]
+    [InlineData("Acknowledged.", true)]
+    [InlineData("please stop", true)]
+    [InlineData("cancel", true)]
+    [InlineData("heard", true)]
+    [InlineData("got it", true)]
+    [InlineData("understood", true)]
+    [InlineData("dismiss", true)]
+    [InlineData("unstoppable", false)]
+    [InlineData("the herd is outside", false)]
+    public void AcknowledgementUsesWholeWords(string Text, bool Expected) => Assert.Equal(Expected, AnnouncementLevels.IsAcknowledgement(Text));
+
+    [Fact]
+    public async Task ImportanceSurvivesDestinationSelection()
+    {
+        var (Manager, Kitchen, _) = Setup();
+        var Handler = new AnnouncementHandler(Manager, new Speech());
+        var Context = new DeviceConversationContext();
+        await Handler.TryHandleAsync(new("announce alarm Dinner is ready", "client"), Context, default);
+        Assert.Equal(AnnouncementImportance.Alarm, Context.Announcement!.Importance);
+        await Handler.TryHandleAsync(new("Kitchen", "client"), Context, default);
+        Assert.Contains("kitchen", Manager.PendingAnnouncementIds);
+        Assert.Equal("Dinner is ready", Kitchen.Events.Single(Event => Event.Type == "announcement").Text);
+        await Manager.StopAsync("kitchen", default);
+        Assert.Empty(Manager.PendingAnnouncementIds);
+    }
+
+    private sealed class TestClock : TimeProvider
+    {
+        private DateTimeOffset Now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
+        public void Advance(int Seconds) => Now = Now.AddSeconds(Seconds);
+    }
+
+    [Fact]
+    public async Task MicrophoneRequestRunsAfterPlaybackReleasesSession()
+    {
+        var Manager = new SatelliteManager();
+        var Listener = new ListeningSpeaker(Manager);
+        Manager.Register(Listener);
+        Manager.Update("listener", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync("listener", "Hello", new Speech(), default, Importance: AnnouncementImportance.Acknowledge);
+        Assert.InRange(Listener.Duration.TotalSeconds, 29, 30);
+        Assert.False(Listener.BusyDuringListen);
+        Assert.True(Manager.IsAcknowledgementListening("listener"));
+    }
+
+    private sealed class ListeningSpeaker(SatelliteManager Manager) : Speaker("listener", "Listener"), IAcknowledgementListener
+    {
+        public TimeSpan Duration { get; private set; }
+        public bool BusyDuringListen { get; private set; }
+        public Task ListenForAcknowledgementAsync(TimeSpan Duration, CancellationToken Token)
+        {
+            this.Duration = Duration;
+            BusyDuringListen = Manager.IsBusy(SatelliteId);
+            return Task.CompletedTask;
+        }
+    }
     [Fact]
     public async Task AnnouncementIncludesHelloSpeechAndGoodbyeInOnePlayback()
     {
@@ -161,7 +261,7 @@ public sealed class AnnouncementTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken Token)
         { await Task.Yield(); yield return new(new byte[2], 16000, 2, 1); }
     }
-    private sealed class Speaker(string Id, string Label) : ISatelliteConnection
+    private class Speaker(string Id, string Label) : ISatelliteConnection
     {
         public string SatelliteId => Id;
         public string Name => Label;

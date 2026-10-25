@@ -82,8 +82,9 @@ public static class SatelliteEndpoints
         App.MapPost("/api/satellites/{id}/announcement", async (string Id, AnnouncementRequest Request,
             SatelliteManager Manager, ITextToSpeechProvider Tts, CancellationToken Token) =>
         {
-            if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 500) { return Results.BadRequest(); }
-            return await Manager.AnnounceAsync(Id, Request.Message, Tts, Token) ? Results.Ok() : Results.Conflict(new { Error = "Satellite is unavailable, busy, or does not support announcements." });
+            if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 500
+                || !AnnouncementLevels.TryParse(Request.Importance, out var Importance)) { return Results.BadRequest(); }
+            return await Manager.AnnounceAsync(Id, Request.Message, Tts, Token, Importance: Importance) ? Results.Ok() : Results.Conflict(new { Error = "Satellite is unavailable, busy, or does not support announcements." });
         });
         App.MapPut("/api/satellites/{id}/volume", async (string Id, VolumeRequest Request, SatelliteManager Manager, CancellationToken Token) =>
         {
@@ -117,7 +118,7 @@ public static class SatelliteEndpoints
         (Input.Endpoint.Length == 0 || Uri.CheckHostName(Input.Endpoint) != UriHostNameType.Unknown);
 }
 
-public sealed record AnnouncementRequest(string Message);
+public sealed record AnnouncementRequest(string Message, string? Importance = null);
 public sealed record VolumeRequest(double Volume);
 public sealed record LogSubscriptionRequest(bool Enabled);
 public sealed record SatelliteRegistration(string Id, string Name, string? AreaId, string Endpoint, string ProviderType = "ESPHome", bool Enabled = true);

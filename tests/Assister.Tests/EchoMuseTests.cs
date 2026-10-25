@@ -12,6 +12,68 @@ namespace Assister.Tests;
 public sealed class EchoMuseTests
 {
     [Fact]
+    public async Task AcknowledgementListeningRequiresCapabilityAndMatchingRequest()
+    {
+        using var Audio = new VoiceAudioStore();
+        var Sent = new List<JsonElement>();
+        var Device = new EchoMuseConnection("device", "logical", "Kitchen", null,
+            (Value, _) => { Sent.Add(Message(Value)); return Task.CompletedTask; }, Audio, Config, new SatelliteManager());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Device.ListenForAcknowledgementAsync(TimeSpan.FromSeconds(30), default));
+        Assert.Empty(Sent);
+        Device.SupportsAcknowledgementListening = true;
+        var Listening = Device.ListenForAcknowledgementAsync(TimeSpan.FromSeconds(30), default);
+        var Request = Sent[0].GetProperty("requestId").GetString();
+        Assert.Equal("listen_for_acknowledgement", Sent[0].GetProperty("type").GetString());
+        Assert.Equal(30000, Sent[0].GetProperty("durationMs").GetInt32());
+        Assert.False(Device.Handle(Message(new { type = "acknowledgement_listen_result", deviceId = "other", requestId = Request, status = "started" })));
+        Assert.False(Device.Handle(Message(new { type = "acknowledgement_listen_result", deviceId = "device", requestId = "stale", status = "started" })));
+        Assert.False(Listening.IsCompleted);
+        Assert.True(Device.Handle(Message(new { type = "acknowledgement_listen_result", deviceId = "device", requestId = Request, status = "started" })));
+        await Listening;
+        Assert.Null(Device.Start("stale-session", null, default, "stale"));
+        using var Turn = Device.Start("ack-session", null, default, Request)!;
+        Assert.True(Turn.Activation.AcknowledgementOnly);
+        await Turn.CompleteAcknowledgementAsync(false, default);
+        Assert.Equal("turn_acknowledgement", Sent[1].GetProperty("type").GetString());
+        Assert.Equal(Request, Sent[1].GetProperty("requestId").GetString());
+        Assert.False(Sent[1].GetProperty("acknowledged").GetBoolean());
+        Assert.False(Device.Handle(Message(new { type = "acknowledgement_listen_finished", deviceId = "device", requestId = "stale" })));
+        var Stopping = Device.StopAcknowledgementListeningAsync(default);
+        Assert.Equal("stop_acknowledgement_listen", Sent[2].GetProperty("type").GetString());
+        Assert.Equal(Request, Sent[2].GetProperty("requestId").GetString());
+        Assert.False(Stopping.IsCompleted);
+        Assert.True(Device.Handle(Message(new { type = "acknowledgement_listen_finished", deviceId = "device", requestId = Request })));
+        await Stopping;
+    }
+
+    [Fact]
+    public async Task TaggedAcknowledgementInputNeverRoutesEvenWithoutPendingAlert()
+    {
+        using var Audio = new VoiceAudioStore();
+        var Manager = new SatelliteManager();
+        EchoMuseConnection? Device = null;
+        string? Request = null;
+        Device = new("device", "logical", "Kitchen", null, (Value, _) =>
+        {
+            var Json = Message(Value);
+            if (EchoMuseConnection.Text(Json, "type") == "listen_for_acknowledgement")
+            {
+                Request = EchoMuseConnection.Text(Json, "requestId");
+                Device!.Handle(Message(new { type = "acknowledgement_listen_result", deviceId = "device", requestId = Request, status = "started" }));
+            }
+            return Task.CompletedTask;
+        }, Audio, Config, Manager) { SupportsAcknowledgementListening = true };
+        Manager.Register(Device);
+        await Device.ListenForAcknowledgementAsync(TimeSpan.FromSeconds(30), default);
+        using var Turn = Device.Start("late-ack-session", null, default, Request)!;
+        Turn.Handle(Message(new { type = "audio_end", reason = "speech_end" }));
+        var Coordinator = new Coordinator();
+        var Result = await new VoicePipeline(new Stt(), new Tts(), Coordinator, Manager, Config).RunAsync(Turn, null, default);
+        Assert.Equal("ignored", Result.Outcome);
+        Assert.Equal(0, Coordinator.Calls);
+    }
+
+    [Fact]
     public async Task InputEndAcknowledgementsMatchDeviceSessionAndRequest()
     {
         using var Audio = new VoiceAudioStore();

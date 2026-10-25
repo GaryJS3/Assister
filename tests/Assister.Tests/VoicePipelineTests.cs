@@ -7,6 +7,25 @@ namespace Assister.Tests;
 
 public sealed class VoicePipelineTests
 {
+    [Theory]
+    [InlineData("turn on the lights", "ignored")]
+    [InlineData("I heard it", "acknowledged")]
+    public async Task AcknowledgementWindowNeverRoutesCommands(string Text, string Expected)
+    {
+        var Satellite = new FakeSatellite();
+        var Manager = new SatelliteManager();
+        Manager.Register(Satellite);
+        Manager.Update("bedroom", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync("bedroom", "74 degrees Fahrenheit", new FakeTts(), default,
+            Importance: AnnouncementImportance.Acknowledge);
+        var Coordinator = new FakeCoordinator();
+        var Result = await new VoicePipeline(new FakeStt(Text: Text), new FakeTts(), Coordinator, Manager,
+            new ConfigurationBuilder().Build()).RunAsync(Satellite, null, default);
+        Assert.Equal(Expected, Result.Outcome);
+        Assert.Null(Coordinator.Request);
+        Assert.Equal(Expected != "acknowledged", Manager.PendingAnnouncementIds.Length > 0);
+        Assert.False(Manager.IsBusy("bedroom"));
+    }
     [Fact]
     public async Task BufferedVoiceRetainsInputAndOutputUnderTheExactRun()
     {

@@ -48,7 +48,7 @@ public sealed class EchoMuseProviderTests
             Assert.Equal("Bearer test-controller-token", Context.Request.Headers.Authorization.ToString());
             Interlocked.Increment(ref Connections);
             using var Socket = await Context.WebSockets.AcceptWebSocketAsync();
-            await Send(Socket, new { type = "hello", protocolVersion = 1, voiceBackend = "external", feedbackPlayback = Tones, adaptiveEndpointing = true });
+            await Send(Socket, new { type = "hello", protocolVersion = 1, voiceBackend = "external", feedbackPlayback = Tones, adaptiveEndpointing = true, acknowledgementListening = true });
             SocketReady.TrySetResult(Socket);
             try
             {
@@ -163,12 +163,44 @@ public sealed class EchoMuseProviderTests
         using var RemovedAudio = await Http.GetAsync(NextAudioUrl, Timeout.Token);
         Assert.Equal(System.Net.HttpStatusCode.NotFound, RemovedAudio.StatusCode);
         Assert.Equal("Assister output idle", Manager.State("echomuse-first").CurrentPlaybackState);
+        // An announcement opens a bounded mic window. Unrelated input completes without
+        // a normal response; another utterance in that window can acknowledge the alert.
+        var Alert = Http.PostAsync("/api/satellites/echomuse-first/announcement",
+            System.Net.Http.Json.JsonContent.Create(new { message = "Check the oven", importance = "acknowledge" }), Timeout.Token);
+        var AlertPlayback = await NextResponse();
+        Assert.Equal("play", AlertPlayback.GetProperty("type").GetString());
+        await Send(Socket, new { type = "play_finished", deviceId = "first", requestId = AlertPlayback.GetProperty("requestId").GetString() });
+        var Listen = await NextResponse();
+        Assert.Equal("listen_for_acknowledgement", Listen.GetProperty("type").GetString());
+        Assert.InRange(Listen.GetProperty("durationMs").GetInt32(), 29000, 30000);
+        var ListenId = Listen.GetProperty("requestId").GetString();
+        await Send(Socket, new { type = "acknowledgement_listen_result", deviceId = "first", requestId = ListenId, status = "started" });
+        using var AlertResult = await Alert;
+        Assert.True(AlertResult.IsSuccessStatusCode);
+        foreach (var Acknowledged in new[] { false, true })
+        {
+            Factory.Transcript = Acknowledged ? "I heard it" : "turn the light off";
+            var Session = Acknowledged ? "ack-accepted" : "ack-ignored";
+            await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = Session, acknowledgementRequestId = ListenId,
+                audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
+            await Send(Socket, new { type = "audio", deviceId = "first", sessionId = Session, data = "AAA=" });
+            await Send(Socket, new { type = "audio_end", deviceId = "first", sessionId = Session, reason = "speech_end" });
+            var Completion = await NextResponse();
+            Assert.Equal("turn_acknowledgement", Completion.GetProperty("type").GetString());
+            Assert.Equal(Acknowledged, Completion.GetProperty("acknowledged").GetBoolean());
+            Assert.Equal(ListenId, Completion.GetProperty("requestId").GetString());
+            await Send(Socket, new { type = "turn_finished", deviceId = "first", sessionId = Session, outcome = Acknowledged ? "acknowledged" : "ignored" });
+            while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
+        }
+        await Send(Socket, new { type = "acknowledgement_listen_finished", deviceId = "first", requestId = ListenId, reason = "acknowledged" });
+        Assert.Empty(Manager.PendingAnnouncementIds);
         await Factory.DisposeAsync(); Socket.Abort();
         await Controller.StopAsync(Timeout.Token);
     }
     private static Task Send(WebSocket Socket, object Message) => Socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(Message), WebSocketMessageType.Text, true, CancellationToken.None);
     private sealed class Application(string Base, bool Tones, bool Streaming, bool Shadow) : WebApplicationFactory<Program>
     {
+        public string Transcript { get; set; } = "turn the light off";
         protected override void ConfigureWebHost(IWebHostBuilder Builder)
         {
             Builder.ConfigureAppConfiguration((_, Config) => Config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -182,7 +214,7 @@ public sealed class EchoMuseProviderTests
             Builder.ConfigureServices(Services =>
             {
                 Services.RemoveAll<IRequestCoordinator>(); Services.AddScoped<IRequestCoordinator, Coordinator>();
-                Services.RemoveAll<ISpeechToTextProvider>(); Services.AddTransient<ISpeechToTextProvider, Stt>();
+                Services.RemoveAll<ISpeechToTextProvider>(); Services.AddTransient<ISpeechToTextProvider>(_ => new Stt(() => Transcript));
                 Services.RemoveAll<ITextToSpeechProvider>(); Services.AddTransient<ITextToSpeechProvider, Tts>();
                 Services.RemoveAll<Assister.Voice.ITurnCompletionClassifier>(); Services.AddSingleton<Assister.Voice.ITurnCompletionClassifier, Classifier>();
             });
@@ -197,10 +229,10 @@ public sealed class EchoMuseProviderTests
     {
         public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken Token) => Task.FromResult(new RequestResult("Done.", Guid.NewGuid(), "direct-intent", Guid.NewGuid(), "succeeded", [], null, 1));
     }
-    private sealed class Stt : ISpeechToTextProvider
+    private sealed class Stt(Func<string> Transcript) : ISpeechToTextProvider
     {
         public async Task<TranscriptionResult> TranscribeAsync(IAsyncEnumerable<AudioChunk> Audio, SpeechToTextOptions Options, CancellationToken Token)
-        { await foreach (var _ in Audio.WithCancellation(Token)) { } return new("turn the light off", "en"); }
+        { await foreach (var _ in Audio.WithCancellation(Token)) { } return new(Transcript(), "en"); }
     }
     private sealed class Tts : ITextToSpeechProvider
     {

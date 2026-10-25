@@ -86,6 +86,7 @@ public static class ServiceRegistration
         Services.AddScoped<AnnouncementHandler>();
         Services.AddSingleton<AnnouncementQueue>();
         Services.AddHostedService(Services => Services.GetRequiredService<AnnouncementQueue>());
+        Services.AddHostedService<AnnouncementRepeatService>();
         Services.AddTransient<IAssisterTool, SatelliteAnnouncementTool>();
         foreach (var Name in new[] { "reminder_get", "reminder_create", "reminder_edit", "reminder_cancel" })
         {

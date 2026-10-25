@@ -73,6 +73,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
         var FeedbackPlayback = false;
         var VolumeControl = false;
         var AdaptiveEndpointing = false;
+        var AcknowledgementListening = false;
         var Tasks = new HashSet<Task>();
         using var SendGate = new SemaphoreSlim(1);
         async Task Send(object Message, CancellationToken CancellationToken)
@@ -104,6 +105,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                     throw new IOException("Unsupported controller voice protocol or backend.");
                 VolumeControl = True(Hello.RootElement, "volumeControl");
                 AdaptiveEndpointing = True(Hello.RootElement, "adaptiveEndpointing");
+                AcknowledgementListening = True(Hello.RootElement, "acknowledgementListening");
                 FeedbackPlayback = Hello.RootElement.TryGetProperty("feedbackPlayback", out var Feedback) && Feedback.ValueKind == JsonValueKind.True;
             }
             await RefreshAsync();
@@ -129,7 +131,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 if (Full) { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 var WakeWord = EchoMuseConnection.Text(Message, "wakeWord");
                 WakeWord = WakeWord is null ? null : new Diagnostics.DiagnosticSanitizer(Configuration).Text(WakeWord, 128);
-                var Turn = await Device.StartAsync(Session, WakeWord, Lifetime.Token);
+                var Turn = await Device.StartAsync(Session, WakeWord, Lifetime.Token, EchoMuseConnection.Text(Message, "acknowledgementRequestId"));
                 if (Turn is null)
                 { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 Manager.Update(Device.SatelliteId, State => State with { WakeWord = WakeWord ?? State.WakeWord });
@@ -154,6 +156,13 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
             {
                 await using var Scope = Scopes.CreateAsyncScope();
                 var Result = await Scope.ServiceProvider.GetRequiredService<VoicePipeline>().RunAsync(Turn, null, Turn.Token);
+                if (Result.Outcome is "acknowledged" or "ignored")
+                {
+                    if (Turn.AcknowledgementRequestId is not null)
+                        await Turn.CompleteAcknowledgementAsync(Result.Outcome == "acknowledged", Turn.Token);
+                    else await Turn.SendCancelAsync(Turn.Token);
+                    return;
+                }
                 if (Result.Outcome is "cancelled" or "no-speech") { return; }
                 if (Result.Request is null || Result.Outcome is "stt-failed" or "tts-failed" or "processing-failed" or "playback-failed")
                 {
@@ -224,6 +233,7 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                     Connection = new(DeviceId, Id, Registration.Name, Registration.AreaId, Send, Audio, Configuration, Manager);
                     Connection.FeedbackPlaybackSupported = FeedbackPlayback;
                     Connection.AdaptiveEndpointingSupported = AdaptiveEndpointing;
+                    Connection.SupportsAcknowledgementListening = AcknowledgementListening;
                     if (!Manager.Register(Connection)) { continue; }
                     lock (Devices) { Devices.Add(DeviceId, Connection); }
                 }

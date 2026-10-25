@@ -17,6 +17,9 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
     public async Task<VoiceResult> RunAsync(ISatelliteConnection Satellite, Guid? ConversationId, CancellationToken CancellationToken)
     {
         var Session = new VoiceSession(Guid.NewGuid(), Satellite.SatelliteId, Satellite.Area, ConversationId, DateTimeOffset.UtcNow);
+        var AcknowledgementOnly = (Satellite as IVoiceActivationContext)?.Activation?.AcknowledgementOnly == true
+            || Satellites.IsAcknowledgementListening(Satellite.SatelliteId)
+            && (Satellite as IVoiceActivationContext)?.Activation?.WakeWord is null or "";
         using var Run = RunTracing.BeginRun(Diagnostics ?? new RunStore(), "voice", Satellite.SatelliteId, Satellite.Area, Session.Id, ConversationId);
         using var LatencyMetrics = new VoiceLatency();
         var RunId = RunTracing.RunId;
@@ -127,6 +130,19 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 RunTracing.Transcript(Transcript.Text);
             }
             if (string.IsNullOrWhiteSpace(Transcript.Text)) { await Feedback("goodbye", Timeout.Token); Run.Complete("no-speech"); return new(Session, null, "no-speech"); }
+            if (await Satellites.AcknowledgeAsync(Satellite.SatelliteId, Transcript.Text, Timeout.Token))
+            {
+                await Feedback("confirmed", Timeout.Token);
+                await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
+                Run.Complete("acknowledged");
+                return new(Session, null, "acknowledged");
+            }
+            if (AcknowledgementOnly)
+            {
+                await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
+                Run.Complete("ignored");
+                return new(Session, null, "ignored");
+            }
             if (StopCommands.IsStop(Transcript.Text))
             {
                 await Satellites.StopAsync(Satellite.SatelliteId, Timeout.Token);
