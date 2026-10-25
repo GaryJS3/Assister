@@ -20,7 +20,9 @@ ADD --chmod=0444 --checksum=sha256:2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc
 COPY licenses/SMART-TURN.txt /app/models/LICENSE.txt
 COPY --from=build /app .
 COPY --from=build /probe /probe
+RUN chmod 0755 /app/models
 ENV ASPNETCORE_HTTP_PORTS=8080 Assister__DataPath=/data
 USER app
+RUN test -r /app/models/smart-turn-v3.2-cpu.onnx
 EXPOSE 8080 8082
 ENTRYPOINT ["dotnet", "Assister.dll"]
