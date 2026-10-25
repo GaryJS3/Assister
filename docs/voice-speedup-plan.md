@@ -12,7 +12,7 @@ Implement one feature at a time in the order below. Each feature gets its own me
 | --- | --- | --- | --- |
 | S0 | Establish comparable latency measurements | In progress — offline harness, server milestones and read-only live text baseline; physical timing pending | None |
 | S1 | Stream rich-client speech during response generation | Implemented and tested locally; browser scheduling verified; deployment and spoken-device measurement pending | S0 |
-| S2 | Stream satellite audio through to physical playback | Planned | S0; reuse S1 concepts where useful |
+| S2 | Stream satellite audio through to physical playback | Deployed 37ab58b for EchoMuse; real TTS/HTTP delivery measured; physical playback acceptance pending; ESPHome offline | S0; reuse S1 concepts where useful |
 | S3 | Add adaptive, semantic turn completion | Planned | S0; device capture support |
 | S4 | Prepare speculative replies during the end-of-turn pause | Planned | S3; provisional input and cancellable output |
 | S5 | Improve model context reuse and inference configuration | Planned | S0 |
@@ -56,7 +56,9 @@ Acceptance:
 
 ## S2 — Stream satellite audio through to physical playback
 
-Current EchoMuse turn playback waits for a complete WAV and then sends an audio URL. The voice pipeline can overlap generation and synthesis, but that does not establish early physical playback. Its tone-enabled satellite branch also bypasses the streaming generation path.
+Implementation, deployment and measured limits: [voice-s2-satellite-streaming.md](voice-s2-satellite-streaming.md).
+
+Before S2, EchoMuse turn playback waited for a complete WAV and then sent an audio URL. The voice pipeline can overlap generation and synthesis, but that does not establish early physical playback. Its tone-enabled satellite branch also bypasses the streaming generation path.
 
 Inspect the installed controller/device capabilities first. Implement incremental delivery for a supported transport, which may require controller changes. Advertise support through the existing streaming-playback capability contract; retain complete-file delivery where necessary. Integrate tones without truncation, overlap races or unnecessary full-response buffering.
 

@@ -102,3 +102,59 @@ Repeat the real-provider comparison with:
 application container, or run the ServiceProbe locally with the TTS host, port
 and voice environment settings. It does not take over the controller voice socket
 or play audio on household devices.
+
+## Deployed verification
+
+Application commit `37ab58b4c13dce1cfda3254ee243467014021e16` was built from
+an exact Git archive, pushed, and deployed through Dockhand Git stack 10 on
+Automation environment 8. Running container:
+`6c76fbdbb2ad0cd48a130ad444da359c2ab6aa807d202cb2ae493c867bc74203`.
+Running image manifest:
+`sha256:7e9a46609b7bab68573f265fc790573c397253760346aa5ff30deb81eb70fa8c`.
+The actual image revision label matches the committed source. Dockhand reports
+`lastCommit=37ab58b`, `syncStatus=synced`, no sync error. Its deploy-stream API
+again returned `success:false, error:"No result"`; running identity and health,
+not that response, establish the deployment result.
+
+The single added stack variable is `ECHOMUSE_STREAMING_PLAYBACK_ENABLED=true`.
+All 31 pre-existing stack variables were preserved, including masked secrets.
+The running container's complete original environment fingerprint matches the
+pre-deploy fingerprint after excluding only the new application streaming flag.
+The `assister_assister-data` volume is unchanged. The ESPHome bridge retains its
+original container ID and image. The application is Healthy, restart count zero;
+all three EchoMuse satellites reconnected as owned by Assister and report
+`streamingVoicePlayback=true`. ESPHome remains offline with streaming false.
+Before/after evidence: [before](voice-s2-deploy-before.json),
+[after](voice-s2-deploy-after.json).
+
+The full .NET suite passed **502 tests** (442 unit, 60 integration); all 18
+browser regression tests also passed. All eight deployed service probes passed,
+including actual TTS synthesis, TTS-to-STT transcription, model completion,
+authenticated Home Assistant REST/WebSocket and controller reachability. See
+[service checks](voice-s2-postdeploy-services.json). The legacy service probe's
+controller detail says its audio transport is not tested; those eight checks
+must not be interpreted as a physical satellite playback test. Existing decoder
+pytest suites could not run inside the controller because pytest is not installed;
+no packages or controller files were changed to work around that limitation.
+Application logs contained startup framework warnings, with no application errors.
+
+The same fixed-text comparison was repeated **inside the deployed application
+container**, ten samples per mode and scenario, alternating mode order. See
+[deployed raw measurements](voice-s2-postdeploy-tts.json). This verifies the
+packaged C# implementation against production TTS and loopback HTTP delivery:
+
+| Scenario | Buffered median first HTTP PCM | Streaming median | Difference |
+| --- | ---: | ---: | ---: |
+| One sentence | 182.42 ms | 147.42 ms | 35.00 ms / 19.2% sooner |
+| Four sentences | 675.42 ms | 136.40 ms | 539.02 ms / 79.8% sooner |
+
+Nearest-rank p95: short 645.66 -> 298.13 ms; long 1025.19 -> 271.15 ms.
+Median complete delivery: short 182.69 -> 181.20 ms; long 676.21 -> 712.62 ms
+(the long-response stream finished 36.42 ms / 5.4% later despite earlier first
+PCM). All 20 streaming samples received PCM before synthesis completed.
+Single-sentence benefit varied between the workstation and deployed runs;
+small samples and synthesis variance limit conclusions for short replies.
+The repeatable large gain is earlier delivery of multi-sentence replies.
+These percentages apply to synthesis/HTTP delivery, not whole voice-turn latency
+or physical speaker onset. Physical EchoMuse acceptance remains pending, and no
+ESPHome hardware performance result is available.

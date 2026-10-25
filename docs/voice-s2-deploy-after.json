@@ -1,0 +1,290 @@
+{
+  "capturedAt": "2026-10-24T22:43:55.9996324-04:00",
+  "containerId": "6c76fbdbb2ad0cd48a130ad444da359c2ab6aa807d202cb2ae493c867bc74203",
+  "image": "sha256:7e9a46609b7bab68573f265fc790573c397253760346aa5ff30deb81eb70fa8c",
+  "expectedRevision": "37ab58b4c13dce1cfda3254ee243467014021e16",
+  "originalEnvironmentFingerprint": "8226A66C73096C30B00561CC0438F59389F7B6F4FC3DDFE0995F5BF5DC9D7361",
+  "originalEnvironmentPreserved": true,
+  "streamingSetting": [
+    "EchoMuse__StreamingPlaybackEnabled=true"
+  ],
+  "mounts": [
+    {
+      "Name": "assister_assister-data",
+      "Source": "/var/lib/docker/volumes/assister_assister-data/_data",
+      "Destination": "/data"
+    }
+  ],
+  "restartCount": 0,
+  "satellites": [
+    {
+      "device": {
+        "id": "ha-voice-0a587e",
+        "name": "HA Voice 0a587e",
+        "areaId": "",
+        "providerType": "ESPHome",
+        "endpoint": "10.44.65.164",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T01:32:29.055153-04:00",
+        "updatedAt": "2026-10-04T01:32:29.0551968-04:00"
+      },
+      "runtime": {
+        "connectionState": "Offline",
+        "lastSeen": null,
+        "connectedAt": null,
+        "deviceName": "",
+        "model": "",
+        "firmwareVersion": "",
+        "espHomeVersion": "",
+        "apiVersion": "",
+        "voiceOwnership": 0,
+        "capabilities": {
+          "streamingVoicePlayback": false,
+          "microphone": false,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": false,
+          "apiAudio": false,
+          "wakeWord": false,
+          "wakeWordConfiguration": false,
+          "speaker": false,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": false,
+          "volumeControl": false,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Unknown",
+        "currentVolume": null,
+        "muteState": null,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090L91181820LCV",
+        "name": "Kitchen",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T12:01:00.4750944-04:00",
+        "updatedAt": "2026-10-04T12:01:00.475138-04:00"
+      },
+      "runtime": {
+        "connectionState": "Online",
+        "lastSeen": "2026-10-24T22:43:41.3150237-04:00",
+        "connectedAt": "2026-10-24T22:43:26.2843055-04:00",
+        "deviceName": "Kitchen",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.17.0",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_jarvis_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.8503937007874016,
+        "muteState": false,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090LF1182030WPN",
+        "name": "MBedroom",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-04T12:01:00.6801775-04:00",
+        "updatedAt": "2026-10-04T12:01:00.6801776-04:00"
+      },
+      "runtime": {
+        "connectionState": "Online",
+        "lastSeen": "2026-10-24T22:43:41.3163246-04:00",
+        "connectedAt": "2026-10-24T22:43:26.2986068-04:00",
+        "deviceName": "MBedroom",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.17.0",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_mycroft_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.8740157480314961,
+        "muteState": false,
+        "lastError": null
+      }
+    },
+    {
+      "device": {
+        "id": "echomuse-G090LF1173730WP0",
+        "name": "Office",
+        "areaId": null,
+        "providerType": "EchoMuse",
+        "endpoint": "10.44.0.33",
+        "enabled": true,
+        "configuration": "{}",
+        "createdAt": "2026-10-07T22:19:23.305076-04:00",
+        "updatedAt": "2026-10-07T22:19:23.3050761-04:00"
+      },
+      "runtime": {
+        "connectionState": "Online",
+        "lastSeen": "2026-10-24T22:43:41.3174772-04:00",
+        "connectedAt": "2026-10-24T22:43:26.3022421-04:00",
+        "deviceName": "Office",
+        "model": "EchoMuse satellite",
+        "firmwareVersion": "v2.18.0-ea.1",
+        "espHomeVersion": "",
+        "apiVersion": "EchoMuse voice v1",
+        "voiceOwnership": 2,
+        "capabilities": {
+          "streamingVoicePlayback": true,
+          "microphone": true,
+          "multiChannelMicrophone": false,
+          "voiceAssistant": true,
+          "apiAudio": false,
+          "wakeWord": true,
+          "wakeWordConfiguration": false,
+          "speaker": true,
+          "mediaPlayer": false,
+          "mediaPlayback": false,
+          "announcementPlayback": true,
+          "volumeControl": true,
+          "muteControl": false,
+          "timers": false,
+          "startConversation": false,
+          "ledFeedback": false
+        },
+        "voiceConfiguration": {
+          "availableWakeWords": [],
+          "activeWakeWords": [
+            "hey_jarvis_v0.1"
+          ],
+          "maxActiveWakeWords": 0
+        },
+        "configurationDrift": null,
+        "currentVoiceSessionId": null,
+        "conversationId": null,
+        "activity": 0,
+        "wakeWord": null,
+        "microphoneSourceChannels": 1,
+        "currentPlaybackState": "Assister output idle",
+        "currentVolume": 0.7322834645669292,
+        "muteState": false,
+        "lastError": null
+      }
+    }
+  ],
+  "verifiedImageRevision": "37ab58b4c13dce1cfda3254ee243467014021e16",
+  "bridgeContainerId": "e7a5273c0dfaa93913b8b7e6c2f60d3e03f3e05a21d22b2a5e3ed94914d27c19",
+  "bridgeUnchanged": true,
+  "health": {
+    "status": "Healthy",
+    "database": "Healthy",
+    "homeAssistant": "Connected",
+    "homeAssistantCache": {
+      "isStale": false,
+      "entityCount": 1813,
+      "stateEventCount": 7045,
+      "lastStateEventAt": "2026-10-24T22:45:19.3958045-04:00"
+    },
+    "components": [
+      {
+        "name": "Language model",
+        "status": "Healthy",
+        "detail": "Models endpoint HTTP 200; inference not tested by this probe."
+      },
+      {
+        "name": "Speech to text",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      },
+      {
+        "name": "Text to speech",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      }
+    ],
+    "satelliteCount": 3,
+    "activeVoiceSessions": 0,
+    "activeConversations": 0,
+    "implementationMilestone": 6
+  }
+}
