@@ -16,9 +16,11 @@ namespace Assister.IntegrationTests;
 public sealed class EchoMuseProviderTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task OneAuthenticatedSocketMultiplexesDevicesAndExactSessionPairs(bool Tones)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task OneAuthenticatedSocketMultiplexesDevicesAndExactSessionPairs(bool Tones, bool Streaming)
     {
         var Builder = WebApplication.CreateBuilder(); Builder.WebHost.UseUrls("http://127.0.0.1:0");
         await using var Controller = Builder.Build(); Controller.UseWebSockets();
@@ -61,7 +63,7 @@ public sealed class EchoMuseProviderTests
             catch (OperationCanceledException) { }
         });
         await Controller.StartAsync();
-        await using var Factory = new Application(Controller.Urls.Single(), Tones);
+        await using var Factory = new Application(Controller.Urls.Single(), Tones, Streaming);
         using var Http = Factory.CreateDefaultClient(); using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var Socket = await SocketReady.Task.WaitAsync(Timeout.Token);
         var Manager = Factory.Services.GetRequiredService<SatelliteManager>();
@@ -119,6 +121,7 @@ public sealed class EchoMuseProviderTests
         var ContinuationReply = await NextResponse();
         Assert.Equal("turn_response", ContinuationReply.GetProperty("type").GetString());
         Assert.Equal("immediate-continuation", ContinuationReply.GetProperty("sessionId").GetString());
+        if (Streaming) await Http.GetByteArrayAsync(new Uri(ContinuationReply.GetProperty("audioUrl").GetString()!).PathAndQuery, Timeout.Token);
         await Send(Socket, new { type = "play_finished", deviceId = "second", sessionId = "immediate-continuation" });
         await Send(Socket, new { type = "turn_finished", deviceId = "second", sessionId = "immediate-continuation", outcome = "ok" });
         while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
@@ -162,7 +165,7 @@ public sealed class EchoMuseProviderTests
         await Controller.StopAsync(Timeout.Token);
     }
     private static Task Send(WebSocket Socket, object Message) => Socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(Message), WebSocketMessageType.Text, true, CancellationToken.None);
-    private sealed class Application(string Base, bool Tones) : WebApplicationFactory<Program>
+    private sealed class Application(string Base, bool Tones, bool Streaming) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder Builder)
         {
@@ -170,7 +173,7 @@ public sealed class EchoMuseProviderTests
             {
                 ["Assister:DataPath"] = Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()),
                 ["EchoMuse:Enabled"] = "true", ["EchoMuse:ControllerUrl"] = Base,
-                ["Voice:Tones:Enabled"] = Tones.ToString(),
+                ["Voice:Tones:Enabled"] = Tones.ToString(), ["EchoMuse:StreamingPlaybackEnabled"] = Streaming.ToString(),
                 ["EchoMuse:Username"] = "test-admin", ["EchoMuse:Password"] = "test-password", ["Assister:PublicUrl"] = "http://localhost"
             }));
             Builder.ConfigureServices(Services =>

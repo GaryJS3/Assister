@@ -6,12 +6,14 @@ namespace Assister.Satellites;
 public sealed class VoiceAudioStore : IDisposable
 {
     private readonly ConcurrentDictionary<Guid, (byte[] Data, DateTimeOffset Expires)> Audio = new();
+    private readonly ConcurrentDictionary<Guid, StreamingAudio> Streams = new();
     private readonly object Gate = new();
     private readonly Timer Cleanup;
     public VoiceAudioStore() => Cleanup = new Timer(_ => RemoveExpired(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     private void RemoveExpired()
     {
         foreach (var Item in Audio.Where(Item => Item.Value.Expires <= DateTimeOffset.UtcNow)) { Audio.TryRemove(Item.Key, out _); }
+        foreach (var Item in Streams.Where(Item => Item.Value.Expires <= DateTimeOffset.UtcNow)) Remove(Item.Key);
     }
     public Guid Add(byte[] Wave)
     {
@@ -19,15 +21,91 @@ public sealed class VoiceAudioStore : IDisposable
         lock (Gate)
         {
             RemoveExpired();
-            if (Audio.Count >= 16) { throw new InvalidOperationException("Audio storage is full."); }
+            if (Audio.Count + Streams.Count >= 16) { throw new InvalidOperationException("Audio storage is full."); }
             var Id = Guid.NewGuid();
             Audio[Id] = (Wave, DateTimeOffset.UtcNow.AddMinutes(2));
             return Id;
         }
     }
     public byte[]? Get(Guid Id) => Audio.TryGetValue(Id, out var Item) && Item.Expires > DateTimeOffset.UtcNow ? Item.Data : null;
-    public void Remove(Guid Id) => Audio.TryRemove(Id, out _);
-    public void Dispose() => Cleanup.Dispose();
+    public Guid AddStream(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
+    {
+        lock (Gate)
+        {
+            RemoveExpired();
+            if (Audio.Count + Streams.Count >= 16) throw new InvalidOperationException("Audio storage is full.");
+            var Id = Guid.NewGuid();
+            Streams[Id] = new(Chunks, Token);
+            return Id;
+        }
+    }
+    public StreamingAudio? GetStream(Guid Id) => Streams.TryGetValue(Id, out var Item) && Item.Expires > DateTimeOffset.UtcNow ? Item : null;
+    public void Remove(Guid Id)
+    {
+        Audio.TryRemove(Id, out _);
+        if (Streams.TryRemove(Id, out var Stream)) Stream.Cancel();
+    }
+    public void Dispose()
+    {
+        Cleanup.Dispose();
+        foreach (var Id in Streams.Keys) Remove(Id);
+    }
+
+    public sealed class StreamingAudio
+    {
+        private readonly IAsyncEnumerable<AudioChunk> Chunks;
+        private readonly CancellationTokenSource Lifetime;
+        private readonly ExecutionContext? ProducerContext = ExecutionContext.Capture();
+        private readonly TaskCompletionSource Done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int Claimed;
+        public DateTimeOffset Expires { get; } = DateTimeOffset.UtcNow.AddMinutes(2);
+        public DateTimeOffset? FirstPcmWrittenAt { get; private set; }
+        public DateTimeOffset? TransferCompletedAt { get; private set; }
+        public Task Completion => Done.Task;
+        internal StreamingAudio(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
+        {
+            this.Chunks = Chunks;
+            Lifetime = CancellationTokenSource.CreateLinkedTokenSource(Token);
+            Lifetime.CancelAfter(TimeSpan.FromMinutes(2));
+            Lifetime.Token.Register(() => Done.TrySetCanceled(Lifetime.Token));
+            // Observe failures even when cancellation wins the turn's wait.
+            _ = Done.Task.ContinueWith(Task => _ = Task.Exception, TaskContinuationOptions.OnlyOnFaulted);
+        }
+        public void Cancel()
+        {
+            try { Lifetime.Cancel(); } catch (ObjectDisposedException) { }
+            if (Interlocked.CompareExchange(ref Claimed, -1, 0) == 0) Lifetime.Dispose();
+        }
+        public async Task<bool> WriteAsync(Stream Destination, CancellationToken RequestAborted)
+        {
+            if (Interlocked.CompareExchange(ref Claimed, 1, 0) != 0) return false;
+            Task? Transfer = null;
+            // Synthesis belongs to the voice run, not to the controller's separate HTTP request.
+            if (ProducerContext is not null) ExecutionContext.Run(ProducerContext.CreateCopy(), _ => Transfer = PumpAsync(), null);
+            else Transfer = PumpAsync();
+            await Transfer!;
+            return true;
+            async Task PumpAsync()
+            {
+                using var Abort = RequestAborted.Register(Cancel);
+                try
+                {
+                    var Header = true;
+                    await foreach (var Bytes in StreamingWave.Encode48kAsync(Chunks, Lifetime.Token))
+                    {
+                        await Destination.WriteAsync(Bytes, Lifetime.Token);
+                        await Destination.FlushAsync(Lifetime.Token);
+                        if (!Header) FirstPcmWrittenAt ??= DateTimeOffset.UtcNow;
+                        Header = false;
+                    }
+                    TransferCompletedAt = DateTimeOffset.UtcNow;
+                    Done.TrySetResult();
+                }
+                catch (Exception Error) { Done.TrySetException(Error); Cancel(); throw; }
+                finally { Lifetime.Dispose(); }
+            }
+        }
+    }
 
     public static async Task<byte[]> WaveAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
     {

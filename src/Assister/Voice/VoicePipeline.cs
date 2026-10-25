@@ -127,7 +127,9 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             await Satellite.SendEventAsync(new("transcribed", Transcript.Text, Session.Id), Timeout.Token);
             await Satellite.SendEventAsync(new("processing", SessionId: Session.Id), Timeout.Token);
             Phase = "processing-failed";
-            if (!(Tones is { Enabled: true } && Satellite is ITonePlayback { SupportsTonePlayback: true }) && Configuration.GetValue("Voice:StreamingEnabled", false) && Coordinator is IStreamingRequestCoordinator Streaming)
+            // EchoMuse needs final follow-up metadata before turn_response. It still streams TTS PCM
+            // below, after routing and feedback finish, without buffering the complete response WAV.
+            if (Satellite is not EchoMuseConnection.Turn { SupportsStreamingPlayback: true } && !(Tones is { Enabled: true } && Satellite is ITonePlayback { SupportsTonePlayback: true }) && Configuration.GetValue("Voice:StreamingEnabled", false) && Coordinator is IStreamingRequestCoordinator Streaming)
             {
                 var Text = Channel.CreateBounded<string>(new BoundedChannelOptions(8) { SingleReader = true, SingleWriter = true });
                 var Sentences = new SentenceBuffer();
@@ -263,7 +265,15 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                 AudioChunk? OutputFormat = null;
                 long Bytes = 0;
                 double Duration = 0;
-                await foreach (var Chunk in Tts.SynthesizeAsync(Spoken, new(Voice), Token).WithCancellation(Token))
+                async IAsyncEnumerable<string> Sentences()
+                {
+                    foreach (var Sentence in new SentenceBuffer().Append(Spoken, Final: true)) yield return Sentence;
+                    await Task.CompletedTask;
+                }
+                var Speech = Satellite is EchoMuseConnection.Turn { SupportsStreamingPlayback: true } && Tts is IStreamingTextToSpeechProvider StreamingSpeech
+                    ? StreamingSpeech.SynthesizeStreamAsync(Sentences(), new(Voice), Token)
+                    : Tts.SynthesizeAsync(Spoken, new(Voice), Token);
+                await foreach (var Chunk in Speech.WithCancellation(Token))
                 {
                     if (!Chunk.Pcm.IsEmpty) LatencyMetrics.Mark("firstSynthesizedPcm");
                     FirstAudio ??= (DateTimeOffset.UtcNow - Started).TotalMilliseconds;

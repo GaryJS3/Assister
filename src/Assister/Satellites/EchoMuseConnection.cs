@@ -13,6 +13,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
     SatelliteManager Manager) : ISatelliteConnection
 {
     private VoiceAudioStore Store => Audio;
+    private bool StreamingPlaybackEnabled => Configuration.GetValue("EchoMuse:StreamingPlaybackEnabled", false);
     private SatelliteManager StateManager => Manager;
     private string Device => DeviceId;
     private Task WriteAsync(object Message, CancellationToken Token) => Send(Message, Token);
@@ -188,7 +189,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         public TaskCompletionSource<bool> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, Assister.Voice.ITonePlayback, IDisposable
+    public sealed class Turn : ISatelliteConnection, IVoiceActivationContext, IProviderEndpointing, IStreamingAudioPlayback, Assister.Voice.ITonePlayback, IDisposable
     {
         private readonly EchoMuseConnection Owner;
         private readonly Channel<AudioChunk> Input = Channel.CreateBounded<AudioChunk>(64);
@@ -280,23 +281,45 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         }
         public void MarkStopped() { ControllerEnded = true; }
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => Input.Reader.ReadAllAsync(Token);
-        public bool SupportsTonePlayback => Owner.FeedbackPlaybackSupported;
+        public bool SupportsTonePlayback => Owner.FeedbackPlaybackSupported && !ControllerEnded;
+        // Opt-in for audited controllers with incremental WAV fetching and device-stream playback.
+        public bool SupportsStreamingPlayback => Owner.StreamingPlaybackEnabled;
         public Task PlayToneAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token) => Owner.PlayAsync(Chunks, true, Token, SessionId);
         public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Chunks, CancellationToken Token)
         {
             if (await End.Task.WaitAsync(Token) != "speech_end") { throw new OperationCanceledException(Token); }
-            var Wave = await VoiceAudioStore.Wave48kAsync(Chunks, Token);
-            var AudioId = Owner.Store.Add(Wave);
+            var Streaming = SupportsStreamingPlayback;
+            var AudioId = Streaming ? Owner.Store.AddStream(Chunks, Token)
+                : Owner.Store.Add(await VoiceAudioStore.Wave48kAsync(Chunks, Token));
+            var Transfer = Streaming ? Owner.Store.GetStream(AudioId)! : null;
             RunId = RunTracing.RunId;
             try
             {
                 using var Delivery = RunTracing.Start("Playback", "Satellite playback", "Serve opaque WAV audio and wait for the matching controller playback acknowledgment.");
-                Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow, transportSessionId = SessionId, controllerDeviceId = Owner.Device });
-                await Owner.WriteAsync(new { type = "turn_response", sessionId = SessionId, deviceId = Owner.Device, audioUrl = Owner.Url(AudioId), text = Response,
+                Delivery.Metadata(new { audioReadyAt = DateTimeOffset.UtcNow, streaming = Streaming, transportSessionId = SessionId, controllerDeviceId = Owner.Device });
+                var Url = Streaming ? Owner.Url(AudioId).Replace("/voice/audio/", "/voice/stream/", StringComparison.Ordinal) : Owner.Url(AudioId);
+                await Owner.WriteAsync(new { type = "turn_response", sessionId = SessionId, deviceId = Owner.Device, audioUrl = Url, text = Response,
                     continueConversation = Response.Contains('?') }, Token);
+                if (Streaming)
+                {
+                    if (await Task.WhenAny(Transfer!.Completion, Playback.Task).WaitAsync(Token) == Playback.Task && !await Playback.Task)
+                        throw new IOException("Satellite playback failed before audio transfer completed.");
+                    await Transfer.Completion.WaitAsync(Token);
+                }
                 if (!await Playback.Task.WaitAsync(Token)) { throw new IOException("Satellite playback failed."); }
-                Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow });
+                Delivery.Output(new { playbackAcknowledgement = "succeeded", acknowledgedAt = DateTimeOffset.UtcNow,
+                    firstPcmHttpWriteAt = Transfer?.FirstPcmWrittenAt, httpTransferCompletedAt = Transfer?.TransferCompletedAt,
+                    firstDevicePlaybackAt = (DateTimeOffset?)null });
                 Delivery.Complete();
+            }
+            catch
+            {
+                if (!ControllerEnded)
+                {
+                    await Owner.TryStopAsync(new { type = "turn_cancel", sessionId = SessionId, deviceId = Owner.Device });
+                    ControllerEnded = true;
+                }
+                throw;
             }
             finally { Owner.Store.Remove(AudioId); }
         }

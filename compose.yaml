@@ -28,6 +28,7 @@ services:
       TextToSpeech__Voice: ${TTS_VOICE:-}
       EchoMuse__ControllerUrl: ${ECHOMUSE_CONTROLLER_URL:-}
       EchoMuse__Enabled: ${ECHOMUSE_ENABLED:-false}
+      EchoMuse__StreamingPlaybackEnabled: ${ECHOMUSE_STREAMING_PLAYBACK_ENABLED:-false}
       EchoMuse__Username: ${ECHOMUSE_USERNAME:-admin}
       EchoMuse__Password: ${ECHOMUSE_PASSWORD:-}
       EspHome__Host: ${ESPHOME_HOST:-}

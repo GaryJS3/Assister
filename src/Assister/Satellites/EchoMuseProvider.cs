@@ -230,7 +230,8 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                     ApiVersion = "EchoMuse voice v1", MuteState = True(Item, "muted"),
                     CurrentVolume = Item.TryGetProperty("volume", out var Volume) && Volume.TryGetDouble(out var Level) ? Level : null,
                     CurrentPlaybackState = State.CurrentPlaybackState == "Unknown" ? "Assister output idle" : State.CurrentPlaybackState,
-                    Capabilities = new() { VoiceAssistant = true, Microphone = true, Speaker = true, VolumeControl = VolumeControl, WakeWord = Wake is not null, AnnouncementPlayback = true },
+                    Capabilities = new() { VoiceAssistant = true, Microphone = true, Speaker = true, VolumeControl = VolumeControl, WakeWord = Wake is not null, AnnouncementPlayback = true,
+                        StreamingVoicePlayback = Configuration.GetValue("EchoMuse:StreamingPlaybackEnabled", false) },
                     VoiceConfiguration = Wake is null ? new([], [], 0) : new([], [Wake], 0) });
             }
             EchoMuseConnection[] Removed;

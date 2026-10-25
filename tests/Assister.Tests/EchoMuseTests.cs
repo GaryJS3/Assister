@@ -11,6 +11,60 @@ namespace Assister.Tests;
 
 public sealed class EchoMuseTests
 {
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task StreamingRequiresCompletedTransferAndMatchingPlaybackAck(bool FailBeforeFetch)
+    {
+        using var Audio = new VoiceAudioStore();
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            { ["Assister:PublicUrl"] = "http://localhost", ["EchoMuse:StreamingPlaybackEnabled"] = "true" }).Build();
+        var Sent = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var Device = new EchoMuseConnection("device", "logical", "Office", null, (Value, _) =>
+        {
+            var Json = Message(Value);
+            if (EchoMuseConnection.Text(Json, "type") == "turn_response") Sent.TrySetResult(Json);
+            return Task.CompletedTask;
+        }, Audio, Config, new SatelliteManager());
+        using var Turn = Device.Start("session", null, Deadline.Token)!;
+        Assert.True(Turn.SupportsStreamingPlayback);
+        Turn.Handle(Message(new { type = "audio_end", reason = "speech_end" }));
+        await Turn.SendEventAsync(new("response", "Would you like more?"), Deadline.Token);
+        var Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var Reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async IAsyncEnumerable<AudioChunk> Source([EnumeratorCancellation] CancellationToken Token = default)
+        {
+            yield return new(new byte[960], 48000, 2, 1);
+            Reading.TrySetResult();
+            await Release.Task.WaitAsync(Token);
+        }
+        var Play = Turn.SendAudioAsync(Source(), Deadline.Token);
+        var Response = await Sent.Task.WaitAsync(Deadline.Token);
+        Assert.True(Response.GetProperty("continueConversation").GetBoolean());
+        var Url = new Uri(Response.GetProperty("audioUrl").GetString()!);
+        Assert.StartsWith("/api/voice/stream/", Url.AbsolutePath);
+        var Id = Guid.Parse(Path.GetFileNameWithoutExtension(Url.AbsolutePath));
+        if (FailBeforeFetch)
+        {
+            Turn.Handle(Message(new { type = "play_failed" }));
+            await Assert.ThrowsAsync<IOException>(() => Play.WaitAsync(Deadline.Token));
+        }
+        else
+        {
+            var Transfer = Audio.GetStream(Id)!.WriteAsync(Stream.Null, Deadline.Token);
+            await Reading.Task.WaitAsync(Deadline.Token);
+            Assert.False(Play.IsCompleted);
+            Release.TrySetResult();
+            await Transfer;
+            Assert.False(Play.IsCompleted); // EOF is not the device acknowledgement.
+            Assert.False(Device.Handle(Message(new { type = "play_finished", deviceId = "device", sessionId = "wrong-session" })));
+            Assert.False(Play.IsCompleted);
+            Turn.Handle(Message(new { type = "play_finished" }));
+            await Play;
+        }
+        Assert.Null(Audio.GetStream(Id));
+    }
+
     [Fact]
     public async Task ImmediateContinuationWaitsForAcknowledgedTurnCleanup()
     {

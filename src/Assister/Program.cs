@@ -28,6 +28,18 @@ App.MapClientUpdates();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }
 App.MapGet("/api/voice/audio/{id:guid}.{extension}", (Guid Id, VoiceAudioStore Audio) => Audio.Get(Id) is { } Data
     ? Results.File(Data, Data.AsSpan().StartsWith("fLaC"u8) ? "audio/flac" : "audio/wav", enableRangeProcessing: true) : Results.NotFound());
+App.MapGet("/api/voice/stream/{id:guid}.wav", async (Guid Id, VoiceAudioStore Audio, HttpContext Context) =>
+{
+    if (Audio.GetStream(Id) is not { } Stream) { Context.Response.StatusCode = 404; return; }
+    Context.Response.ContentType = "audio/wav";
+    Context.Response.Headers.CacheControl = "no-store";
+    try
+    {
+        if (!await Stream.WriteAsync(Context.Response.Body, Context.RequestAborted)) Context.Response.StatusCode = 410;
+    }
+    catch (Exception Error) when (Error is IOException or OperationCanceledException or InvalidOperationException)
+    { Context.Abort(); }
+});
 App.UseDefaultFiles();
 App.UseStaticFiles();
 App.UseWebSockets();

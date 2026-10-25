@@ -20,6 +20,7 @@ public sealed class Satellite
 
 public sealed record SatelliteCapabilities
 {
+    public bool StreamingVoicePlayback { get; init; }
     public bool Microphone { get; init; }
     public bool MultiChannelMicrophone { get; init; }
     public bool VoiceAssistant { get; init; }
