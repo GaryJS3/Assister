@@ -57,7 +57,7 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
         }
         async Task<(string Id, bool Delivered)> DeliverAsync(string[] Row)
         {
-            try { return (Row[0], await Satellites.AnnounceAsync(Row[2], $"Your {Row[1]} has finished.", Tts, Token)); }
+            try { return (Row[0], await Satellites.AnnounceAsync(Row[2], $"Your {Row[1]} has finished.", Tts, Token, Importance: AnnouncementImportance.Alarm)); }
             catch (OperationCanceledException) when (Token.IsCancellationRequested) { return (Row[0], false); }
             catch (Exception Error) when (Error is IOException or InvalidOperationException or System.Net.Sockets.SocketException or OperationCanceledException)
             {

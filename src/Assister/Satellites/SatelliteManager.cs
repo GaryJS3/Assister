@@ -197,7 +197,13 @@ public sealed class SatelliteManager
         }
         catch (Exception)
         {
-            if (Pending is not null) Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().AddSeconds(10).UtcTicks);
+            if (Pending is not null)
+            {
+                // The originating timer/reminder still owns an undelivered notification.
+                // Only retain repeat state after the first successful delivery.
+                if (!Repeat) ((ICollection<KeyValuePair<string, RepeatingAnnouncement>>)Announcements).Remove(new(Id, Pending));
+                else Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().AddSeconds(10).UtcTicks);
+            }
             Record(Id, "Announcement failed", SessionId: Session);
             throw;
         }

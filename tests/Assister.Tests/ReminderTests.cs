@@ -7,6 +7,41 @@ namespace Assister.Tests;
 
 public sealed class ReminderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReminderDefaultsToAcknowledgementIncludingBroadcasts(bool Broadcast)
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('test','Stretch',$p0,'America/New_York',20,0,NULL,0,'active')", default, Broadcast ? "all" : "kitchen");
+        await Store.ExecuteAsync("INSERT INTO Satellites VALUES('kitchen','Kitchen',NULL,'test','',1,'','', '')", default);
+        var Clock = new TestClock();
+        var Manager = new Assister.Satellites.SatelliteManager(Clock: Clock);
+        var Speaker = new Satellite();
+        Manager.Register(Speaker);
+        Manager.Update("kitchen", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Scheduler.TickAsync(Store, new Speech(), Clock.GetUtcNow(), default);
+        Assert.Contains("kitchen", Manager.PendingAnnouncementIds);
+        Clock.Advance(599);
+        await Manager.RepeatAnnouncementAsync("kitchen", new Speech(), default);
+        Assert.Equal(1, Speaker.Deliveries);
+        Clock.Advance(1);
+        await Manager.RepeatAnnouncementAsync("kitchen", new Speech(), default);
+        Assert.Equal(2, Speaker.Deliveries);
+        Assert.True(await Manager.AcknowledgeAsync("kitchen", "acknowledged", default));
+        Clock.Advance(600);
+        await Manager.RepeatAnnouncementAsync("kitchen", new Speech(), default);
+        Assert.Equal(2, Speaker.Deliveries);
+    }
+
+    private sealed class TestClock : TimeProvider
+    {
+        private DateTimeOffset Now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
+        public void Advance(int Seconds) => Now = Now.AddSeconds(Seconds);
+    }
     [Fact]
     public async Task BroadcastRetriesOfflineDestinationWithoutRepeatingSuccessfulPlayback()
     {

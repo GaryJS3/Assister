@@ -35,7 +35,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
         {
             var Deliveries = Batch.Select(async Row =>
             {
-                try { return (Row, Delivered: await Satellites.AnnounceAsync(Row[2], "Reminder: " + Row[1] + ".", Speech, Token)); }
+                try { return (Row, Delivered: await Satellites.AnnounceAsync(Row[2], "Reminder: " + Row[1] + ".", Speech, Token, Importance: AnnouncementImportance.Acknowledge)); }
                 catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }
                 catch (Exception Error)
                 {
@@ -80,7 +80,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
                 if (Satellites.IsBusy(Target[0])) continue;
                 try
                 {
-                    if (await Satellites.AnnounceAsync(Target[0], "Reminder: " + Row[1] + ".", Speech, Token))
+                    if (await Satellites.AnnounceAsync(Target[0], "Reminder: " + Row[1] + ".", Speech, Token, Importance: AnnouncementImportance.Acknowledge))
                         await Store.ExecuteAsync("UPDATE ReminderBroadcastDeliveries SET Delivered=1 WHERE ReminderId=$p0 AND DueAt=$p1 AND SatelliteId=$p2", Token, Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture), Target[0]);
                 }
                 catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }

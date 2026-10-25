@@ -12,7 +12,8 @@
 The satellite Playback panel and `satellite_announce` tool accept the same levels.
 Direct commands use a level after the verb, for example `announce alarm to Kitchen: Check the oven`.
 The destination picker and deferred delivery preserve the importance.
-Timers and reminders retain their existing notify behavior by default.
+Expired timers default to `alarm`. Reminders, including all-satellite broadcasts,
+default to `acknowledge`. Their repeat-until-dismissed state remains memory-only.
 
 Acknowledgements match whole words anywhere in the transcript: acknowledge, acknowledged,
 stop, cancel, heard, dismiss, dismissed, got it, understood. An acknowledgement dismisses

@@ -10,6 +10,55 @@ namespace Assister.Tests;
 
 public sealed class TimerDeliveryTests
 {
+    [Fact]
+    public async Task ExpiredTimerDefaultsToAlarmUntilAcknowledged()
+    {
+        await using var Database = await OpenAsync(":memory:");
+        var Store = new LocalStore(Database);
+        await InsertAsync(Store, "bedroom", 0);
+        var Clock = new TestClock();
+        var Manager = new SatelliteManager(Clock: Clock);
+        var Speaker = new Satellite("bedroom");
+        Register(Manager, Speaker);
+        await Service(Manager).TickAsync(Store, new Tts(), default);
+        Assert.Contains("bedroom", Manager.PendingAnnouncementIds);
+        Clock.Advance(9);
+        await Manager.RepeatAnnouncementAsync("bedroom", new Tts(), default);
+        Assert.Equal(1, Speaker.Deliveries);
+        Clock.Advance(1);
+        await Manager.RepeatAnnouncementAsync("bedroom", new Tts(), default);
+        Assert.Equal(2, Speaker.Deliveries);
+        Assert.True(await Manager.AcknowledgeAsync("bedroom", "heard", default));
+        Clock.Advance(10);
+        await Manager.RepeatAnnouncementAsync("bedroom", new Tts(), default);
+        await Service(Manager).TickAsync(Store, new Tts(), default);
+        Assert.Equal(2, Speaker.Deliveries);
+    }
+
+    [Fact]
+    public async Task FailedInitialAlarmRemainsOwnedByTimerSchedulerForRetry()
+    {
+        await using var Database = await OpenAsync(":memory:");
+        var Store = new LocalStore(Database);
+        await InsertAsync(Store, "bedroom", 0);
+        var Manager = new SatelliteManager();
+        var Speaker = new Satellite("bedroom", Fails: true);
+        Register(Manager, Speaker);
+        await Service(Manager).TickAsync(Store, new Tts(), default);
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        Speaker.FailPlayback = false;
+        await Service(Manager).TickAsync(Store, new Tts(), default);
+        Assert.Equal(1, Speaker.Deliveries);
+        Assert.Single(await Store.QueryAsync("SELECT Id FROM Timers WHERE Status='completed'", default));
+        Assert.Contains("bedroom", Manager.PendingAnnouncementIds);
+    }
+
+    private sealed class TestClock : TimeProvider
+    {
+        private DateTimeOffset Now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
+        public void Advance(int Seconds) => Now = Now.AddSeconds(Seconds);
+    }
     [Theory]
     [InlineData("How much left on the timer?")]
     [InlineData("How much time is left on my timer?")]
@@ -180,6 +229,7 @@ public sealed class TimerDeliveryTests
     }
     private sealed class Satellite(string Id, bool Fails = false, bool Holds = false) : ISatelliteConnection
     {
+        public bool FailPlayback { get; set; } = Fails;
         public string SatelliteId => Id;
         public string Name => Id;
         public string? Area => null;
@@ -191,7 +241,7 @@ public sealed class TimerDeliveryTests
         {
             await foreach (var _ in Audio.WithCancellation(Token)) { }
             if (Holds) { await Release.Task.WaitAsync(Token); }
-            if (Fails) { throw new IOException(); }
+            if (FailPlayback) { throw new IOException(); }
             Deliveries++;
             Completed.TrySetResult();
         }
