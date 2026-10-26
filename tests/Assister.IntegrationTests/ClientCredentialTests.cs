@@ -112,7 +112,8 @@ public sealed class ClientCredentialTests
             Builder.ConfigureAppConfiguration((_, Configuration) => Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Assister:DataPath"] = DataPath,
-                ["ClientUpdates:UploadToken"] = Admin,
+                ["ClientManagement:AdminToken"] = Admin,
+                ["ClientUpdates:UploadToken"] = "different-upload-credential-123456789",
                 ["RichClients:Clients:web:Token"] = WebToken,
                 ["RichClients:Clients:web:Owner"] = "gary",
                 ["SatelliteBridge:Enabled"] = "false",

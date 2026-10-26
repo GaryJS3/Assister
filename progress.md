@@ -405,3 +405,7 @@ Remaining-time questions, including How much left on the timer, use persisted As
 - Durable hash-only credential overrides in the data volume; generated tokens contain 256 random bits. Explicit revocations and rotations survive restart and override environment configuration. Reassignment preserves existing history ownership; credential changes disconnect pending device work. Existing streams recheck authentication/ownership.
 - Full current-checkout suite passed: 524 unit/component tests and 70 integration tests, including three new management tests for authorization/origin, no-secret listings, separate phone/web registration, duplicate/invalid input, rotation/revocation across restart and owner/history isolation. Browser preview verified unlock, controls and layout using disposable local configuration. Screenshot: `.codex-local/client-tokens-preview.png` (no real credentials).
 - Operational reference: `docs/client-tokens.md`. Production rollout evidence will be recorded separately.
+
+### Client-management administrator separation
+
+- Live verification found the existing configured web token equals the upload token. Management therefore now requires a dedicated `ClientManagement:AdminToken` or private `/data/client-management-admin-token.txt`; there is no upload-token fallback. Web/phone and APK upload credentials remain unchanged. The private admin file is not served by an HTTP endpoint.

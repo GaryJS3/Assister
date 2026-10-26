@@ -114,6 +114,7 @@ public static class ClientCredentialEndpoints
     public static void MapClientCredentials(this WebApplication App, ConfigurationManager Configuration)
     {
         var Store = new ClientCredentialStore(Configuration);
+        var AdminPath = Path.Combine(Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data"), "client-management-admin-token.txt");
         var Group = App.MapGroup("/api/devices/credentials");
         Group.AddEndpointFilter(async (Context, Next) =>
         {
@@ -122,7 +123,8 @@ public static class ClientCredentialEndpoints
             var Origin = Http.Request.Headers.Origin.ToString();
             if (Origin.Length > 0 && (!Uri.TryCreate(Origin, UriKind.Absolute, out var OriginUri)
                 || OriginUri.Authority != Http.Request.Host.Value || OriginUri.Scheme != Http.Request.Scheme)) return Results.StatusCode(403);
-            var Expected = Configuration["ClientUpdates:UploadToken"];
+            var Expected = Configuration["ClientManagement:AdminToken"]
+                ?? (File.Exists(AdminPath) ? File.ReadAllText(AdminPath).Trim() : null);
             var Header = Http.Request.Headers.Authorization.ToString();
             var Token = Header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? Header[7..] : "";
             if (string.IsNullOrEmpty(Expected) || !CryptographicOperations.FixedTimeEquals(
