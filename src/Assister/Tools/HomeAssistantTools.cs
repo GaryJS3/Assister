@@ -32,7 +32,10 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
         {
             var Area = Arguments.TryGetProperty("area", out var AreaValue) ? AreaValue.GetString() : null;
             var Domains = Arguments.TryGetProperty("domains", out var DomainValue) ? DomainValue.EnumerateArray().Select(Item => Item.GetString()).ToArray() : null;
-            var Matches = HomeAssistantEntitySearch.Find(Snapshot.Entities, Arguments.GetProperty("query").GetString()!, Area, Domains!)
+            var Query = Arguments.GetProperty("query").GetString()!;
+            var Matches = (SolarEnergyPolicy.ActualToday(Context.Request.Message)
+                ? SolarEnergyPolicy.FindDailyGeneration(Snapshot.Entities, Query, Area, Domains!)
+                : HomeAssistantEntitySearch.Find(Snapshot.Entities, Query, Area, Domains!))
                 .Take(Arguments.TryGetProperty("limit", out var Limit) ? Limit.GetInt32() : 10).ToArray();
             // Materialize before recording observations: a failed projection must not leave
             // half-observed targets available to later controls.
@@ -49,7 +52,15 @@ public sealed class HomeAssistantTool(string Name, HomeAssistantStateCache Cache
             return "{\"error\":\"Search for every requested entity with ha_search in this request first. Copy its exact entity_id; do not reconstruct IDs from names or earlier turns.\",\"code\":\"search_required\"}";
         }
         var Entities = Ids.Select(Id => Snapshot.Entities.SingleOrDefault(Entity => Entity.EntityId == Id) ?? throw new InvalidOperationException()).ToArray();
-        if (Name == "ha_get_state") { return JsonSerializer.Serialize(Entities.Select(Compact)); }
+        if (Name == "ha_get_state")
+        {
+            if (SolarEnergyPolicy.ActualToday(Context.Request.Message)
+                && (Entities.Length == 0 || Entities.Any(Entity => !SolarEnergyPolicy.IsDailyGeneration(Entity)
+                    || !double.TryParse(Entity.State.GetProperty("state").GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var Energy)
+                    || !double.IsFinite(Energy) || Energy < 0)))
+                return "{\"error\":\"Actual solar energy today requires an available measured daily generation counter in Wh, kWh or MWh. Forecasts, lifetime totals and instantaneous power cannot answer this question. Search solar sensors; if no measured daily counter is available, say so.\",\"code\":\"actual_solar_energy_required\"}";
+            return JsonSerializer.Serialize(Entities.Select(Compact));
+        }
         if (Name == "ha_control")
         {
             var Authorized = Context.Control;

@@ -8,6 +8,100 @@ namespace Assister.Tests;
 
 public sealed class HomeAssistantToolTests
 {
+    private static HomeAssistantStateCache SolarCache(string DailyState = "27.6")
+    {
+        var States = Enumerable.Range(0, 12).Select(Index => new
+        {
+            entity_id = "sensor.energy_forecast_" + Index, state = "0",
+            attributes = new { friendly_name = "Solar production forecast Estimated energy production today " + Index, unit_of_measurement = "kWh" }
+        }).Cast<object>().Append(new
+        {
+            entity_id = "sensor.invertermonitor_power_generation_of_the_day", state = DailyState,
+            attributes = new { friendly_name = "InverterMonitor Power Generation Of The Day", unit_of_measurement = "kWh", device_class = "energy" }
+        }).Append(new
+        {
+            entity_id = "sensor.invertermonitor_accumulated_solar_generation", state = "3002",
+            attributes = new { friendly_name = "InverterMonitor Accumulated Solar Generation", unit_of_measurement = "kWh" }
+        }).Append(new
+        {
+            entity_id = "sensor.invertermonitor_pv_power", state = "0",
+            attributes = new { friendly_name = "InverterMonitor PV Power", unit_of_measurement = "W" }
+        });
+        var Cache = new HomeAssistantStateCache();
+        Cache.Load(Json(JsonSerializer.Serialize(States)), Json("{}"), Json("[]"), Json("[]"), Json("[]"));
+        Cache.SetStale(false);
+        return Cache;
+    }
+
+    [Theory]
+    [InlineData("solar missing system")]
+    [InlineData("sensor.energy_forecast_0")]
+    public async Task ActualSolarSearchPreservesSpecificTargets(string Query)
+    {
+        using var Http = new HttpClient();
+        var Tool = new HomeAssistantTool("ha_search", SolarCache(), new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Result = Json(await Tool.ExecuteAsync(Json(JsonSerializer.Serialize(new { query = Query })),
+            new(new("How much solar did I generate today?"), []), default));
+        Assert.Empty(Result.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ActualSolarSearchFindsMeasuredDailyCounterBeforeForecastResultLimit()
+    {
+        var Cache = SolarCache();
+        using var Http = new HttpClient();
+        var Config = new ConfigurationBuilder().Build();
+        var Context = new ToolExecutionContext(new("How much solar did I generate today?"), []);
+        var Search = new HomeAssistantTool("ha_search", Cache, new RecordingActions(), Http, Config);
+        var Result = Json(await Search.ExecuteAsync(Json("""{"query":"solar"}"""), Context, default));
+        var Entity = Assert.Single(Result.EnumerateArray());
+        Assert.Equal("sensor.invertermonitor_power_generation_of_the_day", Entity.GetProperty("entity_id").GetString());
+        var State = new HomeAssistantTool("ha_get_state", Cache, new RecordingActions(), Http, Config);
+        var Reading = Json(await State.ExecuteAsync(Json("""{"entity_ids":["sensor.invertermonitor_power_generation_of_the_day"]}"""), Context, default));
+        Assert.Equal("27.6", Reading[0].GetProperty("state").GetString());
+        Assert.Equal("kWh", Reading[0].GetProperty("unit").GetString());
+    }
+
+    [Theory]
+    [InlineData("sensor.energy_forecast_0")]
+    [InlineData("sensor.invertermonitor_accumulated_solar_generation")]
+    [InlineData("sensor.invertermonitor_pv_power")]
+    public async Task ActualSolarReadRejectsForecastLifetimeAndInstantaneousPower(string Id)
+    {
+        using var Http = new HttpClient();
+        var Tool = new HomeAssistantTool("ha_get_state", SolarCache(), new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Result = Json(await Tool.ExecuteAsync(Json(JsonSerializer.Serialize(new { entity_ids = new[] { Id } })),
+            new(new("How much solar did I generate today?"), [Id]), default));
+        Assert.Equal("actual_solar_energy_required", Result.GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("unavailable")]
+    [InlineData("unknown")]
+    [InlineData("NaN")]
+    [InlineData("-1")]
+    public async Task MissingActualSolarReadingDoesNotBecomeZero(string State)
+    {
+        using var Http = new HttpClient();
+        var Tool = new HomeAssistantTool("ha_get_state", SolarCache(State), new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Id = "sensor.invertermonitor_power_generation_of_the_day";
+        var Result = Json(await Tool.ExecuteAsync(Json(JsonSerializer.Serialize(new { entity_ids = new[] { Id } })),
+            new(new("How much solar did I generate today?"), [Id]), default));
+        Assert.True(Result.TryGetProperty("error", out _));
+    }
+
+    [Theory]
+    [InlineData("How much solar is forecast today?")]
+    [InlineData("How much solar will I generate today?")]
+    [InlineData("How much solar did I generate yesterday?")]
+    public async Task OtherSolarPeriodsAndForecastRequestsKeepNormalDiscovery(string Message)
+    {
+        using var Http = new HttpClient();
+        var Tool = new HomeAssistantTool("ha_search", SolarCache(), new RecordingActions(), Http, new ConfigurationBuilder().Build());
+        var Result = Json(await Tool.ExecuteAsync(Json("""{"query":"solar"}"""), new(new(Message), []), default));
+        Assert.Contains(Result.EnumerateArray(), Entity => Entity.GetProperty("entity_id").GetString()!.StartsWith("sensor.energy_forecast_"));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
