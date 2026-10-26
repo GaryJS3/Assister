@@ -10,10 +10,12 @@ public sealed class NotificationStore : IDisposable
     private readonly object Gate = new();
     private readonly SqliteConnection Database;
     private readonly TimeProvider Clock;
+    private readonly ClientSignals? Signals;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public NotificationStore(IConfiguration Configuration, TimeProvider? Clock = null)
+    public NotificationStore(IConfiguration Configuration, TimeProvider? Clock = null, ClientSignals? Signals = null)
     {
+        this.Signals = Signals;
         this.Clock = Clock ?? TimeProvider.System;
         var Folder = Path.GetFullPath(Configuration["Assister:DataPath"] ?? "data");
         Directory.CreateDirectory(Folder);
@@ -57,7 +59,8 @@ public sealed class NotificationStore : IDisposable
             || string.IsNullOrWhiteSpace(Request.Text) || Request.Text.Length > 2000
             || string.IsNullOrWhiteSpace(Request.IdempotencyKey) || Request.IdempotencyKey.Length > 128
             || Request.Importance is not ("notify" or "high-importance" or "acknowledge" or "alarm")
-            || Request.TargetClientId is { Length: > 128 })
+            || Request.TargetClientId is { Length: > 128 }
+            || Request.TargetGroup is not null && (string.IsNullOrWhiteSpace(Request.TargetGroup) || Request.TargetGroup.Length > 64 || Request.TargetClientId is not null))
             throw new ArgumentException("invalid_notification");
         lock (Gate)
         {
@@ -78,7 +81,7 @@ public sealed class NotificationStore : IDisposable
             using var Count = Command("SELECT COUNT(*) FROM Notifications WHERE Owner=$p0", Owner);
             if ((long)Count.ExecuteScalar()! >= 1000) throw new InvalidOperationException("notification_quota");
             var Item = new ClientNotification(Guid.NewGuid(), Request.Kind, Request.Text, Now, Due, Expires,
-                Request.Importance, Request.TargetClientId, "active");
+                Request.Importance, Request.TargetClientId, "active", Request.TargetGroup);
             using var Insert = Command("INSERT INTO Notifications VALUES($p0,$p1,$p2,$p3,$p4)",
                 Item.Id.ToString(), Owner, Request.IdempotencyKey, Encoded, JsonSerializer.Serialize(Item, Json));
             Insert.ExecuteNonQuery();
@@ -88,6 +91,8 @@ public sealed class NotificationStore : IDisposable
 
     public ClientNotification[] List(string Owner, string ClientId, bool DueOnly = false)
     {
+        // Resolve membership before taking the notification lock; device signalling uses its own lock.
+        var Groups = Signals?.Clients(Owner).FirstOrDefault(Client => Client.ClientId == ClientId)?.Groups ?? [];
         lock (Gate)
         {
             var Now = Clock.GetUtcNow();
@@ -98,6 +103,7 @@ public sealed class NotificationStore : IDisposable
             {
                 var Item = Read(Reader.GetString(0));
                 if ((Item.TargetClientId is null || Item.TargetClientId == ClientId)
+                    && (Item.TargetGroup is null || Groups.Contains(Item.TargetGroup, StringComparer.OrdinalIgnoreCase))
                     && (!DueOnly || Item.Status == "active" && Item.DueAt <= Now && Item.ExpiresAt > Now))
                     Items.Add(Item);
             }

@@ -9,6 +9,13 @@ public static class InteractionEndpoints
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static void MapRichClients(this WebApplication App)
     {
+        // Management API follows the same access boundary as the existing satellite management API.
+        App.MapGet("/api/devices/clients", (ClientSignals Signals) => Signals.Devices());
+        App.MapPut("/api/devices/clients/{id}/groups", (string Id, DeviceGroups Request, ClientSignals Signals) =>
+        {
+            try { return Signals.SetGroups(Id, Request.Groups) ? Results.NoContent() : Results.NotFound(); }
+            catch (ArgumentException Error) { return Results.BadRequest(new ProtocolError("invalid_groups", Error.Message)); }
+        });
         var Group = App.MapGroup("/api/client");
         // Browser requests must be same-origin. Native clients use Authorization headers without Origin.
         Group.AddEndpointFilter(async (Context, Next) =>
@@ -46,7 +53,7 @@ public static class InteractionEndpoints
                 : Results.Conflict(new ProtocolError("attachment_in_use", "Attachments used by an interaction expire with its history."));
         });
         Group.MapPost("/clients/register", (ClientRegistration Request, ClientSignals Signals, HttpContext Http) =>
-            Signals.Register((string)Http.Items["ClientId"]!, Owner(Http), Request) ? Results.Ok() : Results.BadRequest(new ProtocolError("invalid_capabilities", "Supply a device name and at most 32 canonical capability names.")));
+            Signals.Register((string)Http.Items["ClientId"]!, Owner(Http), Request) ? Results.Ok() : Results.BadRequest(new ProtocolError("invalid_capabilities", "Supply a client type, device name, at most 32 canonical capabilities, a client version up to 128 characters and hardware fields up to 256 characters.")));
         Group.MapGet("/clients", (ClientSignals Signals, HttpContext Http) => Signals.Clients(Owner(Http)));
         Group.MapDelete("/clients/current", (ClientSignals Signals, HttpContext Http) => { Signals.Disconnect((string)Http.Items["ClientId"]!); return Results.NoContent(); });
         Group.MapGet("/device/requests", (ClientSignals Signals, HttpContext Http) => Signals.Pending((string)Http.Items["ClientId"]!));

@@ -17,8 +17,8 @@
   const nav = document.createElement('nav');
   nav.className = 'app-nav';
   nav.setAttribute('aria-label', 'Main navigation');
-  const current = location.pathname === '/index.html' ? '/' : location.pathname;
-  for (const [href, label] of [['/', 'Pipeline debugger'], ['/chat.html', 'Conversation'], ['/satellites.html', 'Satellites'], ['/intents.html', 'Intents'], ['/reminders.html', 'Reminders'], ['/integrations.html', 'Integrations'], ['/releases.html', 'Releases']]) {
+  const current = location.pathname === '/index.html' ? '/' : location.pathname === '/satellites.html' ? '/devices.html' : location.pathname;
+  for (const [href, label] of [['/', 'Pipeline debugger'], ['/chat.html', 'Conversation'], ['/devices.html', 'Devices'], ['/intents.html', 'Intents'], ['/reminders.html', 'Reminders'], ['/integrations.html', 'Integrations'], ['/releases.html', 'Releases']]) {
     const link = document.createElement('a');
     link.href = href;
     link.textContent = label;

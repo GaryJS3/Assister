@@ -17,6 +17,34 @@ public sealed class RichClientTests
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     [Fact]
+    public async Task DevicesPageShowsPersistentClientsAndGroupNotificationsReachOnlyMembers()
+    {
+        using var App = new TestApplication();
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        using var TabletHttp = App.CreateClient(); TabletHttp.DefaultRequestHeaders.Authorization = new("Bearer", "tablet-client-test-credential-123456789");
+        using var OtherHttp = App.CreateClient(); OtherHttp.DefaultRequestHeaders.Authorization = new("Bearer", "other-client-test-credential-123456789");
+        var Registration = new ClientRegistration("android", "Kitchen tablet", [], "2.0.1", new("Android 16", SerialNumber: "optional-serial"));
+        (await TabletHttp.PostAsJsonAsync("/api/client/clients/register", Registration)).EnsureSuccessStatusCode();
+        var Devices = (await Http.GetFromJsonAsync<RegisteredClient[]>("/api/devices/clients"))!;
+        var Tablet = Assert.Single(Devices);
+        Assert.Equal("optional-serial", Tablet.Hardware!.SerialNumber);
+        (await Http.PutAsJsonAsync($"/api/devices/clients/{Tablet.ClientId}/groups", new DeviceGroups(["Kitchen"]))).EnsureSuccessStatusCode();
+        var Created = await Http.PostAsJsonAsync("/api/client/notifications", new CreateNotification("announcement", "Dinner is ready", "kitchen-notice", TargetGroup: "Kitchen"));
+        Assert.Equal(HttpStatusCode.Created, Created.StatusCode);
+        Assert.Single((await TabletHttp.GetFromJsonAsync<ClientNotification[]>("/api/client/notifications?dueOnly=true"))!);
+        Assert.Empty((await Http.GetFromJsonAsync<ClientNotification[]>("/api/client/notifications?dueOnly=true"))!);
+        Assert.Empty((await OtherHttp.GetFromJsonAsync<ClientNotification[]>("/api/client/notifications?dueOnly=true"))!);
+        (await TabletHttp.DeleteAsync("/api/client/clients/current")).EnsureSuccessStatusCode();
+        Tablet = Assert.Single((await Http.GetFromJsonAsync<RegisteredClient[]>("/api/devices/clients"))!);
+        Assert.False(Tablet.Online);
+        Assert.Equal("Kitchen", Assert.Single(Tablet.Groups!));
+        var Page = await Http.GetStringAsync("/devices.html");
+        Assert.Contains("Devices.", Page);
+        Assert.Contains("client-sections", Page);
+        Assert.Contains("Devices.", await Http.GetStringAsync("/satellites.html"));
+    }
+
+    [Fact]
     public async Task RealCommandsDeliverTimersRemindersAndAnnouncementsWithoutASatellite()
     {
         using var App = new TestApplication(UseFake: false);

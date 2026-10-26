@@ -73,7 +73,9 @@ async function renderDetail() {
 async function refresh() {
     if (updating) return;
     try {
-        devices = await api('/api/satellites'); byId('satellites').replaceChildren();
+        const [satellites, clients] = await Promise.all([api('/api/satellites'), api('/api/devices/clients')]);
+        devices = satellites; byId('satellites').replaceChildren();
+        renderClients(clients);
         for (const {device:d, runtime:r} of devices) {
             const row = element('tr'), cell = element('td'), button = element('button', d.name);
             button.onclick = () => { selectedId = d.id; history.replaceState(null, '', `?id=${encodeURIComponent(d.id)}`); renderDetail().catch(error => byId('notice').textContent = error.message); };
@@ -81,10 +83,52 @@ async function refresh() {
             for (const text of [d.areaId || 'Unassigned',d.providerType,r.connectionState,ownership[r.voiceOwnership],r.voiceConfiguration.activeWakeWords.join(', ') || r.wakeWord || 'Unknown',activities[r.activity],r.lastSeen ? new Date(r.lastSeen).toLocaleString() : 'Never']) row.append(element('td',text));
             byId('satellites').append(row);
         }
-        if (!devices.length) byId('notice').textContent = 'No satellites configured.';
+        if (!devices.length) { const row = element('tr'), cell = element('td', 'No satellites configured.'); cell.colSpan = 8; row.append(cell); byId('satellites').append(row); }
         // Do not overwrite edits while a user is selecting runtime configuration or composing audio.
         if (!['Configuration','Playback'].includes(selectedTab) || !byId('device-panel').hasChildNodes()) await renderDetail();
     } catch (error) { byId('notice').textContent = error.message; }
+}
+function renderClients(clients) {
+    // Preserve open details and in-progress group edits during polling.
+    const root = byId('client-sections');
+    if (root.contains(document.activeElement) || root.querySelector('[data-dirty]')) return;
+    const expanded = new Set([...root.querySelectorAll('details[open]')].map(detail => detail.dataset.id));
+    root.replaceChildren();
+    for (const [type, title, subtitle] of [
+        ['windows', 'Windows clients', 'Desktop devices registered with Assister.'],
+        ['android', 'Android clients', 'Phones, tablets and other Android devices.'],
+        ['other', 'Other clients', 'Web and other registered clients.']]) {
+        const entries = clients.filter(client => type === 'other' ? !['windows', 'android'].includes(client.clientType) : client.clientType === type);
+        if (type === 'other' && !entries.length) continue;
+        const section = element('section'); section.className = 'device-section';
+        section.append(element('h2', `${title} · ${entries.length}`), element('p', subtitle));
+        if (!entries.length) section.append(element('p', 'No devices registered yet. Devices appear here when they register with the server.'));
+        for (const client of entries) {
+            const detail = element('details'); detail.className = 'client-device'; detail.dataset.id = client.clientId; detail.open = expanded.has(client.clientId);
+            const summary = element('summary', client.deviceName);
+            const badge = element('span', client.online ? 'Online' : 'Offline'); badge.className = `device-presence ${client.online ? 'online' : ''}`;
+            summary.append(badge); detail.append(summary);
+            detail.append(facts({'Client ID': client.clientId, Owner: client.owner, Type: client.clientType,
+                'Client version': client.clientVersion, 'OS version': client.hardware?.operatingSystemVersion,
+                Manufacturer: client.hardware?.manufacturer, Model: client.hardware?.model, 'Serial number': client.hardware?.serialNumber,
+                'First registered': client.firstRegisteredAt ? new Date(client.firstRegisteredAt).toLocaleString() : null,
+                'Last seen': new Date(client.lastSeen).toLocaleString(), Capabilities: client.capabilities.join(', ') || 'None advertised'}));
+            const label = element('label', 'Groups (comma-separated)'), input = element('input'); input.value = (client.groups || []).join(', ');
+            input.maxLength = 2100; input.oninput = () => { detail.dataset.dirty = 'true'; }; label.append(input); detail.append(label);
+            const save = element('button', 'Save groups');
+            save.onclick = async () => {
+                save.disabled = true;
+                try {
+                    await api(`/api/devices/clients/${encodeURIComponent(client.clientId)}/groups`, {method:'PUT', headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({groups:input.value.split(',').map(value => value.trim()).filter(Boolean)})});
+                    delete detail.dataset.dirty; byId('notice').textContent = 'Device groups saved.';
+                } catch (error) { byId('notice').textContent = error.message; }
+                finally { save.disabled = false; }
+            };
+            detail.append(save); section.append(detail);
+        }
+        root.append(section);
+    }
 }
 byId('refresh').onclick = () => { byId('device-panel').replaceChildren(); refresh(); };
 refresh(); setInterval(refresh, 5000);

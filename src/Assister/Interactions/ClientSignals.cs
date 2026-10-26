@@ -10,6 +10,7 @@ public sealed class ClientSignals : IDisposable
 {
     private readonly object Gate = new();
     private readonly Dictionary<string, RegisteredClient> Registered = [];
+    private readonly Dictionary<string, DateTimeOffset> PersistedHeartbeat = [];
     private readonly Dictionary<Guid, TaskCompletionSource<DeviceResponse>> Waiting = [];
     private readonly SqliteConnection Database;
     private readonly InteractionStore Interactions;
@@ -29,8 +30,16 @@ public sealed class ClientSignals : IDisposable
         Setup.CommandText = """
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS Requests(Id TEXT PRIMARY KEY, InteractionId TEXT NOT NULL, ClientId TEXT NOT NULL, Owner TEXT NOT NULL, Request TEXT NOT NULL, Response TEXT);
+            CREATE TABLE IF NOT EXISTS RegisteredDevices(ClientId TEXT PRIMARY KEY, Payload TEXT NOT NULL);
             """;
         Setup.ExecuteNonQuery();
+        using (var Load = Command("SELECT Payload FROM RegisteredDevices"))
+        using (var Reader = Load.ExecuteReader())
+            while (Reader.Read())
+            {
+                var Client = JsonSerializer.Deserialize<RegisteredClient>(Reader.GetString(0), Json)!;
+                Registered[Client.ClientId] = Client with { Online = false };
+            }
         using var Recover = Database.CreateCommand();
         Recover.CommandText = "SELECT Id FROM Requests WHERE Response IS NULL";
         var Ids = new List<Guid>();
@@ -46,12 +55,22 @@ public sealed class ClientSignals : IDisposable
     public bool Register(string ClientId, string Owner, ClientRegistration Request)
     {
         if (Request.ClientType is not { Length: > 0 and <= 32 } || Request.DeviceName is not { Length: > 0 and <= 128 }
+            || string.IsNullOrWhiteSpace(Request.DeviceName) || string.IsNullOrWhiteSpace(Request.ClientType)
+            || Request.ClientVersion is { Length: > 128 }
+            || new[] { Request.Hardware?.OperatingSystemVersion, Request.Hardware?.Manufacturer,
+                Request.Hardware?.Model, Request.Hardware?.SerialNumber }.Any(Value => Value is { Length: > 256 })
             || Request.Capabilities is null || Request.Capabilities.Count > 32
             || Request.Capabilities.Any(Capability => Capability is null || Capability.Length > 64
                 || !Regex.IsMatch(Capability, @"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))) return false;
         lock (Gate)
         {
-            Registered[ClientId] = new(ClientId, Owner, Request.ClientType, Request.DeviceName, Request.Capabilities.Distinct().ToArray(), DateTimeOffset.UtcNow);
+            var Now = DateTimeOffset.UtcNow;
+            var Previous = Registered.GetValueOrDefault(ClientId);
+            if (Previous?.Owner != Owner) Previous = null;
+            Save(new(ClientId, Owner, Request.ClientType.Trim().ToLowerInvariant(), Request.DeviceName.Trim(),
+                Request.Capabilities.Distinct().ToArray(), Now, true, Request.ClientVersion ?? Previous?.ClientVersion,
+                Request.Hardware ?? Previous?.Hardware,
+                Previous?.FirstRegisteredAt ?? Now, Previous?.Groups ?? []));
             foreach (var Pending in PendingCore(ClientId).Where(Item => !Request.Capabilities.Contains(Item.Capability)))
                 Complete(Pending.RequestId, new(Pending.RequestId, false, Error: new("device_unavailable", "The requested capability was withdrawn.", true)));
             return true;
@@ -60,14 +79,47 @@ public sealed class ClientSignals : IDisposable
     public RegisteredClient[] Clients(string Owner)
     {
         lock (Gate) return Registered.Values.Where(Client => Client.Owner == Owner && Authentication.Owner(Client.ClientId) == Owner)
-            .Select(Client => Client with { Online = DateTimeOffset.UtcNow - Client.LastSeen < TimeSpan.FromSeconds(90) }).ToArray();
+            .Select(Status).ToArray();
+    }
+    private static RegisteredClient Status(RegisteredClient Client) => Client with
+        { Online = Client.Online && DateTimeOffset.UtcNow - Client.LastSeen < TimeSpan.FromSeconds(90) };
+    public RegisteredClient[] Devices()
+    {
+        lock (Gate) return Registered.Values.Where(Client => Authentication.Owner(Client.ClientId) == Client.Owner)
+            .Select(Status).OrderBy(Client => Client.DeviceName, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+    private void Save(RegisteredClient Client)
+    {
+        using var Write = Command("INSERT OR REPLACE INTO RegisteredDevices VALUES($id,$payload)",
+            ("$id", Client.ClientId), ("$payload", JsonSerializer.Serialize(Client, Json)));
+        Write.ExecuteNonQuery();
+        Registered[Client.ClientId] = Client;
+    }
+    public bool SetGroups(string ClientId, IReadOnlyList<string>? Groups)
+    {
+        if (Groups is null || Groups.Count > 32 || Groups.Any(Name => string.IsNullOrWhiteSpace(Name) || Name.Length > 64))
+            throw new ArgumentException("Supply at most 32 group names of 1–64 characters.");
+        lock (Gate)
+        {
+            if (!Registered.TryGetValue(ClientId, out var Client) || Authentication.Owner(ClientId) != Client.Owner) return false;
+            Save(Client with { Groups = Groups.Select(Name => Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() });
+            return true;
+        }
     }
     public bool Heartbeat(string ClientId)
     {
         lock (Gate)
         {
-            if (!Registered.TryGetValue(ClientId, out var Client) || Authentication.Owner(ClientId) != Client.Owner) return false;
-            Registered[ClientId] = Client with { LastSeen = DateTimeOffset.UtcNow };
+            if (!Registered.TryGetValue(ClientId, out var Client) || !Client.Online || Authentication.Owner(ClientId) != Client.Owner) return false;
+            var Now = DateTimeOffset.UtcNow;
+            var Updated = Client with { LastSeen = Now, Online = true };
+            // The signal stream polls frequently; checkpoint presence at most once per 15 seconds.
+            if (!PersistedHeartbeat.TryGetValue(ClientId, out var LastWrite) || Now - LastWrite >= TimeSpan.FromSeconds(15))
+            {
+                Save(Updated);
+                PersistedHeartbeat[ClientId] = Now;
+            }
+            else Registered[ClientId] = Updated;
             return true;
         }
     }
@@ -75,7 +127,7 @@ public sealed class ClientSignals : IDisposable
     {
         lock (Gate)
         {
-            Registered.Remove(ClientId);
+            if (Registered.TryGetValue(ClientId, out var Client)) Save(Client with { Online = false });
             foreach (var Request in PendingCore(ClientId)) Complete(Request.RequestId,
                 new(Request.RequestId, false, Error: new("device_unavailable", "The device disconnected.", true)));
         }
@@ -88,7 +140,7 @@ public sealed class ClientSignals : IDisposable
         DeviceRequest Request;
         lock (Gate)
         {
-            if (!Registered.TryGetValue(ClientId, out var Client) || DateTimeOffset.UtcNow - Client.LastSeen > TimeSpan.FromSeconds(90)
+            if (!Registered.TryGetValue(ClientId, out var Client) || !Status(Client).Online
                 || !Client.Capabilities.Contains(Capability) || Authentication.Owner(ClientId) != Client.Owner
                 || Interactions.Get(InteractionId, Client.Owner) is not { Status: "created" or "transcribing" or "running" or "responding" })
                 throw new InvalidOperationException("device_unavailable");

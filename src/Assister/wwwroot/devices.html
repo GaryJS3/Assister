@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Devices</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/satellites.css"><link rel="stylesheet" href="/app-shell.css"></head>
+<body><header data-app-shell></header>
+<main><div class="heading"><div><p class="eyebrow">OPERATIONS / DEVICES</p><h1>Devices.</h1><p>Satellites, Windows clients and Android clients. Registered clients stay in your inventory when offline.</p></div><button id="refresh">Refresh</button></div>
+<p id="notice" role="status"></p><section class="device-section"><p class="eyebrow">01 / AUDIO</p><h2>Satellites</h2><p>Audio-only endpoints, including Home Assistant Voice and EchoMuse devices.</p><div class="satellite-table"><table><thead><tr><th>Name / device</th><th>Area</th><th>Provider</th><th>Connection</th><th>Voice ownership</th><th>Wake word</th><th>Activity</th><th>Last seen</th></tr></thead><tbody id="satellites"></tbody></table></div>
+</section><div id="client-sections"></div><section id="satellite-detail" hidden><h2 id="device-title"></h2><nav id="device-tabs" class="tabs" aria-label="Satellite detail"></nav><div id="device-panel" class="summary-card"></div></section>
+<footer>Client hardware details are optional and self-reported. Groups route notifications among clients belonging to the same owner. Satellite controls apply runtime configuration only. Firmware compilation and flashing are outside Assister. Voice ownership is confirmed by a device voice request; an API connection alone is insufficient.</footer>
+</main><script src="/app-shell.js"></script><script src="/satellites.js"></script></body></html>

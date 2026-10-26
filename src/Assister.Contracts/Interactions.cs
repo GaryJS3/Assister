@@ -5,9 +5,15 @@ namespace Assister.Contracts;
 public sealed record SubmitInteraction(string Message, string IdempotencyKey, IReadOnlyList<Guid>? AttachmentIds = null,
     Guid? AudioAttachmentId = null, bool Speak = false, bool StreamSpeech = false);
 public sealed record SpeechSegment(int Index, string Url, int SampleRate, int SampleWidth, int Channels, int Size);
-public sealed record ClientRegistration(string ClientType, string DeviceName, IReadOnlyList<string> Capabilities);
+public sealed record ClientHardwareInfo(string? OperatingSystemVersion = null, string? Manufacturer = null,
+    string? Model = null, string? SerialNumber = null);
+public sealed record ClientRegistration(string ClientType, string DeviceName, IReadOnlyList<string> Capabilities,
+    string? ClientVersion = null, ClientHardwareInfo? Hardware = null);
 public sealed record RegisteredClient(string ClientId, string Owner, string ClientType, string DeviceName,
-    IReadOnlyList<string> Capabilities, DateTimeOffset LastSeen, bool Online = true);
+    IReadOnlyList<string> Capabilities, DateTimeOffset LastSeen, bool Online = true,
+    string? ClientVersion = null, ClientHardwareInfo? Hardware = null, DateTimeOffset? FirstRegisteredAt = null,
+    IReadOnlyList<string>? Groups = null);
+public sealed record DeviceGroups(IReadOnlyList<string> Groups);
 public sealed record DeviceRequest(Guid RequestId, Guid InteractionId, string TargetClientId, string Capability,
     JsonElement Parameters, DateTimeOffset Deadline);
 public sealed record DeviceResponse(Guid RequestId, bool Success, JsonElement? Result = null, ProtocolError? Error = null);
