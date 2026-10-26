@@ -9,6 +9,34 @@ namespace Assister.Tests;
 
 public sealed class DirectIntentTests
 {
+    [Theory]
+    [InlineData("What's the temperature in the office right now?")]
+    [InlineData("What is the temperature in my office now?")]
+    [InlineData("Hey Jarvis, what's the temperature of our office right now please?")]
+    public async Task CurrentTemperatureSuffixDoesNotBecomePartOfTheArea(string Message)
+    {
+        var (Coordinator, Fake, Cache) = Create();
+        var Intent = new IntentClassifier().Classify(Message)!;
+        Assert.Equal("office", Intent.ExplicitArea);
+        var Resolution = new HomeAssistantEntityResolver().Resolve(Intent, "Kitchen", Cache.Snapshot());
+        Assert.Equal("sensor.office_temperature", Assert.Single(Resolution.Entities).EntityId);
+        var Result = await Coordinator.ProcessAsync(new(Message, Area: "Kitchen"), default);
+        Assert.Equal("succeeded", Result.Outcome);
+        Assert.Equal("direct-intent", Result.HandledBy);
+        Assert.Equal("Office temperature is 74 degrees Fahrenheit.", Result.Response);
+        Assert.Empty(Fake.Calls);
+    }
+
+    [Theory]
+    [InlineData("What's the temperature in the living room right now?", "living room")]
+    [InlineData("What's the temperature in the right wing?", "right wing")]
+    [InlineData("What's the temperature in the now room?", "now room")]
+    [InlineData("What's the temperature in the office?", "office")]
+    public void TemperatureAreaPreservesRoomNames(string Message, string Area)
+    {
+        Assert.Equal(Area, new IntentClassifier().Classify(Message)!.ExplicitArea);
+    }
+
     [Fact]
     public void RoomOnlyEntityIdDoesNotHideOtherRoomLights()
     {

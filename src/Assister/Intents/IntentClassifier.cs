@@ -89,7 +89,7 @@ public sealed class IntentClassifier : IIntentEngine
             }
         }
 
-        Match = Pattern(Text, @"^(?:what is|what's) the temperature (?:in|of) (?<area>.+)$");
+        Match = Pattern(Text, @"^(?:what is|what's) the temperature (?:in|of) (?<area>.+?)(?: (?:right )?now)?$");
         if (Match.Success) { return new(DirectIntentKind.QueryTemperature, "temperature", ExplicitArea: LanguageParser.Noun(Match.Groups["area"].Value)); }
         if (Text is "what is the temperature" or "what's the temperature") { return new(DirectIntentKind.QueryTemperature, "temperature"); }
 
