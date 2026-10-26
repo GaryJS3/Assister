@@ -397,3 +397,11 @@ Brightness accepts at as well as to; the exact spoken kitchen transcript and LLM
 ## October 5 native timer queries
 
 Remaining-time questions, including How much left on the timer, use persisted Assister timers scoped to the requesting satellite. Named queries and bounded duplicate listings are supported; expired pending timers are reported honestly. 207 tests pass (189 unit/component, 18 integration). Live pre-deployment snapshot confirms two active unnamed EchoMuse timers from the interrupted and successful spoken attempts. Controller logs attribute the interrupted confirmation to wake-word barge-in followed by no-speech timeout.
+
+## October 26 Client Token Management
+
+- Added a Client tokens dashboard page alongside Devices, with administrator unlock/lock, create, one-time display/copy, rotate, owner reassignment and revoke/reissue controls. Matches the existing dashboard and preserves unrelated local device/group work.
+- Administrator-only API uses the configured upload credential, checks browser Origin, and sets no-store responses. Client bearer tokens cannot manage credentials. Existing environment credentials remain effective until explicitly changed.
+- Durable hash-only credential overrides in the data volume; generated tokens contain 256 random bits. Explicit revocations and rotations survive restart and override environment configuration. Reassignment preserves existing history ownership; credential changes disconnect pending device work. Existing streams recheck authentication/ownership.
+- Full current-checkout suite passed: 524 unit/component tests and 70 integration tests, including three new management tests for authorization/origin, no-secret listings, separate phone/web registration, duplicate/invalid input, rotation/revocation across restart and owner/history isolation. Browser preview verified unlock, controls and layout using disposable local configuration. Screenshot: `.codex-local/client-tokens-preview.png` (no real credentials).
+- Operational reference: `docs/client-tokens.md`. Production rollout evidence will be recorded separately.

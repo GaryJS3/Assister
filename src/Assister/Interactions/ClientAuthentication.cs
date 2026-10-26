@@ -30,7 +30,7 @@ public sealed class ClientAuthentication(IConfiguration Configuration, IDataProt
         foreach (var Client in Configuration.GetSection("RichClients:Clients").GetChildren())
         {
             var Expected = Client["Token"];
-            if (Expected is { Length: >= 24 } && CryptographicOperations.FixedTimeEquals(Hash, SHA256.HashData(Encoding.UTF8.GetBytes(Expected)))) return Client.Key;
+            if (Expected is { Length: >= 24 } && CryptographicOperations.FixedTimeEquals(Hash, Client.GetValue<bool>("TokenIsHash") ? Convert.FromHexString(Expected) : SHA256.HashData(Encoding.UTF8.GetBytes(Expected)))) return Client.Key;
         }
         return null;
     }

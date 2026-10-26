@@ -23,6 +23,7 @@ if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
     });
 }
 var App = Builder.Build();
+App.MapClientCredentials(Builder.Configuration);
 Assister.Llm.LanguageModelSettingsEndpoints.MapLanguageModelSettings(App, Builder.Configuration);
 App.MapClientUpdates();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false)) { App.MapGrpcService<BridgeTransportService>(); }

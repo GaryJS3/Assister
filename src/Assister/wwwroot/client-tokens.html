@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assister · Client tokens</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/satellites.css"><link rel="stylesheet" href="/app-shell.css"><link rel="stylesheet" href="/client-tokens.css"></head>
+<body><header data-app-shell></header><main>
+<div class="heading"><div><p class="eyebrow">OPERATIONS / ACCESS</p><h1>Client tokens.</h1><p>One identity for each phone, browser or desktop. Shared owners connect their conversations and notifications.</p></div><a href="/devices.html">View devices →</a></div>
+<p id="token-notice" role="status" aria-live="polite"></p>
+<section class="summary-card" id="unlock-panel"><h2>Administrator access</h2><p>Use the administrator credential used to publish app updates. It stays in this page’s memory until you lock or leave.</p><form id="unlock-form"><label>Administrator credential<input id="admin-token" type="password" required autocomplete="off"></label><button>Unlock token management</button></form></section>
+<div id="management" hidden>
+<div class="heading"><p>Existing token values are never displayed. Rotating or revoking a token immediately invalidates it; update the affected client afterward.</p><button id="lock" type="button">Lock</button></div>
+<section class="summary-card"><p class="eyebrow">NEW CLIENT</p><h2>A separate identity.</h2><form id="create-form" class="token-form"><label>Client ID<input name="clientId" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" placeholder="pixel-8-pro"></label><label>Owner<input name="owner" required maxlength="128" placeholder="gary"></label><button>Create token</button></form><p>Use a new ID for your phone. Choose the same owner as your web client to keep access to your conversations. Client IDs cannot be renamed; create a new identity instead.</p></section>
+<section id="issued" class="summary-card issued" hidden><h2 id="issued-title">New token</h2><p>Copy this token into the client’s bearer-token setting now. It cannot be retrieved later.</p><label>Bearer token<input id="issued-token" readonly autocomplete="off" spellcheck="false"></label><div class="token-actions"><button id="copy" type="button">Copy token</button><button id="hide-token" type="button">I have saved it</button></div></section>
+<section class="device-section"><div class="heading"><h2>Configured clients</h2><button id="reload" type="button">Refresh</button></div><div id="credentials"></div></section>
+</div></main><script src="/app-shell.js"></script><script src="/client-tokens.js"></script></body></html>

@@ -1,0 +1,14 @@
+# Client token management
+
+Open **Client tokens** in the server dashboard (`/client-tokens.html`). Unlock with the administrator credential configured as `ClientUpdates:UploadToken`, also used to publish app updates. Ordinary client tokens cannot administer credentials. Browser requests must be same-origin; responses are not cached. The page keeps the administrator credential only in memory, clears it on Lock/navigation, and never stores it in local storage.
+
+- **Create:** choose a unique client ID such as `pixel-8-pro` and owner `gary`. The server generates a random 256-bit bearer token and shows it once. Enter it in Android Settings → Bearer token → Save and connect. The phone then registers independently from `web` while retaining access to the same owner's history and notices.
+- **Rotate:** invalidates the current credential immediately and shows a replacement once. Update that client's bearer-token setting afterward.
+- **Reassign owner:** keeps the credential but changes the conversations and notices it can access. Existing history stays with its original owner. Pending device requests are disconnected and registered presence is re-established by the next renewal.
+- **Revoke:** disables the credential and disconnects pending device requests without deleting conversation history. A durable revocation record prevents an old environment credential from becoming active again after restart. Issue a replacement token to reactivate the same ID. Client IDs are immutable; create a new ID to rename an identity.
+
+Managed overrides live at `Assister:DataPath/client-credentials.json`. Generated credentials are stored only as SHA-256 hashes. Owner changes convert an existing configuration credential to a hash without changing its value. Overrides take precedence over `RichClients:Clients:*` environment/settings credentials; deleting the overrides file would restore environment-defined credentials, so retain it with the data volume and backups. Changes require no restart. Existing configured credentials continue working until explicitly rotated, reassigned or revoked. Client token management does not rotate the administrator/upload credential.
+
+Endpoints under `/api/devices/credentials` require `Authorization: Bearer <administrator credential>`: GET lists metadata only, POST creates `{clientId,owner}`, POST `/{id}/rotate` returns a replacement token, PUT `/{id}/owner` accepts `{owner}`, and DELETE `/{id}` revokes. Creation and rotation are the only responses that contain a token. No token values or hashes appear in listings.
+
+The rest of the Operations dashboard retains its existing deployment/access boundary. Use the deployment's HTTPS/private-network access controls; this feature does not add a login system to other management endpoints.
