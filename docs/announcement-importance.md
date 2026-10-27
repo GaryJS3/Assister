@@ -6,7 +6,7 @@
 | --- | --- |
 | `notify` (default) | Existing announcement |
 | `high-importance` | Three opening cues, speech, then one repeat, followed by goodbye |
-| `acknowledge` | Announcement every 10 minutes until dismissed; request a 30-second acknowledgement window after playback |
+| `acknowledge` | Announcement every 10 minutes until dismissed; request a 10-second acknowledgement window after playback |
 | `alarm` | Three opening cues and speech; repeat 10 seconds after playback until dismissed |
 
 The satellite Playback panel and `satellite_announce` tool accept the same levels.
@@ -34,7 +34,7 @@ activations can still issue normal commands or acknowledgements.
 
 EchoMuse implements this contract when its controller advertises `acknowledgementListening`
 in the voice hello. Both the Assister adapter and EchoMuse controller must be updated.
-After playback it opens the microphone for up to 30 seconds (`acknowledge`) or the 10-second
+After playback it opens the microphone for up to 10 seconds (`acknowledge`) or the 10-second
 gap before an `alarm` repeats. Silence and unrelated speech start another capture within
 the same deadline. An accepted acknowledgement ends the window; timeout, Stop, mute and
 disconnect also close it and restore the ordinary wake-word stream. A new announcement

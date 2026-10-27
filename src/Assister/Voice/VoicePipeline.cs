@@ -42,6 +42,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
         var FeedbackUnavailable = false;
         async Task Feedback(string Name, CancellationToken Token)
         {
+            if (AcknowledgementOnly && Name != "confirmed") return;
             if (Tones is not { Enabled: true } || Satellite is not ITonePlayback { SupportsTonePlayback: true } Player) { return; }
             await FeedbackGate.WaitAsync(Token);
             try
@@ -115,12 +116,27 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
                     if (AudioEnded is not null) { CaptureStep.Complete(); }
                 }
             }
+            // Inspect the stream before invoking STT: empty controller turns are no speech,
+            // and must not reach providers that require a nonempty WAV.
+            await using var Microphone = ObserveAudio(Timeout.Token).GetAsyncEnumerator(Timeout.Token);
+            while (await Microphone.MoveNextAsync() && Microphone.Current.Pcm.Length == 0) { }
+            if (PcmBytes == 0)
+            {
+                await Feedback("goodbye", Timeout.Token);
+                Run.Complete("no-speech");
+                return new(Session, null, "no-speech");
+            }
+            async IAsyncEnumerable<AudioChunk> RecognitionAudio()
+            {
+                yield return Microphone.Current;
+                while (await Microphone.MoveNextAsync()) yield return Microphone.Current;
+            }
             TranscriptionResult Transcript;
             using (var Recognition = RunTracing.Start("SpeechToText", "Speech to text", "Stream microphone input to STT and measure finalization separately from audio capture."))
             {
                 var Language = Configuration["SpeechToText:Language"] ?? "en";
                 Recognition.Input(new { languageRequested = Language });
-                Transcript = await Stt.TranscribeAsync(ObserveAudio(Timeout.Token), new(Language), Timeout.Token);
+                Transcript = await Stt.TranscribeAsync(RecognitionAudio(), new(Language), Timeout.Token);
                 LatencyMetrics.Mark("transcriptFinal");
                 var Arrived = DateTimeOffset.UtcNow;
                 Recognition.Output(new { transcript = Transcript.Text, returnedLanguage = Transcript.Language });

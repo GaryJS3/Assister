@@ -86,6 +86,7 @@ public sealed class EchoMuseTests
         Manager.Register(Device);
         await Device.ListenForAcknowledgementAsync(TimeSpan.FromSeconds(30), default);
         using var Turn = Device.Start("late-ack-session", null, default, Request)!;
+        Turn.Handle(Message(new { type = "audio", data = Convert.ToBase64String(new byte[320]) }));
         Turn.Handle(Message(new { type = "audio_end", reason = "speech_end" }));
         var Coordinator = new Coordinator();
         var Result = await new VoicePipeline(new Stt(), new Tts(), Coordinator, Manager, Config).RunAsync(Turn, null, default);

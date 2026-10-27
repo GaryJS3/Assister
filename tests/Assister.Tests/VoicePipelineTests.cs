@@ -8,6 +8,32 @@ namespace Assister.Tests;
 public sealed class VoicePipelineTests
 {
     [Theory]
+    [InlineData(false, "background speech", "ignored")]
+    [InlineData(false, "I heard it", "acknowledged")]
+    [InlineData(true, "unused", "no-speech")]
+    public async Task RepeatedAcknowledgementTurnsStayQuiet(bool Empty, string Text, string Expected)
+    {
+        var Config = new ConfigurationBuilder().Build();
+        var Catalog = new ToneCatalog(new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { ContentRootPath = AppContext.BaseDirectory }, Config);
+        var Satellite = new FakeSatellite { Catalog = Catalog, EmptyAudio = Empty };
+        var Manager = new SatelliteManager();
+        Manager.Register(Satellite);
+        Manager.Update("bedroom", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync("bedroom", "74 degrees Fahrenheit", new FakeTts(), default, Importance: AnnouncementImportance.Acknowledge);
+        var Coordinator = new FakeCoordinator();
+        for (var Attempt = 0; Attempt < (Expected == "acknowledged" ? 1 : 3); Attempt++)
+        {
+            var Result = await new VoicePipeline(new FakeStt(Fail: Empty, Text: Text), new FakeTts(), Coordinator, Manager, Config, Tones: Catalog)
+                .RunAsync(Satellite, null, default);
+            Assert.Equal(Expected, Result.Outcome);
+        }
+        Assert.Equal(Expected == "acknowledged" ? new[] { "confirmed" } : [], Satellite.ToneNames);
+        Assert.Null(Coordinator.Request);
+        Assert.Equal(Expected != "acknowledged", Manager.PendingAnnouncementIds.Length > 0);
+        Assert.Equal(0, Manager.ActiveSessionCount);
+    }
+
+    [Theory]
     [InlineData("turn on the lights", "ignored")]
     [InlineData("I heard it", "acknowledged")]
     public async Task AcknowledgementWindowNeverRoutesCommands(string Text, string Expected)
@@ -191,6 +217,7 @@ public sealed class VoicePipelineTests
     {
         public ToneCatalog? Catalog { get; init; }
         public bool FailTone { get; init; }
+        public bool EmptyAudio { get; init; }
         public List<string> ToneNames { get; } = [];
         public async Task PlayToneAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token)
         {
@@ -206,7 +233,7 @@ public sealed class VoicePipelineTests
         public async IAsyncEnumerable<AudioChunk> ReceiveAudioAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken CancellationToken)
         {
             await Task.Yield();
-            yield return new(new byte[2], 16000, 2, 1);
+            if (!EmptyAudio) yield return new(new byte[2], 16000, 2, 1);
         }
         public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken CancellationToken)
         {

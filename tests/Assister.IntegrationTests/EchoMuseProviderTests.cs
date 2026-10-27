@@ -172,19 +172,19 @@ public sealed class EchoMuseProviderTests
         await Send(Socket, new { type = "play_finished", deviceId = "first", requestId = AlertPlayback.GetProperty("requestId").GetString() });
         var Listen = await NextResponse();
         Assert.Equal("listen_for_acknowledgement", Listen.GetProperty("type").GetString());
-        Assert.InRange(Listen.GetProperty("durationMs").GetInt32(), 29000, 30000);
+        Assert.InRange(Listen.GetProperty("durationMs").GetInt32(), 9000, 10000);
         var ListenId = Listen.GetProperty("requestId").GetString();
         await Send(Socket, new { type = "acknowledgement_listen_result", deviceId = "first", requestId = ListenId, status = "started" });
         using var AlertResult = await Alert;
         Assert.True(AlertResult.IsSuccessStatusCode);
-        foreach (var Transcript in new[] { "turn the light off", "", "I heard it" })
+        foreach (var Transcript in new[] { "turn the light off", "", "zero-pcm", "I heard it" })
         {
             var Acknowledged = Transcript == "I heard it";
             Factory.Transcript = Transcript;
-            var Session = Acknowledged ? "ack-accepted" : Transcript.Length == 0 ? "ack-empty-transcript" : "ack-ignored";
+            var Session = Acknowledged ? "ack-accepted" : Transcript == "zero-pcm" ? "ack-zero-pcm" : Transcript.Length == 0 ? "ack-empty-transcript" : "ack-ignored";
             await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = Session, acknowledgementRequestId = ListenId,
                 audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
-            await Send(Socket, new { type = "audio", deviceId = "first", sessionId = Session, data = "AAA=" });
+            if (Transcript != "zero-pcm") await Send(Socket, new { type = "audio", deviceId = "first", sessionId = Session, data = "AAA=" });
             await Send(Socket, new { type = "audio_end", deviceId = "first", sessionId = Session, reason = "speech_end" });
             var Completion = await NextResponse();
             Assert.Equal("turn_acknowledgement", Completion.GetProperty("type").GetString());

@@ -27,7 +27,7 @@ public sealed class AnnouncementTests
     }
 
     [Theory]
-    [InlineData(AnnouncementImportance.Acknowledge, 600, 30)]
+    [InlineData(AnnouncementImportance.Acknowledge, 600, 10)]
     [InlineData(AnnouncementImportance.Alarm, 10, 10)]
     public async Task RepeatsAtDeadlineUntilAcknowledged(AnnouncementImportance Importance, int Seconds, int ListenSeconds)
     {
@@ -97,7 +97,7 @@ public sealed class AnnouncementTests
         Manager.Register(Listener);
         Manager.Update("listener", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
         await Manager.AnnounceAsync("listener", "Hello", new Speech(), default, Importance: AnnouncementImportance.Acknowledge);
-        Assert.InRange(Listener.Duration.TotalSeconds, 29, 30);
+        Assert.InRange(Listener.Duration.TotalSeconds, 9, 10);
         Assert.False(Listener.BusyDuringListen);
         Assert.True(Manager.IsAcknowledgementListening("listener"));
     }
