@@ -14,6 +14,7 @@ public enum HomeAssistantAction
 }
 
 public sealed record HomeAssistantControl(HomeAssistantAction Action, IReadOnlyList<string> EntityIds, int? BrightnessPercent = null, int? SpeedPercent = null);
+public sealed class HomeAssistantConfirmationException(Exception Inner) : InvalidOperationException("Home Assistant accepted the command, but its final state could not be confirmed. Do not resend automatically.", Inner);
 
 public interface IHomeAssistantClient
 {
@@ -101,9 +102,17 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
         {
             throw new InvalidOperationException("Home Assistant rejected the command.");
         }
+        Trace.Detail("commandAccepted", true);
+        using var ConfirmationTimeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+        ConfirmationTimeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(Configuration.GetValue<double?>("HomeAssistant:ConfirmationTimeoutSeconds") ?? 15, 0.1, 30)));
         // A successful service response only accepts the command. Read back the requested state
         // before either direct intents or LLM tools are allowed to claim completion.
         var Pending = ConfirmationIds;
+        var Observations = new Dictionary<string, object>();
+        Trace.Detail("requestedSpeedPercent", Control.SpeedPercent);
+        Trace.Detail("requestedBrightnessPercent", Control.BrightnessPercent);
+        try
+        {
         while (Pending.Count > 0)
         {
             foreach (var Id in Pending.ToArray())
@@ -111,18 +120,34 @@ public sealed class HomeAssistantActionClient(HttpClient Http, IConfiguration Co
                 using var Readback = new HttpRequestMessage(HttpMethod.Get,
                     new Uri(new Uri(Configuration["HomeAssistant:Url"]!), $"api/states/{Uri.EscapeDataString(Id)}"));
                 Readback.Headers.Authorization = Request.Headers.Authorization;
-                using var StateResponse = await Http.SendAsync(Readback, HttpCompletionOption.ResponseHeadersRead, Timeout.Token);
+                using var StateResponse = await Http.SendAsync(Readback, HttpCompletionOption.ResponseHeadersRead, ConfirmationTimeout.Token);
                 if (!StateResponse.IsSuccessStatusCode) { throw new InvalidOperationException("The device state could not be confirmed."); }
-                await using var StateStream = await StateResponse.Content.ReadAsStreamAsync(Timeout.Token);
-                using var State = await JsonDocument.ParseAsync(StateStream, cancellationToken: Timeout.Token);
+                await using var StateStream = await StateResponse.Content.ReadAsStreamAsync(ConfirmationTimeout.Token);
+                using var State = await JsonDocument.ParseAsync(StateStream, cancellationToken: ConfirmationTimeout.Token);
+                var Root = State.RootElement;
+                Observations[Id] = new {
+                    power = Root.TryGetProperty("state", out var Power) ? Power.Clone() : (JsonElement?)null,
+                    speed = Root.TryGetProperty("attributes", out var Attributes) && Attributes.TryGetProperty("percentage", out var Speed) ? Speed.Clone() : (JsonElement?)null,
+                    percentageStep = Root.TryGetProperty("attributes", out var Attr) && Attr.TryGetProperty("percentage_step", out var Step) ? Step.Clone() : (JsonElement?)null
+                };
                 if (Matches(Control, State.RootElement))
                 {
                     if (Domain == "fan") { Cache.ApplyEvent(JsonSerializer.SerializeToElement(new { entity_id = Id, new_state = State.RootElement })); }
                     Pending.Remove(Id);
                 }
             }
-            if (Pending.Count > 0) { await Task.Delay(200, Timeout.Token); }
+            if (Pending.Count > 0) { await Task.Delay(200, ConfirmationTimeout.Token); }
         }
+        }
+        catch (Exception Error) when (!CancellationToken.IsCancellationRequested && Error is OperationCanceledException or HttpRequestException or InvalidOperationException or JsonException or IOException)
+        {
+            Trace.Detail("stateConfirmed", false);
+            Trace.Detail("pendingEntities", Pending.ToArray());
+            Trace.Detail("lastObservedStates", Observations);
+            Trace.Complete("accepted-unconfirmed");
+            throw new HomeAssistantConfirmationException(Error);
+        }
+        Trace.Detail("lastObservedStates", Observations);
         Trace.Detail("stateConfirmed", true);
         Trace.Complete();
     }

@@ -9,6 +9,17 @@ namespace Assister.Tests;
 
 public sealed class LanguageModelTests
 {
+    [Theory]
+    [InlineData("unexpected")]
+    [InlineData(null)]
+    public async Task InvalidFinishReasonIsRetainedWithoutAcceptingResponse(string? Finish)
+    {
+        var Body = JsonSerializer.Serialize(new { choices = new[] { new { index = 0, message = new { role = "assistant", content = "untrusted partial" }, finish_reason = Finish } } });
+        var Error = await Assert.ThrowsAsync<InvalidLanguageModelResponseException>(() => Create(new(Body)).CompleteAsync(new([new("user", "test")]), default));
+        Assert.Equal("missing-or-invalid-finish-reason", Error.Reason);
+        Assert.Equal(Finish, Error.FinishReason); Assert.False(Error.Streaming);
+    }
+
     [Fact]
     public async Task ThinkingExtensionIsOptionalAndUsesABooleanWhenConfigured()
     {

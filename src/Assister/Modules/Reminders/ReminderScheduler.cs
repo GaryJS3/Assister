@@ -27,13 +27,13 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
     {
         if (Rich is not null)
         {
-            var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt FROM Reminders WHERE Status='active' AND SatelliteId LIKE 'client-conversation-%' AND NextDueAt <= $p0 ORDER BY NextDueAt,Id LIMIT 100", Token, Now.ToUnixTimeSeconds());
+            var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt,COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0),COALESCE((SELECT Importance FROM ReminderPolicies WHERE ReminderId=Reminders.Id),'acknowledge') FROM Reminders WHERE Status='active' AND SatelliteId LIKE 'client-conversation-%' AND NextDueAt <= $p0 ORDER BY NextDueAt,Id LIMIT 100", Token, Now.ToUnixTimeSeconds());
             foreach (var Row in Rows)
             {
                 Token.ThrowIfCancellationRequested();
                 try
                 {
-                    if (!Rich.Publish(Row[2], "reminder", "Reminder: " + Row[1] + ".", "reminder:" + Row[0] + ":" + Row[7], "acknowledge")) continue;
+                    if (!Rich.Publish(Row[2], "reminder", "Reminder: " + Row[1] + ".", "reminder:" + Row[0] + ":" + Row[7], Row[9])) continue;
                 }
                 catch (InvalidOperationException Error)
                 {
@@ -43,7 +43,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
                 var Schedule = new ReminderSchedule(int.Parse(Row[4], CultureInfo.InvariantCulture), int.Parse(Row[5], CultureInfo.InvariantCulture),
                     Row[6].Length == 0 ? null : (DayOfWeek)int.Parse(Row[6], CultureInfo.InvariantCulture));
                 var Next = Schedule.Next(DateTimeOffset.UtcNow > Now ? DateTimeOffset.UtcNow : Now, TimeZoneInfo.FindSystemTimeZoneById(Row[3]));
-                await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0 WHERE Id=$p1 AND Status='active' AND NextDueAt=$p2", Token,
+                await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0,Status=CASE WHEN COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0)=1 THEN 'completed' ELSE 'active' END WHERE Id=$p1 AND Status='active' AND NextDueAt=$p2", Token,
                     Next.ToUnixTimeSeconds(), Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture));
             }
         }
@@ -52,13 +52,13 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
         foreach (var Id in Satellites.ConnectedIds)
         {
             if (Satellites.IsBusy(Id) || !Satellites.State(Id).Capabilities.AnnouncementPlayback) { continue; }
-            Candidates.AddRange(await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt FROM Reminders WHERE Status='active' AND SatelliteId=$p0 AND NextDueAt <= $p1 ORDER BY NextDueAt LIMIT 1", Token, Id, Now.ToUnixTimeSeconds()));
+            Candidates.AddRange(await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt,COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0),COALESCE((SELECT Importance FROM ReminderPolicies WHERE ReminderId=Reminders.Id),'acknowledge') FROM Reminders WHERE Status='active' AND SatelliteId=$p0 AND NextDueAt <= $p1 ORDER BY NextDueAt LIMIT 1", Token, Id, Now.ToUnixTimeSeconds()));
         }
         foreach (var Batch in Candidates.Chunk(4))
         {
             var Deliveries = Batch.Select(async Row =>
             {
-                try { return (Row, Delivered: await Satellites.AnnounceAsync(Row[2], "Reminder: " + Row[1] + ".", Speech, Token, Importance: AnnouncementImportance.Acknowledge)); }
+                try { return (Row, Delivered: await Satellites.AnnounceAsync(Row[2], "Reminder: " + Row[1] + ".", Speech, Token, Importance: Enum.Parse<AnnouncementImportance>(Row[9].Replace("high-importance", "HighImportance"), true))); }
                 catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }
                 catch (Exception Error)
                 {
@@ -77,7 +77,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
                     var Schedule = new ReminderSchedule(int.Parse(Row[4], CultureInfo.InvariantCulture), int.Parse(Row[5], CultureInfo.InvariantCulture),
                         Row[6].Length == 0 ? null : (DayOfWeek)int.Parse(Row[6], CultureInfo.InvariantCulture));
                     var Next = Schedule.Next(DateTimeOffset.UtcNow > Now ? DateTimeOffset.UtcNow : Now, TimeZoneInfo.FindSystemTimeZoneById(Row[3]));
-                    await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0 WHERE Id=$p1 AND Status='active' AND NextDueAt=$p2",
+                    await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0,Status=CASE WHEN COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0)=1 THEN 'completed' ELSE 'active' END WHERE Id=$p1 AND Status='active' AND NextDueAt=$p2",
                         Token, Next.ToUnixTimeSeconds(), Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture));
                 }
             }
@@ -87,7 +87,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
 
     private async Task BroadcastsAsync(LocalStore Store, ITextToSpeechProvider Speech, DateTimeOffset Now, CancellationToken Token)
     {
-        var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt FROM Reminders WHERE Status='active' AND SatelliteId='all' AND NextDueAt <= $p0 ORDER BY NextDueAt LIMIT 100", Token, Now.ToUnixTimeSeconds());
+        var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt,COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0),COALESCE((SELECT Importance FROM ReminderPolicies WHERE ReminderId=Reminders.Id),'acknowledge') FROM Reminders WHERE Status='active' AND SatelliteId='all' AND NextDueAt <= $p0 ORDER BY NextDueAt LIMIT 100", Token, Now.ToUnixTimeSeconds());
         foreach (var Row in Rows)
         {
             // Snapshot recipients once per occurrence so reconnects and retries cannot repeat successful delivery.
@@ -103,7 +103,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
                 if (Satellites.IsBusy(Target[0])) continue;
                 try
                 {
-                    if (await Satellites.AnnounceAsync(Target[0], "Reminder: " + Row[1] + ".", Speech, Token, Importance: AnnouncementImportance.Acknowledge))
+                    if (await Satellites.AnnounceAsync(Target[0], "Reminder: " + Row[1] + ".", Speech, Token, Importance: Enum.Parse<AnnouncementImportance>(Row[9].Replace("high-importance", "HighImportance"), true)))
                         await Store.ExecuteAsync("UPDATE ReminderBroadcastDeliveries SET Delivered=1 WHERE ReminderId=$p0 AND DueAt=$p1 AND SatelliteId=$p2", Token, Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture), Target[0]);
                 }
                 catch (OperationCanceledException) when (Token.IsCancellationRequested) { throw; }
@@ -114,7 +114,7 @@ public sealed class ReminderScheduler(IServiceScopeFactory Scopes, SatelliteMana
             var Schedule = new ReminderSchedule(int.Parse(Row[4], CultureInfo.InvariantCulture), int.Parse(Row[5], CultureInfo.InvariantCulture),
                 Row[6].Length == 0 ? null : (DayOfWeek)int.Parse(Row[6], CultureInfo.InvariantCulture));
             var Next = Schedule.Next(DateTimeOffset.UtcNow > Now ? DateTimeOffset.UtcNow : Now, TimeZoneInfo.FindSystemTimeZoneById(Row[3]));
-            await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0 WHERE Id=$p1 AND Status='active' AND SatelliteId='all' AND NextDueAt=$p2", Token, Next.ToUnixTimeSeconds(), Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture));
+            await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=$p0,Status=CASE WHEN COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0)=1 THEN 'completed' ELSE 'active' END WHERE Id=$p1 AND Status='active' AND SatelliteId='all' AND NextDueAt=$p2", Token, Next.ToUnixTimeSeconds(), Row[0], long.Parse(Row[7], CultureInfo.InvariantCulture));
         }
         await Store.ExecuteAsync("DELETE FROM ReminderBroadcastDeliveries WHERE NOT EXISTS (SELECT 1 FROM Reminders WHERE Id=ReminderId AND Status='active' AND SatelliteId='all' AND NextDueAt=DueAt)", Token);
     }

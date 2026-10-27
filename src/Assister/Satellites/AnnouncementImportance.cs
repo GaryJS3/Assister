@@ -6,6 +6,9 @@ public enum AnnouncementImportance { Notify, HighImportance, Acknowledge, Alarm 
 
 public static class AnnouncementLevels
 {
+    public static TimeSpan AlarmRepeatInterval => TimeSpan.FromSeconds(10);
+    public static TimeSpan AcknowledgeRepeatInterval => TimeSpan.FromMinutes(10);
+    public static string Capabilities => $"Notify is a standard notification. On satellites, high-importance adds beeps and repeats once; acknowledge repeats every {AcknowledgeRepeatInterval.TotalMinutes:0} minutes until acknowledged; alarm repeats every {AlarmRepeatInterval.TotalSeconds:0} seconds until acknowledged. Rich-client importance is advisory: client support determines sound and repetition, and storage does not confirm display or playback.";
     public static bool TryParse(string? Value, out AnnouncementImportance Importance)
     {
         Importance = Value?.ToLowerInvariant() switch

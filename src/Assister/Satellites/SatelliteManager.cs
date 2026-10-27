@@ -182,7 +182,7 @@ public sealed class SatelliteManager
             await Connection.SendAudioAsync(AnnouncementAudio(Text, Tts, Importance, Timeout.Token), Timeout.Token);
             if (Pending is not null && Announcements.TryGetValue(Id, out var Current) && ReferenceEquals(Pending, Current))
             {
-                Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().Add(Importance == AnnouncementImportance.Alarm ? TimeSpan.FromSeconds(10) : TimeSpan.FromMinutes(10)).UtcTicks);
+                Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().Add(Importance == AnnouncementImportance.Alarm ? AnnouncementLevels.AlarmRepeatInterval : AnnouncementLevels.AcknowledgeRepeatInterval).UtcTicks);
                 Interlocked.Exchange(ref Pending.ListenUntilTicks, Clock.GetUtcNow().AddSeconds(10).UtcTicks);
             }
             Record(Id, "Announcement completed", SessionId: Session);

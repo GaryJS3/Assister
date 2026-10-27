@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Assister.Contracts;
 using Assister.Persistence;
 
@@ -35,6 +36,23 @@ public sealed partial class ReminderIntentHandler(LocalStore Store, IConfigurati
     public async Task<string?> TryHandleAsync(UserRequest Request, CancellationToken Token, bool AllowModelFallback = false)
     {
         var Text = Request.Message.Trim();
+        var Creation = Regex.Match(Text, @"^(?:remind me (?<when>in .+?)|(?:set|create|add|schedule) (?:an? )?(?:alarm reminder|alarm|reminder) (?<when>(?:for|at|in) .+?)) to (?<message>.+?)[.!]?$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        if (Creation.Success && !ReminderRequestPolicy.Recurring(Text))
+        {
+            if (ReminderRequestPolicy.ValidateTime(Text) is { } TimeError) return TimeError;
+            var Local = ReminderRequestPolicy.Clock(Text) ?? (0, 0);
+            var Tool = new Assister.Tools.ReminderTool("reminder_create", Store, Configuration, Rich);
+            using var Step = Assister.Diagnostics.RunTracing.Start("ToolCall", "reminder_create", "Create a one-time schedule from the current request without a model.");
+            var Arguments = JsonSerializer.SerializeToElement(new { message = Creation.Groups["message"].Value, hour = Local.Item1, minute = Local.Item2, weekday = -1 });
+            Step.Input(Arguments);
+            var Result = await Tool.ExecuteAsync(Arguments, new(Request, []), Token);
+            var Output = JsonSerializer.Deserialize<JsonElement>(Result);
+            Step.Output(Output);
+            if (Output.TryGetProperty("error", out var Error)) { Step.Complete("rejected"); return Error.GetString(); }
+            Step.Complete();
+            return ReminderRequestPolicy.Confirmation(Output.GetProperty("reminder").Deserialize<ReminderItem>()!);
+        }
         var RichClient = Rich?.Owner(Request.SatelliteId) is not null;
         var Broadcast = RichClient ? Request.SatelliteId : "all";
         if (!Recognizes(Text)) { return null; }

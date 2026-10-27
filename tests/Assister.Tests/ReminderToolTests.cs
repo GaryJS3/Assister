@@ -79,7 +79,7 @@ public sealed class ReminderToolTests
             return JsonSerializer.Deserialize<JsonElement>(Result);
         }
         var CreateArgs = new { message = "Stretch", hour = 20, minute = 0, weekday = -1 };
-        var Context = new ToolExecutionContext(new("Schedule a reminder to stretch", SatelliteId: "desk"), []);
+        var Context = new ToolExecutionContext(new("Schedule a reminder to stretch every day at 8 PM", SatelliteId: "desk"), []);
         var Created = await Call("reminder_create", CreateArgs, "", Context: Context);
         Assert.Equal("created", Created.GetProperty("status").GetString());
         var Id = Created.GetProperty("reminder").GetProperty("Id").GetString()!;

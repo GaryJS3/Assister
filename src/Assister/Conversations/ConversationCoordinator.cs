@@ -16,7 +16,7 @@ public sealed class ConversationLocks
 }
 
 public sealed class ConversationCoordinator(AssisterDbContext Database, RequestCoordinator Coordinator,
-    ConversationLocks Locks, RunStore? Diagnostics = null, TimeProvider? Clock = null) : IStreamingRequestCoordinator
+    ConversationLocks Locks, RunStore? Diagnostics = null, TimeProvider? Clock = null, IConfiguration? Configuration = null) : IStreamingRequestCoordinator
 {
     private DateTimeOffset UtcNow => (Clock ?? TimeProvider.System).GetUtcNow();
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken)
@@ -33,6 +33,8 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
         var Arrived = UtcNow;
         var ArrivedAt = Arrived.ToUnixTimeSeconds();
         var SourceDevice = Request.DeviceId ?? Request.SatelliteId;
+        var Lifetime = Request.DeviceId is not null && Request.SatelliteId.StartsWith("client-conversation-", StringComparison.Ordinal)
+            ? Math.Clamp(Configuration?.GetValue<int?>("Conversations:RichClientLifetimeSeconds") ?? 1800, 30, 86400) : 30;
         bool CanContinue(Conversation Candidate)
         {
             try
@@ -40,7 +42,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 var Context = JsonSerializer.Deserialize<DeviceConversationContext>(Candidate.DeviceContextJson);
                 var Finished = Context?.ResponseFinishedAt ?? DateTimeOffset.FromUnixTimeSeconds(Candidate.UpdatedAt);
                 return (Context?.SourceDeviceId ?? Candidate.SatelliteId) == SourceDevice
-                    && Arrived >= Finished && Arrived - Finished <= TimeSpan.FromSeconds(30);
+                    && Arrived >= Finished && Arrived - Finished <= TimeSpan.FromSeconds(Lifetime);
             }
             catch (JsonException) { return false; }
         }
@@ -65,7 +67,13 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                     RunTracing.Response(Response, Response, "invalid-request", "validation", null);
                     return new(Response, null, "validation", RunTracing.RunId, "invalid-request", [], null, 0, Response);
                 }
-                if (Request.NewConversation || !CanContinue(Conversation)) Conversation = null;
+                if (Request.NewConversation || !CanContinue(Conversation))
+                {
+                    using var Expiry = RunTracing.Start("Conversation context", "Start fresh after explicit reset, expiry or device mismatch.");
+                    Expiry.Metadata(new { previousConversationId = Conversation.Id, lifetimeSeconds = Lifetime, reason = Request.NewConversation ? "explicit-reset" : "expired-or-device-mismatch" });
+                    Expiry.Complete();
+                    Conversation = null;
+                }
             }
             else
             {
@@ -73,7 +81,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
             }
             if (Conversation is null && !Request.NewConversation)
             {
-                var Candidates = await Database.Conversations.Where(Row => Row.SatelliteId == Request.SatelliteId && Row.UpdatedAt >= Now - 31)
+                var Candidates = await Database.Conversations.Where(Row => Row.SatelliteId == Request.SatelliteId && Row.UpdatedAt >= Now - Lifetime - 1)
                     .OrderByDescending(Row => Row.UpdatedAt).Take(32).ToListAsync(CancellationToken);
                 Conversation = Candidates.FirstOrDefault(CanContinue);
             }

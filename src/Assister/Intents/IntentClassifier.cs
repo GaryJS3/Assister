@@ -70,6 +70,7 @@ public sealed class IntentClassifier : IIntentEngine
 
         Match = Pattern(Text, @"^turn (?<target>.+) (?<power>on|off)$");
         if (!Match.Success) { Match = Pattern(Text, @"^turn (?<power>on|off) (?<target>.+)$"); }
+        if (!Match.Success) { Match = Pattern(Text, @"^shut (?:(?<power>off) (?<target>.+)|(?<target>.+) (?<power>off))$"); }
         if (Match.Success)
         {
             return Slots(Match.Groups["power"].Value == "on" ? DirectIntentKind.TurnOn : DirectIntentKind.TurnOff, Match.Groups["target"].Value);
