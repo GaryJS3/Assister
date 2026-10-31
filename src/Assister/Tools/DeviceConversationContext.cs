@@ -15,12 +15,13 @@ public sealed class DeviceConversationContext
     public DeviceReference[] References { get; set; } = [];
     public ControlRequest? Pending { get; set; }
     public bool AwaitingAction { get; set; }
+    public bool AwaitingStateQuery { get; set; }
     public ControlReceipt? LastCompleted { get; set; }
     public ControlAttempt? LastAttempted { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public void Expire()
     {
-        if (UpdatedAt < DateTimeOffset.UtcNow.AddMinutes(-5)) { References = []; Pending = null; AwaitingAction = false; }
+        if (UpdatedAt < DateTimeOffset.UtcNow.AddMinutes(-5)) { References = []; Pending = null; AwaitingAction = false; AwaitingStateQuery = false; }
     }
 }
 

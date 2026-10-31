@@ -9,6 +9,7 @@ namespace Assister.Tools;
 public sealed record ToolExecutionContext(UserRequest Request, HashSet<string> ObservedEntities, Guid TraceId = default,
     DeviceConversationContext? Conversation = null)
 {
+    public DateTimeOffset ReceivedAt { get; } = DateTimeOffset.UtcNow;
     public bool ForecastAllowed { get; set; }
     public ControlRequest? Control { get; set; } = ControlRequest.Parse(Request.Message, Conversation);
     public bool SemanticControlChecked { get; set; }
@@ -87,7 +88,7 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, 
             }
             await Audit("started");
             using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-            Timeout.CancelAfter(TimeSpan.FromSeconds(Call.Function.Name == "satellite_announce" ? 75 : 12));
+            Timeout.CancelAfter(TimeSpan.FromSeconds(Call.Function.Name == "satellite_announce" ? 75 : Call.Function.Name == "ha_control" ? 42 : 12));
             var Result = await Tool.ExecuteAsync(Arguments.RootElement, Context, Timeout.Token);
             if (Encoding.UTF8.GetByteCount(Result) > 16384)
             {
@@ -99,6 +100,14 @@ public sealed class ToolBroker(ToolRegistry Registry, LocalStore? Store = null, 
             Trace.Complete(Outcome);
             Trace.Output(Output);
             await Audit(Outcome);
+            return Result;
+        }
+        catch (Assister.Modules.HomeAssistant.HomeAssistantConfirmationException)
+        {
+            Trace.Complete("accepted-unconfirmed");
+            var Result = "{\"error\":\"Home Assistant accepted the command but its final state was not confirmed. Please check the device; do not resend automatically.\",\"code\":\"accepted_unconfirmed\"}";
+            Trace.Output(DiagnosticSanitizer.ParseJson(Result));
+            await Audit("accepted-unconfirmed");
             return Result;
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }

@@ -8,9 +8,12 @@ using Assister.Contracts;
 
 namespace Assister.Llm;
 
-public sealed class InvalidLanguageModelResponseException(string Reason) : InvalidOperationException("Language model returned an invalid or incomplete response.")
+public sealed class InvalidLanguageModelResponseException(string Reason, string? FinishReason = null, bool Streaming = false, bool TerminalEventSeen = false) : InvalidOperationException("Language model returned an invalid or incomplete response.")
 {
     public string Reason { get; } = Reason;
+    public string? FinishReason { get; } = FinishReason is null ? null : FinishReason[..Math.Min(FinishReason.Length, 64)];
+    public bool Streaming { get; } = Streaming;
+    public bool TerminalEventSeen { get; } = TerminalEventSeen;
 }
 
 public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguration Configuration) : ILanguageModel
@@ -77,7 +80,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             if (Data == "[DONE]")
             {
                 var Result = BuildResponse(Text.Length == 0 ? null : Text.ToString(),
-                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish) with { Reasoning = Reasoning.Length == 0 ? null : Reasoning.ToString() };
+                    Calls.Values.Select(Call => Call.Build()).ToArray(), Finish, true, true) with { Reasoning = Reasoning.Length == 0 ? null : Reasoning.ToString() };
                 if (Trace is not null) { LlmDiagnostics.Output(Trace, Result); }
                 yield return new(Completed: Result);
                 yield break;
@@ -110,7 +113,7 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
             }
             Finish = Choice.FinishReason;
         }
-        throw InvalidResponse(); // EOF without [DONE] must not authorize partially generated tool calls.
+        throw new InvalidLanguageModelResponseException("missing-terminal-event", Finish, true, false);
     }
 
     private bool ThinkingEnabled => Configuration.GetValue<bool?>("LanguageModel:EnableThinking") != false;
@@ -183,10 +186,10 @@ public sealed class OpenAiCompatibleLanguageModel(HttpClient Http, IConfiguratio
         return Envelope.Choices[0];
     }
 
-    private static LlmResponse BuildResponse(string? Content, IReadOnlyList<LlmToolCall> Calls, string? Finish)
+    private static LlmResponse BuildResponse(string? Content, IReadOnlyList<LlmToolCall> Calls, string? Finish, bool Streaming = false, bool TerminalEventSeen = false)
     {
         if (Finish is not ("stop" or "tool_calls"))
-            throw new InvalidLanguageModelResponseException(Finish == "length" ? "token-limit" : Finish == "content_filter" ? "content-filter" : "missing-or-invalid-finish-reason");
+            throw new InvalidLanguageModelResponseException(Finish == "length" ? "token-limit" : Finish == "content_filter" ? "content-filter" : "missing-or-invalid-finish-reason", Finish, Streaming, TerminalEventSeen);
         if (Finish is not ("stop" or "tool_calls") || Calls.Count > 16
             || Calls.Any(Call => Call.Type != "function" || string.IsNullOrWhiteSpace(Call.Id)
                 || Call.Id.Length > 128 || Call.Function is null || string.IsNullOrWhiteSpace(Call.Function.Name)

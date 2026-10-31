@@ -14,6 +14,33 @@ namespace Assister.IntegrationTests;
 
 public sealed class RichClientTests
 {
+    [Fact]
+    public async Task OneTimeAlarmDeliveryCompletesAndDoesNotRepeatTomorrow()
+    {
+        using var App = new TestApplication();
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        await Client.RegisterAsync(new("windows", "Audit client", []));
+        var Conversation = await Client.CreateConversationAsync();
+        var Route = "client-conversation-" + Conversation.Id.ToString("N");
+        await using var Scope = App.Services.CreateAsyncScope();
+        var Store = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.LocalStore>();
+        var Handler = ActivatorUtilities.CreateInstance<Assister.Modules.Reminders.ReminderIntentHandler>(Scope.ServiceProvider);
+        var Before = DateTimeOffset.UtcNow;
+        var Answer = await Handler.TryHandleAsync(new("set an alarm in 2 minutes to audit game", Route), default);
+        Assert.Contains("one-time alarm reminder", Answer);
+        var Row = Assert.Single(await Store.QueryAsync("SELECT Id,NextDueAt FROM Reminders", default));
+        Assert.InRange(long.Parse(Row[1]) - Before.ToUnixTimeSeconds(), 120, 121);
+        await Store.ExecuteAsync("UPDATE Reminders SET NextDueAt=0 WHERE Id=$p0", default, Row[0]);
+        var Scheduler = ActivatorUtilities.CreateInstance<Assister.Modules.Reminders.ReminderScheduler>(Scope.ServiceProvider);
+        await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow, default);
+        Assert.Equal("completed", Assert.Single(await Store.QueryAsync("SELECT Status FROM Reminders", default))[0]);
+        var Notification = Assert.Single((await Client.GetNotificationsAsync(true))!);
+        Assert.Equal("alarm", Notification.Importance);
+        await Scheduler.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), DateTimeOffset.UtcNow.AddDays(1), default);
+        Assert.Single((await Client.GetNotificationsAsync(true))!);
+    }
+
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     [Fact]
@@ -137,7 +164,7 @@ public sealed class RichClientTests
         {
             var Tool = Scope.ServiceProvider.GetServices<Assister.Tools.IAssisterTool>().Single(Tool => Tool.Definition.Function.Name == Name);
             return JsonSerializer.Deserialize<JsonElement>(await Tool.ExecuteAsync(JsonSerializer.SerializeToElement(Args),
-                new(new("Change my reminder schedule", Route), []), default));
+                  new(new(Name == "reminder_create" ? "Schedule my reminder every day at 8 PM" : Name == "reminder_edit" ? "Change my reminder every day at 9 PM" : "Change my reminder schedule", Route), []), default));
         }
         Assert.Empty((await Call("reminder_get", new { })).GetProperty("items").EnumerateArray());
         var Created = await Call("reminder_create", new { message = "Stretch", hour = 20, minute = 0, weekday = -1, all_satellites = true });
