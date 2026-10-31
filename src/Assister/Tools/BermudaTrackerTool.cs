@@ -8,7 +8,7 @@ public sealed class BermudaTrackerTool(HomeAssistantStateCache Cache) : IAssiste
 {
     public bool StateChanging => false;
     public LlmTool Definition => new(new("ha_locate_tracker",
-        "Locate a Bermuda Bluetooth tracker by device name, alias or exact area sensor entity ID (for example Gary's keys or Meg's phone). Searches and reads together. Returns current area, visibility and elapsed time when available; last seen area is provided only when current location is unavailable. Mention last seen location only when there is no current location. Use Response to preserve uncertainty: an area-loss timestamp is not an exact last detection time. Never use a device's assigned HA area as its tracked location. If ambiguous, ask which listed tracker; if no match, say so.",
+        "Locate a Bermuda Bluetooth tracker by device name, alias or exact area sensor entity ID (for example Gary's keys or Meg's phone). Searches and reads together. Returns current area, visibility and elapsed time when available; last seen area is provided only when current location is unavailable. Mention last seen location only when there is no current location. Report LastUpdatedAt and LastUpdatedSecondsAgo as last updated, using the location sensor update time; never describe it as last detected. Never use a device's assigned HA area as its tracked location. If ambiguous, ask which listed tracker; if no match, say so.",
         JsonSerializer.Deserialize<JsonElement>("""{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}""")));
     public Task<string> ExecuteAsync(JsonElement Arguments, ToolExecutionContext Context, CancellationToken CancellationToken)
     {

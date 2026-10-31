@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Assister.Modules.HomeAssistant;
 
 public sealed record TrackerLocation(string EntityId, string Name, string? CurrentArea, string? LastSeenArea,
-    bool CurrentlySeen, DateTimeOffset? LastSeenAt, double? LastSeenSecondsAgo, DateTimeOffset? AreaLostAt, string Response);
+    bool CurrentlySeen, DateTimeOffset? LastUpdatedAt, double? LastUpdatedSecondsAgo, string Response);
 
 public static class BermudaTracker
 {
@@ -48,22 +48,18 @@ public static class BermudaTracker
         var LastAreas = Related.Where(IsLastArea).ToArray();
         var Current = Area(Entity);
         var Last = Current is null && LastAreas.Length == 1 ? Area(LastAreas[0]) : null;
-        var Seen = Related.Select(Item => Timestamp(Text(Item.State.GetProperty("attributes"), "last_seen"), Now))
-            .Where(Item => Item.HasValue).Max();
-        // HA last_changed is when the area became unknown, not a BLE observation timestamp.
-        // last_updated/last_reported and the retained area's last_changed are not last-seen evidence.
-        var Lost = Current is null && Text(Entity.State, "state") == "unknown"
-            ? Timestamp(Text(Entity.State, "last_changed"), Now) : null;
+        // Report when the sensor supplying the location was updated, not when BLE detected the device.
+        var LocationSensor = Last is not null ? LastAreas[0] : Entity;
+        var Updated = Timestamp(Text(LocationSensor.State, "last_updated"), Now);
         var Name = Label(Entity);
         var Response = Current is not null ? $"{Name}: currently in {Current}."
             : Text(Entity.State, "state") == "unavailable" ? $"{Name}: the tracker sensor is unavailable; its current location cannot be confirmed."
             : $"{Name}: no longer being seen in an area.";
         if (Last is not null) { Response += $" Last seen area: {Last}."; }
         else if (Current is null) { Response += " The last seen area is unavailable."; }
-        Response += Seen is not null ? $" Last detected {Ago(Now - Seen.Value)}."
-            : Lost is not null ? $" It stopped reporting an area {Ago(Now - Lost.Value)}; the exact last detection time is unavailable."
-            : " The last detection time is unavailable.";
-        return new(Entity.EntityId, Name, Current, Last, Current is not null, Seen,
-            Seen is null ? null : (Now - Seen.Value).TotalSeconds, Lost, Response);
+        Response += Updated is not null ? $" Last updated {Ago(Now - Updated.Value)}."
+            : " The last update time is unavailable.";
+        return new(Entity.EntityId, Name, Current, Last, Current is not null, Updated,
+            Updated is null ? null : (Now - Updated.Value).TotalSeconds, Response);
     }
 }
