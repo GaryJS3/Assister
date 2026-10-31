@@ -242,6 +242,51 @@ public sealed class AnnouncementTests
         Assert.Empty(Kitchen.Events);
     }
 
+    [Theory]
+    [InlineData(AnnouncementImportance.Acknowledge)]
+    [InlineData(AnnouncementImportance.Alarm)]
+    public async Task BroadcastAcknowledgementClearsAllRecipientsAndPreservesVoiceSession(AnnouncementImportance Importance)
+    {
+        var (Manager, _, _) = Setup();
+        var Handler = new AnnouncementHandler(Manager, new Speech());
+        await Handler.ExecuteAsync("Broadcast", "all", new(), default, Importance: Importance);
+        Assert.Equal(2, Manager.PendingAnnouncementIds.Length);
+        var VoiceSession = Guid.NewGuid();
+        Assert.True(Manager.BeginSession("office", VoiceSession));
+        Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        Assert.True(Manager.IsBusy("office"));
+        Assert.False(Manager.IsStopRequested(VoiceSession));
+        Assert.Contains(Manager.Events("kitchen"), Event => Event.Type == "Broadcast announcement acknowledged");
+    }
+
+    [Fact]
+    public async Task SeparateAnnouncementsWithSameTextRemainIndependent()
+    {
+        var (Manager, _, _) = Setup();
+        foreach (var Id in new[] { "kitchen", "office" })
+            await Manager.AnnounceAsync(Id, "Same text", new Speech(), default, Importance: AnnouncementImportance.Alarm);
+        Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        Assert.Equal(new[] { "kitchen" }, Manager.PendingAnnouncementIds);
+    }
+
+    [Fact]
+    public async Task AcknowledgedBroadcastSkipsDelayedDeliveryAndDoesNotClearReplacement()
+    {
+        var (Manager, Kitchen, _) = Setup();
+        var Broadcast = new SatelliteManager.AnnouncementBroadcast();
+        await Manager.AnnounceAsync("office", "Broadcast", new Speech(), default,
+            Importance: AnnouncementImportance.Alarm, Broadcast: Broadcast);
+        Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        Assert.True(await Manager.AnnounceAsync("kitchen", "Broadcast", new Speech(), default,
+            Importance: AnnouncementImportance.Alarm, Broadcast: Broadcast));
+        Assert.Empty(Kitchen.Events);
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        await Manager.AnnounceAsync("kitchen", "Replacement", new Speech(), default, Importance: AnnouncementImportance.Alarm);
+        Assert.False(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        Assert.Equal(new[] { "kitchen" }, Manager.PendingAnnouncementIds);
+    }
+
     private static (SatelliteManager, Speaker, Speaker) Setup()
     {
         var Manager = new SatelliteManager();

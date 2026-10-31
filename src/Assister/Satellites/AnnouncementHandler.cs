@@ -95,10 +95,11 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
             if (Context is not null) Context.Announcement = new(Message, AvailableIds, DateTimeOffset.UtcNow, Importance);
             return "Which satellite should receive the announcement?\n1. All satellites\n" + string.Join("\n", AvailableIds.Select((Id, Index) => $"{Index + 2}. {Name(Id)}"));
         }
-        var Queued = Targets.Where(Id => Id == SourceId && Satellites.IsBusy(Id) && Queue?.Enqueue(Id, Message, Importance) == true).ToArray();
+        var SatelliteBroadcast = All ? new SatelliteManager.AnnouncementBroadcast() : null;
+        var Queued = Targets.Where(Id => Id == SourceId && Satellites.IsBusy(Id) && Queue?.Enqueue(Id, Message, Importance, SatelliteBroadcast) == true).ToArray();
         var Results = await Task.WhenAll(Targets.Except(Queued).Select(async Id =>
         {
-            try { return (Id, Played: await Satellites.AnnounceAsync(Id, Message, Tts, Token, RequireVolume: true, Importance: Importance)); }
+            try { return (Id, Played: await Satellites.AnnounceAsync(Id, Message, Tts, Token, RequireVolume: true, Importance: Importance, Broadcast: SatelliteBroadcast)); }
             catch (Exception Error) when (Error is IOException or InvalidOperationException or HttpRequestException || Error is OperationCanceledException && !Token.IsCancellationRequested)
             { return (Id, Played: false); }
         }));
