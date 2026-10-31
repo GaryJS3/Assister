@@ -11,9 +11,9 @@ public sealed class BermudaTrackerTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-31T16:00:00Z");
     private static JsonElement Json(string Text) => JsonSerializer.Deserialize<JsonElement>(Text);
     private static HomeAssistantEntity Entity(string Id, string Role, string State, string Device = "keys", string Name = "Gary's keys",
-        string? Seen = null) => new(Id, Name + " " + Role, "static", "Wrong static area",
-        Json(JsonSerializer.Serialize(new { state = State, last_changed = "2026-10-31T15:55:00Z",
-            attributes = new { last_seen = Seen } })))
+        string? Updated = "2026-10-31T15:58:00Z") => new(Id, Name + " " + Role, "static", "Wrong static area",
+        Json(JsonSerializer.Serialize(new { state = State, last_changed = "2026-10-31T15:55:00Z", last_updated = Updated,
+            attributes = new { last_seen = "2026-10-31T15:59:00Z" } })))
         { Platform = "bermuda", DeviceId = Device, DeviceName = Name, OriginalName = Role };
     private static HomeAssistantSnapshot Snapshot(params HomeAssistantEntity[] Entities) => new(false, Entities, Json("{}"));
 
@@ -40,41 +40,42 @@ public sealed class BermudaTrackerTests
     [Fact]
     public void LocationUsesBermudaStatesAndPairsByRegistryDeviceId()
     {
-        var Area = Entity("sensor.renamed", "Area", "Kitchen", Seen: "2026-10-31T15:58:00Z");
-        var Last = Entity("sensor.other_renamed", "Area Last Seen", "Office");
+        var Area = Entity("sensor.renamed", "Area", "Kitchen");
+        var Last = Entity("sensor.other_renamed", "Area Last Seen", "Office", Updated: "2026-10-31T15:59:00Z");
         var Result = BermudaTracker.Read(Snapshot(Area, Last, Entity("sensor.meg", "Area Last Seen", "Bedroom", "phone", "Meg's phone")), Area, Now);
         Assert.Equal("Kitchen", Result.CurrentArea);
         Assert.Null(Result.LastSeenArea);
         Assert.DoesNotContain("Last seen area", Result.Response);
         Assert.DoesNotContain("Office", Result.Response);
         Assert.True(Result.CurrentlySeen);
-        Assert.Equal(120, Result.LastSeenSecondsAgo);
-        Assert.Contains("2 minutes ago", Result.Response);
+        Assert.Equal(120, Result.LastUpdatedSecondsAgo);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-31T15:58:00Z"), Result.LastUpdatedAt);
+        Assert.Contains("Last updated about 2 minutes ago", Result.Response);
         Assert.DoesNotContain("Wrong static area", Result.Response);
     }
 
     [Fact]
-    public void LostAreaReportsElapsedLossTimeWithoutInventingLastDetection()
+    public void LostAreaReportsLastSeenLocationsSensorUpdateTime()
     {
-        var Area = Entity("sensor.keys_area", "Area", "unknown");
-        var Result = BermudaTracker.Read(Snapshot(Area, Entity("sensor.keys_last", "Area Last Seen", "Kitchen")), Area, Now);
+        var Area = Entity("sensor.keys_area", "Area", "unknown", Updated: "2026-10-31T15:59:00Z");
+        var Result = BermudaTracker.Read(Snapshot(Area, Entity("sensor.keys_last", "Area Last Seen", "Kitchen", Updated: "2026-10-31T15:50:00Z")), Area, Now);
         Assert.False(Result.CurrentlySeen);
         Assert.Null(Result.CurrentArea);
         Assert.Equal("Kitchen", Result.LastSeenArea);
-        Assert.Null(Result.LastSeenAt);
+        Assert.Equal(600, Result.LastUpdatedSecondsAgo);
         Assert.Contains("no longer being seen", Result.Response);
-        Assert.Contains("stopped reporting an area about 5 minutes ago", Result.Response);
-        Assert.Contains("exact last detection time is unavailable", Result.Response);
+        Assert.Contains("Last updated about 10 minutes ago", Result.Response);
+        Assert.DoesNotContain("detection", Result.Response);
     }
 
     [Fact]
     public void UnavailableSensorDoesNotClaimDeviceHasLeft()
     {
-        var Area = Entity("sensor.keys", "Area", "unavailable", Seen: "2026-11-01T00:00:00Z");
+        var Area = Entity("sensor.keys", "Area", "unavailable", Updated: "2026-11-01T00:00:00Z");
         var Result = BermudaTracker.Read(Snapshot(Area), Area, Now);
         Assert.Contains("sensor is unavailable", Result.Response);
-        Assert.Null(Result.AreaLostAt);
-        Assert.Null(Result.LastSeenAt);
+        Assert.Null(Result.LastUpdatedAt);
+        Assert.Null(Result.LastUpdatedSecondsAgo);
         Assert.Null(Result.LastSeenArea);
     }
 
@@ -91,6 +92,21 @@ public sealed class BermudaTrackerTests
         var Result = Resolver.Resolve(Intent, "Wrong static area", Snapshot(First, Second));
         Assert.Empty(Result.Entities);
         Assert.Equal(2, Result.Alternatives.Count);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("invalid")]
+    [InlineData("2026-10-31T15:58:00")]
+    [InlineData("2026-11-01T00:00:00Z")]
+    public void InvalidUpdateTimeDoesNotFallBackToDetectionOrStateChangeTime(string? Updated)
+    {
+        var Area = Entity("sensor.keys", "Area", "Kitchen", Updated: Updated);
+        var Result = BermudaTracker.Read(Snapshot(Area), Area, Now);
+        Assert.Null(Result.LastUpdatedAt);
+        Assert.Null(Result.LastUpdatedSecondsAgo);
+        Assert.Contains("last update time is unavailable", Result.Response);
+        Assert.DoesNotContain("detected", Result.Response);
     }
 
     [Fact]
