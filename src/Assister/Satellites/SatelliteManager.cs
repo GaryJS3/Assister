@@ -58,6 +58,26 @@ public sealed class SatelliteManager
     public string[] PendingAnnouncementIds => Announcements.Keys.ToArray();
     private readonly ConcurrentDictionary<string, Guid> AnnouncementSessions = new();
     public bool IsAcknowledgementListening(string Id) => Announcements.TryGetValue(Id, out var Item) && Interlocked.Read(ref Item.ListenUntilTicks) > Clock.GetUtcNow().UtcTicks;
+    public async Task CancelBroadcastAsync(AnnouncementBroadcast Broadcast, CancellationToken Token)
+    {
+        var Recipients = new List<string>();
+        lock (Broadcast.Gate)
+        {
+            Broadcast.Acknowledged = true;
+            foreach (var Pair in Announcements)
+                if (ReferenceEquals(Pair.Value.Broadcast, Broadcast)
+                    && ((ICollection<KeyValuePair<string, RepeatingAnnouncement>>)Announcements).Remove(Pair))
+                    Recipients.Add(Pair.Key);
+        }
+        foreach (var Id in Recipients)
+        {
+            Record(Id, "Broadcast occurrence superseded or cancelled");
+            if (AnnouncementSessions.TryGetValue(Id, out var Session) && Sessions.GetValueOrDefault(Id) == Session)
+                await StopAsync(Id, Token);
+            else if (TryGet(Id, out var Peer) && Peer is IAcknowledgementListener Listener)
+                await Listener.StopAcknowledgementListeningAsync(Token);
+        }
+    }
     public async Task<bool> AcknowledgeAsync(string Id, string Text, CancellationToken Token)
     {
         if (!AnnouncementLevels.IsAcknowledgement(Text) || !Announcements.TryRemove(Id, out var Acknowledged)) return false;

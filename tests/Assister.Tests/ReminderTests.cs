@@ -1,3 +1,4 @@
+using Assister.Satellites;
 using Assister.Modules.Reminders;
 using Assister.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -58,7 +59,7 @@ public sealed class ReminderTests
         await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
         await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
         Assert.Equal(1, Kitchen.Deliveries);
-        Assert.Equal("0", Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]);
+        Assert.NotEqual("0", Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]);
         var Office = new Satellite("office");
         Manager.Register(Office);
         Manager.Update("office", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
@@ -95,6 +96,90 @@ public sealed class ReminderTests
             Assert.True(long.Parse(Assert.Single(await Persisted.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]) > DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(PathName); }
+    }
+
+    [Fact]
+    public async Task LegacyStuckBroadcastAdvancesWithoutReplayingAlreadyDeliveredSpeakers()
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('broadcast','Vitamins','all','America/New_York',21,0,NULL,0,'active')", default);
+        foreach (var Id in new[] { "kitchen", "offline" })
+        {
+            await Store.ExecuteAsync("INSERT INTO Satellites VALUES($p0,$p0,NULL,'test','',1,'','', '')", default, Id);
+            await Store.ExecuteAsync("INSERT INTO ReminderBroadcastDeliveries VALUES('broadcast',0,$p0,$p1)", default, Id, Id == "kitchen" ? 1 : 0);
+        }
+        var Manager = new SatelliteManager();
+        var Kitchen = new Satellite();
+        Manager.Register(Kitchen);
+        Manager.Update("kitchen", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        var Now = DateTimeOffset.Parse("2026-10-31T12:00:00-04:00");
+        // Use a future-independent assertion: whichever is later, real time or the supplied tick.
+        await Scheduler.TickAsync(Store, new Speech(), Now, default);
+        Assert.True(long.Parse(Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]) > Now.ToUnixTimeSeconds());
+        Assert.Equal(0, Kitchen.Deliveries);
+        Assert.Equal("offline", Assert.Single(await Store.QueryAsync("SELECT SatelliteId FROM ReminderBroadcastDeliveries WHERE Delivered=0", default))[0]);
+    }
+
+    [Fact]
+    public async Task BroadcastAcknowledgementDismissesPeersAndOfflineRetryAcrossSchedulerRestart()
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('broadcast','Vitamins','all','America/New_York',21,0,NULL,0,'active')", default);
+        var Manager = new SatelliteManager();
+        foreach (var Id in new[] { "kitchen", "office", "offline" })
+        {
+            await Store.ExecuteAsync("INSERT INTO Satellites VALUES($p0,$p0,NULL,'test','',1,'','', '')", default, Id);
+            if (Id == "offline") continue;
+            Manager.Register(new Satellite(Id));
+            Manager.Update(Id, State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        }
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Equal(2, Manager.PendingAnnouncementIds.Length);
+        Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Empty(await Store.QueryAsync("SELECT SatelliteId FROM ReminderBroadcastDeliveries WHERE Delivered=0", default));
+        var Offline = new Satellite("offline");
+        Manager.Register(Offline);
+        Manager.Update("offline", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Restarted = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Restarted.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Equal(0, Offline.Deliveries);
+    }
+
+    [Fact]
+    public async Task UnacknowledgedOccurrenceDoesNotBlockNextNightAndOfflineRetriesSurviveRestart()
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        var Now = DateTimeOffset.UtcNow;
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('broadcast','Vitamins','all','America/New_York',21,0,NULL,0,'active')", default);
+        foreach (var Id in new[] { "kitchen", "offline" })
+            await Store.ExecuteAsync("INSERT INTO Satellites VALUES($p0,$p0,NULL,'test','',1,'','', '')", default, Id);
+        var Manager = new SatelliteManager();
+        var Kitchen = new Satellite();
+        Manager.Register(Kitchen);
+        Manager.Update("kitchen", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Scheduler.TickAsync(Store, new Speech(), Now, default);
+        var Next = long.Parse(Assert.Single(await Store.QueryAsync("SELECT NextDueAt FROM Reminders", default))[0]);
+        Assert.True(Next > Now.ToUnixTimeSeconds());
+        Assert.Contains("kitchen", Manager.PendingAnnouncementIds);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.FromUnixTimeSeconds(Next), default);
+        Assert.Equal(2, Kitchen.Deliveries);
+        Assert.Single(Manager.PendingAnnouncementIds);
+        Assert.Contains(Manager.Events("kitchen"), Event => Event.Type == "Broadcast occurrence superseded or cancelled");
+        var Offline = new Satellite("offline");
+        Manager.Register(Offline);
+        Manager.Update("offline", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Restarted = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Restarted.TickAsync(Store, new Speech(), DateTimeOffset.FromUnixTimeSeconds(Next), default);
+        Assert.Equal(1, Offline.Deliveries);
+        Assert.Equal(2, Kitchen.Deliveries);
     }
 
     private sealed class Speech : Assister.Contracts.ITextToSpeechProvider
