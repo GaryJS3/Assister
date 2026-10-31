@@ -36,7 +36,8 @@ public static class IntentCatalog
         ["builtin-brightness"] = ["set {target} to {brightness} percent", "set living room light to 100"],
         ["builtin-state"] = ["what is the state of {target}", "what's the status of {target}", "is {target} on"],
         ["builtin-fan-speed"] = ["set office fan speed to 50 percent"],
-        ["builtin-temperature"] = ["what is the temperature in {area}", "what's the temperature"]
+        ["builtin-temperature"] = ["what is the temperature in {area}", "what's the temperature"],
+        ["builtin-tracker"] = ["where are {target}", "where is {target}", "find {target}"]
     };
     public static readonly IntentDefinition[] BuiltIns =
     [
@@ -46,6 +47,7 @@ public static class IntentCatalog
         new("builtin-state", "Read device state", "home-assistant.query-state", true, [], BuiltIn: true),
         new("builtin-fan-speed", "Set fan speed", "home-assistant.set-fan-speed", true, [], BuiltIn: true),
         new("builtin-temperature", "Read temperature", "home-assistant.query-temperature", true, [], BuiltIn: true),
+        new("builtin-tracker", "Locate Bermuda tracker", "home-assistant.query-tracker", true, [], BuiltIn: true),
         new("builtin-time", "Current local time", "assister.time", true, ["what time is it", "what is the time"], BuiltIn: true),
         new("builtin-date", "Current local date", "assister.date", true, ["what is today's date", "what is the date", "what day is it"], BuiltIn: true)
     ];
@@ -63,7 +65,7 @@ public static class IntentCatalog
     public static string NativeId(DirectIntentKind Kind) => Kind switch
     {
         DirectIntentKind.TurnOn => "builtin-turn-on", DirectIntentKind.TurnOff => "builtin-turn-off",
-        DirectIntentKind.SetBrightness => "builtin-brightness", DirectIntentKind.SetFanSpeed => "builtin-fan-speed", DirectIntentKind.QueryState => "builtin-state", _ => "builtin-temperature"
+        DirectIntentKind.SetBrightness => "builtin-brightness", DirectIntentKind.SetFanSpeed => "builtin-fan-speed", DirectIntentKind.QueryState => "builtin-state", DirectIntentKind.QueryTracker => "builtin-tracker", _ => "builtin-temperature"
     };
 }
 

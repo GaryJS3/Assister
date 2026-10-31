@@ -15,6 +15,11 @@ public sealed class HomeAssistantEntityResolver : IEntityResolver
     public EntityResolutionResult Resolve(IntentMatch Intent, string? SatelliteArea, HomeAssistantSnapshot Snapshot)
     {
         var Target = LanguageParser.Noun(Intent.Target);
+        if (Intent.Kind == DirectIntentKind.QueryTracker)
+        {
+            var Matches = BermudaTracker.Find(Snapshot, Intent.Target);
+            return Matches.Length == 1 ? new(Matches, 1, []) : new([], 0, Matches.Take(5).ToArray());
+        }
         if (Intent.Kind is DirectIntentKind.SetBrightness or DirectIntentKind.SetFanSpeed or DirectIntentKind.TurnOn or DirectIntentKind.TurnOff
             && Assister.Tools.ControlRequest.NormalizeTargetList(Target).Contains(" and ", StringComparison.Ordinal))
         {
