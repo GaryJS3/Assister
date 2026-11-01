@@ -10,6 +10,12 @@ public sealed class DirectIntentHandler(IHomeAssistantClient HomeAssistant, Home
     public async Task<IntentResult> ExecuteAsync(IntentMatch Intent, EntityResolutionResult Resolution, CancellationToken CancellationToken)
     {
         var Entities = Resolution.Entities;
+        if (Intent.Kind == DirectIntentKind.QueryTracker)
+        {
+            var Snapshot = Cache?.Snapshot();
+            if (Snapshot is null || Snapshot.IsStale) { return new("Home Assistant is unavailable.", "unavailable"); }
+            return new(BermudaTracker.Read(Snapshot, Entities.Single()).Response, "succeeded");
+        }
         if (Entities.Any(Entity => Entity.IsUnavailable)) { return new("That device is unavailable.", "unavailable"); }
         if (Intent.Kind is DirectIntentKind.QueryState or DirectIntentKind.QueryTemperature)
         {

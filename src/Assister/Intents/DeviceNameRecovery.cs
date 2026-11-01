@@ -19,6 +19,7 @@ public sealed class DeviceNameRecovery(ILanguageModel Model, IEntityResolver Res
             DirectIntentKind.SetBrightness => Entity.Domain == "light",
             DirectIntentKind.SetFanSpeed => Entity.Domain == "fan",
             DirectIntentKind.QueryTemperature => Entity.IsTemperature,
+            DirectIntentKind.QueryTracker => BermudaTracker.IsArea(Entity),
             DirectIntentKind.QueryState => Entity.Domain is "light" or "switch" or "fan" or "sensor",
             _ => Entity.Domain is "light" or "switch" or "fan"
         }).ToArray();

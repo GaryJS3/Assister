@@ -54,7 +54,7 @@ public sealed class IntentWorkbench(IIntentEngine Engine, IntentStore Store, Int
                 Resolution = Resolver.Resolve(Match.Intent, Request.Area, Snapshot);
                 Outcome = Snapshot.IsStale ? "unavailable" : Resolution.Entities.Count == 0
                     ? Resolution.Alternatives.Count > 0 ? "ambiguous" : "not-found"
-                    : Resolution.Entities.Any(Entity => Entity.IsUnavailable) ? "unavailable"
+                    : Match.Intent.Kind != DirectIntentKind.QueryTracker && Resolution.Entities.Any(Entity => Entity.IsUnavailable) ? "unavailable"
                     : Match.Intent.Kind == DirectIntentKind.SetBrightness && Resolution.Entities.Any(Entity => !Entity.SupportsBrightness) ? "unsupported" : Match.Intent.Kind == DirectIntentKind.SetFanSpeed && Resolution.Entities.Any(Entity => !Entity.SupportsFanSpeed) ? "unsupported" : "ready";
                 Reason = Outcome switch
                 {

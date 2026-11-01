@@ -26,7 +26,7 @@ public sealed class IntentEngineTests
     {
         var Registry = IntentActionRegistry.Default;
         Assert.Equal(2, Registry.Integrations.Length);
-        Assert.Equal(9, Registry.Actions.Length);
+        Assert.Equal(10, Registry.Actions.Length);
         Assert.Throws<ArgumentException>(() => new IntentActionRegistry([new HomeAssistantIntentActions(), new HomeAssistantIntentActions()]));
         Assert.Throws<ArgumentException>(() => Registry.Get("SetBrightness"));
         Assert.Throws<ArgumentException>(() => IntentStore.Validate(new("bad-input", "Bad input", "assister.reply", true, ["hello {target}"], Response: "Hello.")));

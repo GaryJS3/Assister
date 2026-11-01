@@ -9,7 +9,8 @@ public enum DirectIntentKind
     SetBrightness,
     QueryState,
     QueryTemperature,
-    SetFanSpeed
+    SetFanSpeed,
+    QueryTracker
 }
 
 public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? BrightnessPercent = null, string? ExplicitArea = null, string? TargetDomain = null, int? SpeedPercent = null)
@@ -20,6 +21,7 @@ public sealed record IntentMatch(DirectIntentKind Kind, string Target, int? Brig
         DirectIntentKind.SetBrightness => "SetBrightnessPercent",
         DirectIntentKind.SetFanSpeed => "SetFanSpeedPercent",
         DirectIntentKind.QueryTemperature => "QueryTemperature",
+        DirectIntentKind.QueryTracker => "QueryTracker",
         _ => "QueryState"
     };
 }
@@ -47,6 +49,11 @@ public sealed class IntentClassifier : IIntentEngine
     public IntentMatch? Classify(string Message)
     {
         var Text = Normalize(Message);
+
+        var Tracker = Pattern(Text, @"^(?:where (?:is|are|was|were)|where's|find|locate) (?<target>.+?)(?: (?:right now|now|last seen))?$");
+        if (Tracker.Success && Pattern(Tracker.Groups["target"].Value,
+            @"\b(?:keys?|phones?|trackers?|wallets?|watches?|tags?|tablets?|bags?|backpacks?|remotes?)\b|['’]s\b|^sensor\.").Success)
+        { return new(DirectIntentKind.QueryTracker, LanguageParser.Noun(Tracker.Groups["target"].Value)); }
 
         var Fan = Pattern(Text, @"^(?:set|adjust|make|turn) (?:(?<target>.+?) (?:to|at)|on (?<target>.+?) (?:to|at)) (?<percent>-?\d{1,9})\s*(?:percent|%)?$");
         if (Fan.Success && Pattern(Fan.Groups["target"].Value, @"\bfans?\b").Success

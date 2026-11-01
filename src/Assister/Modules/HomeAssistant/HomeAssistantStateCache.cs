@@ -7,6 +7,9 @@ public sealed record HomeAssistantEntity(string EntityId, string Name, string? A
     public string Domain => EntityId.Split('.')[0];
     public IReadOnlyList<string> Aliases { get; init; } = [];
     public string? DeviceName { get; init; }
+    public string? DeviceId { get; init; }
+    public string? Platform { get; init; }
+    public string? OriginalName { get; init; }
     public bool SupportsFanSpeed => Domain == "fan" && State.GetProperty("attributes").TryGetProperty("supported_features", out var Features)
         && Features.ValueKind == JsonValueKind.Number && Features.TryGetInt32(out var Bits) && (Bits & 1) != 0;
     public double? FanSpeedPercent => Domain == "fan" && State.GetProperty("attributes").TryGetProperty("percentage", out var Value)
@@ -115,6 +118,9 @@ public static class HomeAssistantEntityIndex
             return new HomeAssistantEntity(Id, Name, AreaId, Text(Area, "name"), State)
             {
                 Aliases = Aliases,
+                DeviceId = Text(Entity, "device_id"),
+                Platform = Text(Entity, "platform"),
+                OriginalName = Text(Entity, "original_name"),
                 DeviceName = Text(Device, "name_by_user") ?? Text(Device, "name")
             };
         }).ToArray();

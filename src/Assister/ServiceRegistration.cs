@@ -97,6 +97,7 @@ public static class ServiceRegistration
             Services.AddTransient<IAssisterTool>(Services => new MemoryTool(Name, Services.GetRequiredService<LocalStore>()));
         }
         Services.AddHttpClient("homeassistant-tools").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        Services.AddTransient<IAssisterTool, BermudaTrackerTool>();
         Services.AddTransient<IAssisterTool>(Services => new WeatherTool(Services.GetRequiredService<HomeAssistantStateCache>(),
             Services.GetRequiredService<IHttpClientFactory>().CreateClient("homeassistant-tools"), Services.GetRequiredService<IConfiguration>()));
         foreach (var Name in new[] { "ha_search", "ha_get_state", "ha_control", "ha_get_history" })
