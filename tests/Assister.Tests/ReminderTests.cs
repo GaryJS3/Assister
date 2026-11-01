@@ -122,8 +122,10 @@ public sealed class ReminderTests
         Assert.Equal("offline", Assert.Single(await Store.QueryAsync("SELECT SatelliteId FROM ReminderBroadcastDeliveries WHERE Delivered=0", default))[0]);
     }
 
-    [Fact]
-    public async Task BroadcastAcknowledgementDismissesPeersAndOfflineRetryAcrossSchedulerRestart()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BroadcastDismissalClearsPeersAndOfflineRetryAcrossSchedulerRestart(bool Clear)
     {
         await using var Database = await OpenAsync();
         var Store = new LocalStore(Database);
@@ -139,7 +141,8 @@ public sealed class ReminderTests
         var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
         await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
         Assert.Equal(2, Manager.PendingAnnouncementIds.Length);
-        Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
+        if (Clear) Assert.True(await Manager.StopAsync("office", default));
+        else Assert.True(await Manager.AcknowledgeAsync("office", "acknowledged", default));
         Assert.Empty(Manager.PendingAnnouncementIds);
         await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
         Assert.Empty(await Store.QueryAsync("SELECT SatelliteId FROM ReminderBroadcastDeliveries WHERE Delivered=0", default));

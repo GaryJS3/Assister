@@ -151,7 +151,8 @@ public sealed class SatelliteManager
     }
     public async Task<bool> StopAsync(string Id, CancellationToken Token)
     {
-        Announcements.TryRemove(Id, out _);
+        if (Announcements.TryRemove(Id, out var Pending) && Pending.Broadcast is { } Broadcast)
+            await CancelBroadcastAsync(Broadcast, Token);
         if (!TryGet(Id, out var Connection)) { return false; }
         if (Connection is IAcknowledgementListener Listener) await Listener.StopAcknowledgementListeningAsync(Token);
         var Session = Sessions.GetValueOrDefault(Id);
