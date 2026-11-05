@@ -24,7 +24,7 @@ public sealed class CalendarDeletion
 public sealed record AccountInput(string Name, string Credential);
 public sealed record SubscriptionInput(bool Enabled, string? SatelliteId = null, bool Announce = false,
     string[]? SatelliteIds = null, CalendarRichRecipient[]? RichClients = null,
-    bool AllSatellites = false, bool AllRichClients = false);
+    bool AllSatellites = false, bool AllRichClients = false, CalendarNotificationSettings? Notifications = null);
 public sealed record CalendarIdInput(string CalendarId);
 public sealed record ConfirmationInput(string Confirmation);
 public sealed record DefaultReminderInput(int? Minutes);
@@ -65,8 +65,9 @@ public static class CalendarEndpoints
             if (Satellites.Length > 64 || Satellites.Any(Id => string.IsNullOrWhiteSpace(Id) || Id.Length > 128)) throw new ArgumentException("Choose at most 64 valid satellites.");
             if (Clients.Length > 64 || Clients.Any(C => C is null || !Recipients.Available(C))) throw new ArgumentException("Choose available Rich API clients with their current owners. Refresh recipients if a client was revoked or reassigned.");
             Satellites = Satellites.Distinct(StringComparer.Ordinal).ToArray(); Clients = Clients.Distinct().ToArray();
+            var Schedule = Input.Notifications?.Validate();
             if (Input.Announce && !Input.AllSatellites && !Input.AllRichClients && Satellites.Length + Clients.Length == 0) throw new ArgumentException("Choose at least one satellite or Rich API client for notifications.");
-            Store.Update(Account, A => A with { Calendars = A.Calendars.Select(C => C.Id == Calendar ? C with { Enabled = Input.Enabled, Announce = Input.Announce, SatelliteId = "", SatelliteIds = Satellites, RichClients = Clients, AllSatellites = Input.AllSatellites, AllRichClients = Input.AllRichClients } : C).ToArray() });
+            Store.Update(Account, A => A with { Calendars = A.Calendars.Select(C => C.Id == Calendar ? C with { Enabled = Input.Enabled, Announce = Input.Announce, SatelliteId = "", SatelliteIds = Satellites, RichClients = Clients, AllSatellites = Input.AllSatellites, AllRichClients = Input.AllRichClients, Notifications = Schedule ?? C.Notifications } : C).ToArray() });
             return Results.NoContent();
         });
         Group.MapGet("/{account}/{calendar}/events", async (string Account, string Calendar, DateTimeOffset From, DateTimeOffset To, string? Page, GoogleCalendarClient Client, CancellationToken Ct) => await Client.Events(Account, Calendar, From, To, Page, Ct));

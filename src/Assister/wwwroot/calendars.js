@@ -35,6 +35,40 @@
     const overrides = event.reminders?.overrides || [];
     return overrides.length ? overrides.map(r => (r.minutes === 0 ? 'At start' : r.minutes + ' minutes before') + ' (' + r.method + ')').join(', ') : 'No notifications';
   }
+  function scheduleEditor(settings) {
+    const field = node('fieldset', null, 'schedule-editor'); field.append(node('legend', 'Assister notification schedule'));
+    field.append(node('p', 'These rules apply to every event in this calendar, independently of Google notification settings. Each rule goes to the recipients selected above.', 'muted'));
+    if (!settings) field.append(node('p', 'Currently using Google reminders. Save an Assister schedule below to replace them.', 'muted'));
+    const before = node('div'), daily = node('div'); const advances = [], agendas = [];
+    function addBefore(value = {amount: 10, unit: 'minutes'}) {
+      const row = node('div', null, 'schedule-rule');
+      const amount = node('input'); amount.type = 'number'; amount.min = '0'; amount.max = '525600'; amount.step = '1'; amount.value = value.amount; amount.setAttribute('aria-label', 'How long before the event');
+      const unit = node('select'); unit.setAttribute('aria-label', 'Notification time unit'); for (const u of ['minutes','hours','days']) unit.append(new Option(u, u)); unit.value = value.unit;
+      const rule = {row, amount, unit}; advances.push(rule);
+      row.append(amount, unit, node('span', 'before each event'), button('Remove', () => { advances.splice(advances.indexOf(rule), 1); row.remove(); })); before.append(row);
+    }
+    function addDaily(time = '08:00') {
+      const row = node('div', null, 'schedule-rule'); const input = node('input'); input.type = 'time'; input.value = time; input.setAttribute('aria-label', 'Time to list today’s events');
+      const rule = {row, input}; agendas.push(rule);
+      row.append(node('span', 'List all events for today at'), input, button('Remove', () => { agendas.splice(agendas.indexOf(rule), 1); row.remove(); })); daily.append(row);
+    }
+    for (const rule of settings?.before || []) addBefore(rule);
+    for (const time of settings?.dailyTimes || []) addDaily(time);
+    const zoneLabel = node('label', 'Daily agenda time zone'); const zone = node('input'); zone.value = settings?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; zone.maxLength = 100; zoneLabel.append(zone);
+    field.append(node('h4', 'Before events'), before, button('Add advance notification', () => { if (advances.length >= 10) throw new Error('Choose up to ten advance notifications.'); addBefore(); }),
+      node('h4', 'Daily agenda'), daily, button('Add daily agenda', () => { if (agendas.length >= 4) throw new Error('Choose up to four daily agenda times.'); addDaily(); }), zoneLabel,
+      node('p', 'A daily agenda includes earlier events and all-day events, and says when the day is empty. No rules means no notifications. A day before means 24 hours before the event start.', 'muted'));
+    return {element: field, value: () => {
+      const rules = advances.map(r => {
+        if (!/^\d+$/.test(r.amount.value)) throw new Error('Enter a whole, nonnegative notification amount.');
+        const amount = Number(r.amount.value), multiplier = r.unit.value === 'days' ? 1440 : r.unit.value === 'hours' ? 60 : 1;
+        if (amount * multiplier > 525600) throw new Error('Notifications can be at most 365 days before an event.');
+        return {amount, unit:r.unit.value};
+      });
+      if (agendas.some(r => !r.input.value) || !zone.value.trim()) throw new Error('Choose a daily agenda time and a time zone.');
+      return {before:rules, dailyTimes:agendas.map(r => r.input.value), timeZone:zone.value.trim()};
+    }};
+  }
   async function refresh() {
     accounts = await api('/accounts');
     richClients = await api('/recipients');
@@ -58,13 +92,9 @@
         const savedSatellites = (cal.satelliteIds ?? (cal.satelliteId ? [cal.satelliteId] : [])).map(id => ({id}));
         const targets = recipientPicker('Satellites', satellites, savedSatellites, s => s.id, s => s.name || s.id, cal.allSatellites === true);
         const clients = recipientPicker('Rich API clients', richClients, cal.richClients || [], c => JSON.stringify([c.owner,c.clientId]), c => (c.name || c.clientId) + ' · ' + c.owner, cal.allRichClients === true);
-        item.append(targets.element, clients.element, node('p', 'Each recipient receives the event’s configured notification times. Rich clients receive durable notifications through the Rich API; display and sound depend on the client.', 'muted'));
-        item.append(button('Save subscription', async () => { await api('/' + enc(account.id) + '/subscriptions/' + enc(cal.id), 'PUT', {enabled: check.checked, announce: announce.checked, allSatellites: targets.all(), allRichClients: clients.all(), satelliteIds: targets.values().map(s => s.id), richClients: clients.values().map(c => ({clientId:c.clientId,owner:c.owner}))}); await refresh(); $('notice').textContent = 'Subscription saved.'; }));
-        const defaultsForm = node('form'); const defaultsLabel = node('label', 'Service account default notification (minutes before; blank disables)');
-        const minutes = node('input'); minutes.type = 'number'; minutes.min = '0'; minutes.max = '40320'; defaultsLabel.append(minutes);
-        defaultsForm.append(defaultsLabel, node('button', 'Set notification default'));
-        defaultsForm.onsubmit = e => { e.preventDefault(); run(async () => { await api('/' + enc(account.id) + '/defaults/' + enc(cal.id), 'PUT', {minutes: minutes.value === '' ? null : Number(minutes.value)}); $('notice').textContent = 'Service account notification default saved.'; }); };
-        item.append(defaultsForm);
+        item.append(targets.element, clients.element, node('p', 'Rich clients receive durable notifications through the Rich API; display and sound depend on the client.', 'muted'));
+        const schedule = scheduleEditor(cal.notifications); item.append(schedule.element);
+        item.append(button('Save subscription', async () => { await api('/' + enc(account.id) + '/subscriptions/' + enc(cal.id), 'PUT', {enabled: check.checked, announce: announce.checked, allSatellites: targets.all(), allRichClients: clients.all(), satelliteIds: targets.values().map(s => s.id), richClients: clients.values().map(c => ({clientId:c.clientId,owner:c.owner})), notifications:schedule.value()}); await refresh(); $('notice').textContent = 'Subscription and Assister schedule saved.'; }));
         card.append(item);
         if (cal.enabled) $('calendar').append(new Option(account.name + ' / ' + cal.name, account.id + '|' + cal.id));
       }
@@ -86,7 +116,7 @@
       const start = event.start?.dateTime ? new Date(event.start.dateTime).toLocaleString() : event.start?.date;
       const end = event.end?.dateTime ? new Date(event.end.dateTime).toLocaleString() : event.end?.date;
       card.append(node('time', start + ' → ' + end));
-      card.append(node('p', 'Notifications: ' + notificationText(event)));
+      card.append(node('p', 'Google notifications: ' + notificationText(event) + '. Assister uses the subscription schedule above.'));
       if (event.location) card.append(node('p', event.location));
       if (event.description) card.append(node('p', event.description));
       const actions = node('div', null, 'actions'); actions.append(button('Edit', () => edit(event)), button('Remove', async () => {
