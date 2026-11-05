@@ -94,18 +94,41 @@ public sealed class GoogleCalendarTests : IDisposable
         await Scheduler().Tick(A.Id, Calendar, Due.AddDays(1), default);
         Assert.Empty(Notifications.List("other","phone")); Assert.Single(Notifications.List("bob","tablet"));
     }
-    [Fact]
-    public async Task RichOnlySubscriptionQueuesEvenWithNoConnectedSatellites()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RichOnlySubscriptionQueuesEvenWithNoConnectedSatellites(bool DynamicAll)
     {
         var Store = this.Store(); var A = Store.Add("Home", Credential()); var Now = DateTimeOffset.UtcNow;
         var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Assister:DataPath"]=DirectoryName, ["RichClients:Clients:phone:Token"]=new string('a',32), ["RichClients:Clients:phone:Owner"]="alice" }).Build();
         using var Notices = new NotificationStore(Config);
-        var Calendar = new CalendarSubscription("shared","Shared",true,Announce:true,SatelliteIds:[],RichClients:[new("phone","alice")]); Store.Update(A.Id,A=>A with { Calendars=[Calendar] });
+        var Calendar = new CalendarSubscription("shared","Shared",true,Announce:true,SatelliteIds:[],RichClients:DynamicAll ? [] : [new("phone","alice")],AllSatellites:DynamicAll,AllRichClients:DynamicAll); Store.Update(A.Id,A=>A with { Calendars=[Calendar] });
+        var Persisted = Assert.Single(this.Store().Get(A.Id).Calendars); Assert.Equal(DynamicAll,Persisted.AllSatellites); Assert.Equal(DynamicAll,Persisted.AllRichClients);
         var Client = new GoogleCalendarClient(Store,new Factory(new FakeGoogle {EventStart=Now.AddMinutes(10), EventReminders=JsonNode.Parse("{\"useDefault\":false,\"overrides\":[{\"method\":\"popup\",\"minutes\":10},{\"method\":\"popup\",\"minutes\":5}]}")!.AsObject()}));
         var Services = new ServiceCollection(); Services.AddDbContext<AssisterDbContext>(O=>O.UseSqlite("Data Source="+Path.Combine(DirectoryName,"rich.db")+";Pooling=False")); Services.AddScoped<LocalStore>(); Services.AddSingleton<ITextToSpeechProvider,Speech>();
         await using var Provider=Services.BuildServiceProvider(); await using(var Scope=Provider.CreateAsyncScope()) await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Database.MigrateAsync();
-        var Scheduler=new CalendarScheduler(Store,Client,Provider.GetRequiredService<IServiceScopeFactory>(),new SatelliteManager(),Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance,Notices,new CalendarRecipients(Config));
+        var Manager=new SatelliteManager();
+        var Scheduler=new CalendarScheduler(Store,Client,Provider.GetRequiredService<IServiceScopeFactory>(),Manager,Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance,Notices,new CalendarRecipients(Config));
         await Scheduler.Tick(A.Id,Calendar,Now,default); Assert.Single(Notices.List("alice","phone",true));
+        if(DynamicAll)
+        {
+            // New recipients are discovered without saving the subscription again.
+            Config["RichClients:Clients:tablet:Token"]=new string('b',32); Config["RichClients:Clients:tablet:Owner"]="bob";
+            Config["RichClients:Clients:revoked:Token"]=""; Config["RichClients:Clients:revoked:Owner"]="bob";
+            await using(var Scope=Provider.CreateAsyncScope())
+            {
+                var Database=Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
+                Database.Satellites.Add(new Assister.Satellites.Satellite{Id="office",Name="Office",Enabled=true});
+                Database.Satellites.Add(new Assister.Satellites.Satellite{Id="disabled",Name="Disabled",Enabled=false});
+                await Database.SaveChangesAsync();
+            }
+            var Office=new Speaker("office");var Disabled=new Speaker("disabled");
+            foreach(var Speaker in new[]{Office,Disabled}){Manager.Register(Speaker);Manager.Update(Speaker.SatelliteId,S=>S with{Capabilities=new(){AnnouncementPlayback=true}});}
+            await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(1),default);
+            await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(1).AddSeconds(30),default);
+            Assert.Equal(1,Office.Deliveries);Assert.Equal(0,Disabled.Deliveries);
+            Assert.Single(Notices.List("bob","tablet"));Assert.Empty(Notices.List("bob","revoked"));Assert.Single(Notices.List("alice","phone"));
+        }
         await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(5),default);
         await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(5).AddSeconds(30),default);
         var Queued = Notices.List("alice","phone"); Assert.Equal(2,Queued.Length); Assert.Equal(new[] {Now,Now.AddMinutes(5)},Queued.Select(N=>N.DueAt));

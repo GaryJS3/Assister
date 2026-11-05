@@ -13,8 +13,10 @@
   async function run(action) { try { $('notice').textContent = ''; await action(); } catch (e) { $('notice').textContent = e.message; } }
   function selected() { const [a, c] = $('calendar').value.split('|'); if (!a || !c) throw new Error('Select a subscribed calendar first.'); return '/' + enc(a) + '/' + enc(c); }
   function resetEditor() { editing = null; $('event-form').hidden = true; $('event-form').reset(); }
-  function recipientPicker(title, choices, selected, key, label) {
+  function recipientPicker(title, choices, selected, key, label, allSelected = false) {
     const field = node('fieldset', null, 'recipient-picker'); field.append(node('legend', title)); const inputs = [];
+    const all = node('input'); all.type = 'checkbox'; all.checked = allSelected;
+    const allRow = node('label', null, 'check'); allRow.append(all, document.createTextNode('All (current and future)')); field.append(allRow);
     for (const choice of choices) {
       const input = node('input'); input.type = 'checkbox'; input.checked = selected.some(s => key(s) === key(choice));
       const row = node('label', null, 'check'); row.append(input, document.createTextNode(label(choice))); field.append(row); inputs.push({input, choice});
@@ -24,7 +26,9 @@
       const row = node('label', null, 'check'); row.append(input, document.createTextNode(label(missing) + ' (unavailable — uncheck to remove)')); field.append(row); inputs.push({input, choice: missing});
     }
     if (!inputs.length) field.append(node('p', 'No recipients configured.', 'muted'));
-    return {element: field, values: () => inputs.filter(r => r.input.checked).map(r => r.choice)};
+    function updateAll() { for (const row of inputs) row.input.disabled = all.checked; }
+    all.onchange = updateAll; updateAll();
+    return {element: field, all: () => all.checked, values: () => all.checked ? [] : inputs.filter(r => r.input.checked).map(r => r.choice)};
   }
   function notificationText(event) {
     if (event.reminders?.useDefault) return 'Calendar defaults';
@@ -52,10 +56,10 @@
         const announce = node('input'); announce.type = 'checkbox'; announce.checked = cal.announce;
         const al = node('label', null, 'check'); al.append(announce, document.createTextNode('Send event notifications')); item.append(al);
         const savedSatellites = (cal.satelliteIds ?? (cal.satelliteId ? [cal.satelliteId] : [])).map(id => ({id}));
-        const targets = recipientPicker('Satellites', satellites, savedSatellites, s => s.id, s => s.name || s.id);
-        const clients = recipientPicker('Rich API clients', richClients, cal.richClients || [], c => JSON.stringify([c.owner,c.clientId]), c => (c.name || c.clientId) + ' · ' + c.owner);
+        const targets = recipientPicker('Satellites', satellites, savedSatellites, s => s.id, s => s.name || s.id, cal.allSatellites === true);
+        const clients = recipientPicker('Rich API clients', richClients, cal.richClients || [], c => JSON.stringify([c.owner,c.clientId]), c => (c.name || c.clientId) + ' · ' + c.owner, cal.allRichClients === true);
         item.append(targets.element, clients.element, node('p', 'Each recipient receives the event’s configured notification times. Rich clients receive durable notifications through the Rich API; display and sound depend on the client.', 'muted'));
-        item.append(button('Save subscription', async () => { await api('/' + enc(account.id) + '/subscriptions/' + enc(cal.id), 'PUT', {enabled: check.checked, announce: announce.checked, satelliteIds: targets.values().map(s => s.id), richClients: clients.values().map(c => ({clientId:c.clientId,owner:c.owner}))}); await refresh(); $('notice').textContent = 'Subscription saved.'; }));
+        item.append(button('Save subscription', async () => { await api('/' + enc(account.id) + '/subscriptions/' + enc(cal.id), 'PUT', {enabled: check.checked, announce: announce.checked, allSatellites: targets.all(), allRichClients: clients.all(), satelliteIds: targets.values().map(s => s.id), richClients: clients.values().map(c => ({clientId:c.clientId,owner:c.owner}))}); await refresh(); $('notice').textContent = 'Subscription saved.'; }));
         const defaultsForm = node('form'); const defaultsLabel = node('label', 'Service account default notification (minutes before; blank disables)');
         const minutes = node('input'); minutes.type = 'number'; minutes.min = '0'; minutes.max = '40320'; defaultsLabel.append(minutes);
         defaultsForm.append(defaultsLabel, node('button', 'Set notification default'));

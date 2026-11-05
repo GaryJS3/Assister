@@ -32,9 +32,13 @@ public sealed class GoogleCalendarDashboardTests
                 Assert.Equal(HttpStatusCode.BadRequest,Bad.StatusCode);
                 var NoTargets=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,satelliteIds=Array.Empty<string>(),richClients=Array.Empty<object>()});
                 Assert.Equal(HttpStatusCode.BadRequest,NoTargets.StatusCode);
+                var All=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,allSatellites=true,allRichClients=true});
+                Assert.Equal(HttpStatusCode.NoContent,All.StatusCode);
+                var Dynamic=Assert.Single(Store.Get(Account.Id).Calendars); Assert.True(Dynamic.AllSatellites); Assert.True(Dynamic.AllRichClients); Assert.Empty(Dynamic.SatelliteTargets); Assert.Empty(Dynamic.RichClients!);
                 var Save=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,satelliteIds=new[]{"kitchen","office","kitchen"},richClients=new[]{new{clientId="phone",owner="gary"}}});
                 Assert.Equal(HttpStatusCode.NoContent,Save.StatusCode);
                 var Saved=Assert.Single(Store.Get(Account.Id).Calendars); Assert.Equal(["kitchen","office"],Saved.SatelliteTargets); Assert.Equal("",Saved.SatelliteId); Assert.Equal(new CalendarRichRecipient("phone","gary"),Assert.Single(Saved.RichClients!));
+                Assert.False(Saved.AllSatellites);Assert.False(Saved.AllRichClients);
                 // Existing API callers can still send one satellite using the old field.
                 var Legacy=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=false,satelliteId="kitchen"}); Legacy.EnsureSuccessStatusCode();
                 Assert.Equal(["kitchen"],Assert.Single(Store.Get(Account.Id).Calendars).SatelliteTargets);

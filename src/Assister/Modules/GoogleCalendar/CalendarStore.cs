@@ -5,7 +5,8 @@ namespace Assister.Modules.GoogleCalendar;
 
 public sealed record CalendarRichRecipient(string ClientId, string Owner);
 public sealed record CalendarSubscription(string Id, string Name, bool Enabled = false, string SatelliteId = "", bool Announce = false,
-    string[]? SatelliteIds = null, CalendarRichRecipient[]? RichClients = null)
+    string[]? SatelliteIds = null, CalendarRichRecipient[]? RichClients = null,
+    bool AllSatellites = false, bool AllRichClients = false)
 {
     // Old saved subscriptions retain their single target until explicitly saved in the new editor.
     [System.Text.Json.Serialization.JsonIgnore]
