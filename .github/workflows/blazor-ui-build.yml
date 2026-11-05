@@ -16,3 +16,7 @@ jobs:
         run: dotnet restore Assister.sln
       - name: Build
         run: dotnet build Assister.sln --no-restore --configuration Release
+      - name: Unit tests
+        run: dotnet test tests/Assister.Tests/Assister.Tests.csproj --no-build --configuration Release
+      - name: Integration tests
+        run: dotnet test tests/Assister.IntegrationTests/Assister.IntegrationTests.csproj --no-build --configuration Release

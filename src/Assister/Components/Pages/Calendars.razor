@@ -15,6 +15,7 @@
             <label>Service account JSON key <InputFile OnChange="ReadKey" accept=".json,application/json" /></label>
             <button disabled="@busy" @onclick="Connect">Connect account</button>
         </div>
+        <h2>Connected accounts</h2>
         @if(accounts.Length==0){<p class="empty">No connected accounts.</p>}
         @foreach(var account in accounts){
             var accountId=account.Text("id");
