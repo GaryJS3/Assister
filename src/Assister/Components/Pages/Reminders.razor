@@ -1,0 +1,57 @@
+@page "/reminders"
+@page "/reminders.html"
+@inject BrowserApi Api
+<PageTitle>Reminders · Assister</PageTitle>
+<PageHeader Eyebrow="SCHEDULE / REMINDERS" Title="Reminders" Description="Manage scheduled announcements to satellites.">
+    <Actions><button @onclick="Load" disabled="@busy">Refresh</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<div class="split">
+    <section class="card"><div class="row"><h2>Active reminders</h2><span class="status-pill">@items.Length scheduled</span></div>
+    @if(items.Length==0){<p class="empty">Nothing scheduled yet.</p>}
+    @foreach(var item in items){
+        <article class="panel">
+            <h3>@item.Text("message")</h3>
+            <p class="muted">@(item.Flag("oneTime")?"Once":item.Prop("weekday").ValueKind == JsonValueKind.Null?"Daily":Days[(int)item.Number("weekday")]) at @($"{(int)item.Number("hour"):00}:{(int)item.Number("minute"):00}") · @item.Text("importance")</p>
+            <p class="subtle">Next: @item.Date("nextDueAt") · @item.Text("timeZone")</p>
+            <p class="subtle">Destination: @item.Text("satelliteId")</p>
+            <div class="actions"><button @onclick="()=>Edit(item)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>Remove(item)">Remove</button></div>
+        </article>
+    }
+    </section>
+    <section class="card stack"><h2>@(editing is null?"Add a reminder":"Edit reminder")</h2>
+        <label>Remind me to <textarea rows="3" maxlength="500" @bind="message"></textarea></label>
+        <div class="form-grid">
+            <label>Repeat <select @bind="weekday"><option value="">Every day</option>@for(int day=0;day<7;day++){<option value="@day">Every @Days[day]</option>}</select></label>
+            <label>At <input type="time" @bind="time" /></label>
+        </div>
+        <label>Time zone <input @bind="zone" maxlength="100" /></label>
+        <label>Announce on <select @bind="satellite"><option value="all">All satellites</option>
+            @foreach(var s in satellites){<option value="@s.Text("id")">@s.Text("name")</option>}
+        </select></label>
+        <p class="hint">Announcements queue while devices are offline or busy.</p>
+        <div class="actions"><button class="primary" disabled="@busy" @onclick="Save">@(editing is null?"Add reminder":"Save changes")</button>
+        @if(editing is not null){<button @onclick="Reset">Cancel editing</button>}</div>
+    </section>
+</div>
+@code {
+    static readonly string[] Days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    JsonElement[] items=[],satellites=[]; string? editing;string message="",weekday="",time="20:00",zone="America/New_York",satellite="all",notice="";bool busy,error;
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();try{satellites=(await Api.Get("/api/satellites")).Items().Select(x=>x.Prop("device")).ToArray();}catch{}StateHasChanged();}}
+    async Task Load(){busy=true;try{
+        var all=new List<JsonElement>();JsonElement page=default;
+        do{page=await Api.Get("/api/reminders?offset="+all.Count);all.AddRange(page.Prop("items").Items());}while(page.Prop("items").Items().Count()==100);
+        items=all.ToArray();if(editing is null)zone=page.Text("defaultTimeZone","America/New_York");notice="";error=false;
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    void Edit(JsonElement i){editing=i.Text("id");message=i.Text("message");weekday=i.Prop("weekday").ValueKind==JsonValueKind.Null?"":i.Prop("weekday").String();time=$"{(int)i.Number("hour"):00}:{(int)i.Number("minute"):00}";zone=i.Text("timeZone");satellite=i.Text("satelliteId");}
+    void Reset(){editing=null;message="";weekday="";time="20:00";satellite="all";}
+    async Task Save(){busy=true;try{
+        if(string.IsNullOrWhiteSpace(message)||string.IsNullOrWhiteSpace(zone)||!TimeOnly.TryParse(time,out var at))throw new Exception("Provide a message, valid time and time zone.");
+        var payload=new {message=message.Trim(),satelliteId=satellite,hour=at.Hour,minute=at.Minute,weekday=string.IsNullOrWhiteSpace(weekday)?(int?)null:int.Parse(weekday),timeZone=zone};
+        if(editing is null)await Api.Post("/api/reminders",payload);else await Api.Put("/api/reminders/"+Uri.EscapeDataString(editing),payload);
+        Reset();await Load();notice="Reminder saved.";
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task Remove(JsonElement i){if(!await Api.Confirm("Remove reminder: "+i.Text("message")+"?"))return;busy=true;try{
+        await Api.Delete("/api/reminders/"+Uri.EscapeDataString(i.Text("id")));if(editing==i.Text("id"))Reset();await Load();notice="Reminder removed.";
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+}

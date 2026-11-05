@@ -1,0 +1,30 @@
+@page "/integrations"
+@page "/integrations.html"
+@inject BrowserApi Api
+<PageTitle>Integrations · Assister</PageTitle>
+<PageHeader Eyebrow="CONNECTIONS / AVAILABLE ACTIONS" Title="Integrations" Description="Services and registered actions available to Assister.">
+    <Actions><button disabled="@busy" @onclick="Load">Refresh catalog</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="true" />
+@if (integrations.Length==0 && string.IsNullOrEmpty(notice)) { <p class="empty">No integrations registered.</p> }
+<div class="grid">
+@foreach (var item in integrations) {
+    <article class="card">
+        <div class="row"><h2>@item.Text("name")</h2><span class="status-pill @(item.Text("status").Equals("available",StringComparison.OrdinalIgnoreCase) ? "good" : "")">@item.Text("status")</span></div>
+        <p class="muted">@item.Text("description")</p><small class="mono">@item.Text("id") · @(item.Flag("builtIn") ? "Built-in" : "Extension")</small>
+        <details><summary>@item.Prop("actions").Items().Count() available actions</summary>
+            @foreach (var action in item.Prop("actions").Items()) {
+                <div class="panel"><strong>@action.Text("name")</strong><span class="status-pill">@(action.Flag("stateChanging")?"Changes state":"Read-only")</span>
+                <p class="mono">@action.Text("id")</p>
+                <small>@(string.Join(", ",action.Prop("inputs").Items().Select(i=>i.Text("label")+" ("+i.Text("type")+")")))</small></div>
+            }
+        </details>
+        <a href="/intents">Manage intents →</a>
+    </article>
+}
+</div>
+@code {
+    JsonElement[] integrations=[];string notice="";bool busy;
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();StateHasChanged();}}
+    async Task Load(){busy=true;try{integrations=(await Api.Get("/api/integrations")).Items().ToArray();notice="";}catch(Exception ex){notice=ex.Message;}finally{busy=false;}}
+}

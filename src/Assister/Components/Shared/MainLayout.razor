@@ -1,0 +1,36 @@
+@inherits LayoutComponentBase
+<div class="app-layout">
+    <aside class="sidebar @(menuOpen ? "open" : "")" id="sidebar">
+        <div class="brand"><a href="/" aria-label="Assister dashboard"><span class="brand-icon">A</span><span><strong>Assister</strong><small>CONTROL CENTER</small></span></a></div>
+        <nav class="sidebar-nav" aria-label="Primary navigation">
+            <span class="nav-caption">WORKSPACE</span>
+            <NavLink href="/" Match="NavLinkMatch.All" @onclick="Close">Overview <span class="nav-symbol">⌂</span></NavLink>
+            <NavLink href="/chat" @onclick="Close">Conversation</NavLink>
+            <NavLink href="/devices" @onclick="Close">Devices</NavLink>
+            <NavLink href="/intents" @onclick="Close">Intents</NavLink>
+            <span class="nav-caption">SCHEDULING</span>
+            <NavLink href="/reminders" @onclick="Close">Reminders</NavLink>
+            <NavLink href="/calendars" @onclick="Close">Calendars</NavLink>
+            <span class="nav-caption">ADMINISTRATION</span>
+            <NavLink href="/integrations" @onclick="Close">Integrations</NavLink>
+            <NavLink href="/ai-server" @onclick="Close">AI server</NavLink>
+            <NavLink href="/client-tokens" @onclick="Close">Client tokens</NavLink>
+            <NavLink href="/releases" @onclick="Close">Releases</NavLink>
+        </nav>
+        <div class="sidebar-footer">Assister · Management UI</div>
+    </aside>
+    @if (menuOpen) { <button class="sidebar-scrim" aria-label="Close navigation" @onclick="Close"></button> }
+    <div class="content-frame">
+        <header class="topbar">
+            <button class="mobile-menu ghost" @onclick="Toggle" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="@menuOpen">☰</button>
+            <span class="topbar-title">ASSISTER / ADMINISTRATION</span>
+            <span class="topbar-badge">SERVER · LIVE</span>
+        </header>
+        <main class="content" id="main-content">@Body</main>
+    </div>
+</div>
+@code {
+    private bool menuOpen;
+    private void Toggle() => menuOpen = !menuOpen;
+    private void Close() => menuOpen = false;
+}

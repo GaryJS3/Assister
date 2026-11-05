@@ -1,0 +1,170 @@
+@page "/chat"
+@page "/chat.html"
+@implements IAsyncDisposable
+@inject BrowserApi Api
+@inject IJSRuntime JS
+<PageTitle>Conversation · Assister</PageTitle>
+<PageHeader Eyebrow="CONVERSATION / RICH CLIENT" Title="Conversation" Description="Send text, voice, and attachments through the production interaction pipeline.">
+    <Actions><span class="status-pill @(connected?"good":"")">@connection</span></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+@if(!connected){
+    <section class="card stack" style="max-width:560px">
+        <h2>Connect a client</h2><p class="muted">Use a configured rich-client credential. The API manages an eight-hour session cookie.</p>
+        <label>Bearer credential <input type="password" autocomplete="off" @bind="credential" /></label>
+        <button class="primary" disabled="@busy" @onclick="Login">Connect</button>
+    </section>
+}else{
+    <div class="toolbar">
+        <label>Conversation <select @bind="conversationId" @bind:after="Open"><option value="">Select conversation</option>
+            @foreach(var c in conversations){<option value="@c.Text("id")">@c.Text("title","Conversation")</option>}
+        </select></label>
+        <button disabled="@busy" @onclick="NewConversation">New conversation</button>
+        <button @onclick="Logout">Sign out</button>
+    </div>
+    <div class="split" style="grid-template-columns:minmax(0,2fr) minmax(240px,1fr)">
+        <section class="card stack">
+            <div aria-live="polite" class="stack" style="max-height:62vh;overflow:auto">
+                @if(interactions.Length==0){<p class="empty">Start a conversation by sending a message.</p>}
+                @foreach(var item in interactions){
+                    var id=item.Text("id");
+                    <article class="panel">
+                        <div class="row"><strong>YOU</strong><small>@item.Date("createdAt")</small></div>
+                        <p>@item.Text("input")</p><h3>ASSISTER</h3>
+                        <p style="white-space:pre-wrap">@ResponseFor(item)</p>
+                        <span class="status-pill @(item.Text("status")=="completed"?"good":item.Text("status")=="failed"?"bad":"")">@item.Text("status")</span>
+                        @if(audioReady.Contains(id) || (speak && item.Text("status")=="completed")){
+                            <div><audio controls preload="none" src="@("/api/client/interactions/"+id+"/audio")"></audio></div>
+                        }
+                        <details><summary>Execution activity</summary>
+                            @foreach(var ev in EventsFor(id).Where(x=>x.Text("type").StartsWith("step.")||x.Text("type").StartsWith("interaction.")||x.Text("type").StartsWith("tts."))){
+                                <p class="subtle">@ev.Text("type") · @ev.Prop("data").Text("label") @ev.Prop("data").Text("status")</p>
+                            }
+                        </details>
+                        <details><summary>Context and trace</summary>
+                            <button @onclick="()=>LoadContext(id)">Load context and trace</button>
+                            @if(context.TryGetValue(id,out var data)){<JsonDetails Title="Context used" Data="@data" />}
+                            @if(traces.TryGetValue(id,out var trace)){<JsonDetails Title="Diagnostic trace" Data="@trace" />}
+                        </details>
+                        @if(attachmentsFor.TryGetValue(id,out var files)){
+                            @foreach(var attachment in files.Items()){<a href="@("/api/client/attachments/"+attachment.Text("id"))" download>@attachment.Text("name")</a>}
+                        }
+                    </article>
+                }
+            </div>
+            <div class="panel stack">
+                <label>Ask Assister <textarea @bind="message" rows="3" maxlength="1000" placeholder="How warm is the office?"></textarea></label>
+                <label>Attach a text document or an image <input type="file" id="chat-attachments" multiple accept=".txt,.md,.json,image/png,image/jpeg" /></label>
+                <div class="actions">
+                    <button disabled="@busy" @onclick="UploadFiles">Upload selected attachments</button>
+                    @foreach(var file in attachments){<span class="status-pill">@file.Text("name") <button class="ghost" title="Remove attachment" @onclick="()=>RemoveAttachment(file)">×</button></span>}
+                </div>
+                <label class="check"><input type="checkbox" @bind="speak" /> Request spoken answers</label>
+                <div class="actions">
+                    <button disabled="@busy" @onclick="ToggleMic">@(recording?"Stop and send recording":"Record voice")</button>
+                    <button disabled="@(busy||string.IsNullOrEmpty(activeId))" @onclick="Cancel">Cancel current run</button>
+                    <button class="primary" disabled="@busy" @onclick="Send">@(busy?"Processing…":"Send")</button>
+                </div>
+                <small class="muted">Requests can execute real device commands. Microphone access requires HTTPS or localhost.</small>
+            </div>
+        </section>
+        <aside class="card"><h2>Live activity</h2>
+            @if(string.IsNullOrEmpty(activeId)){<p class="empty">Nothing running.</p>}
+            else{
+                <p class="mono">@activeId</p>
+                @foreach(var ev in EventsFor(activeId).TakeLast(30)){
+                    <div class="panel"><small>@ev.Text("type")</small><div>@ev.Prop("data").Text("label",ev.Prop("data").Text("text"))</div></div>
+                }
+            }
+        </aside>
+    </div>
+}
+@code {
+    JsonElement[] conversations=[],interactions=[];List<JsonElement> attachments=new();
+    Dictionary<string,List<JsonElement>> eventMap=new();Dictionary<string,long> cursors=new();
+    Dictionary<string,JsonElement> context=new(),traces=new(),attachmentsFor=new();HashSet<string> audioReady=new();
+    string conversationId="",credential="",message="",connection="Disconnected",notice="";string? activeId;bool connected,busy,error,speak,recording;
+    CancellationTokenSource polling=new();
+    string ResponseFor(JsonElement item){var value=item.Text("response");if(!string.IsNullOrEmpty(value))return value;
+        if(eventMap.TryGetValue(item.Text("id"),out var events)){
+            var done=events.LastOrDefault(x=>x.Text("type")=="response.completed");
+            if(done.ValueKind==JsonValueKind.Object)return done.Prop("data").Text("text");
+            return string.Concat(events.Where(x=>x.Text("type")=="response.delta").Select(x=>x.Prop("data").Text("text")));
+        }
+        return "Working…";
+    }
+    IEnumerable<JsonElement> EventsFor(string id)=>eventMap.TryGetValue(id,out var events)?events:Enumerable.Empty<JsonElement>();
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){
+        try{await Load();}catch{connected=false;connection="Authentication required";}
+        StateHasChanged();_ = Poll(polling.Token);
+    }}
+    async Task Login(){busy=true;try{
+        await Api.Post("/api/client/session",new{token=credential});credential="";await Load();notice="";error=false;
+    }catch(Exception ex){notice=ex.Message;error=true;connected=false;}finally{busy=false;}}
+    async Task Load(){
+        await Api.Get("/api/client/protocol");
+        await Api.Post("/api/client/clients/register",new{clientType="web",deviceName="Blazor web client",
+            capabilities=new[]{"text.input","text.output","attachments.file","attachments.image","audio.input","audio.output","execution.steps","context.inspect","events.replay"}});
+        connected=true;connection="Connected";
+        conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();
+        if(conversations.Length==0){await Api.Post("/api/client/conversations");conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();}
+        var saved=await Api.Storage("assister-conversation");conversationId=conversations.FirstOrDefault(x=>x.Text("id")==saved).ValueKind==JsonValueKind.Object?saved!:conversations.First().Text("id");
+        await Open();
+    }
+    async Task Open(){if(string.IsNullOrEmpty(conversationId))return;
+        eventMap.Clear();cursors.Clear();audioReady.Clear();context.Clear();traces.Clear();attachmentsFor.Clear();attachments.Clear();activeId=null;
+        interactions=(await Api.Get("/api/client/conversations/"+Uri.EscapeDataString(conversationId))).Items().ToArray();
+        foreach(var item in interactions)await LoadEvents(item.Text("id"));
+        activeId=interactions.LastOrDefault(x=>!new[]{"completed","failed","cancelled"}.Contains(x.Text("status"))).Text("id");
+        await Api.SetStorage("assister-conversation",conversationId);
+    }
+    async Task NewConversation(){try{
+        var c=await Api.Post("/api/client/conversations");conversationId=c.Text("id");
+        conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();await Open();
+    }catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Logout(){try{await Api.Delete("/api/client/clients/current");await Api.Delete("/api/client/session");}catch{}
+        connected=false;connection="Disconnected";conversationId="";interactions=[];attachments.Clear();eventMap.Clear();
+        try{await JS.InvokeVoidAsync("assisterApi.voiceCancel");}catch{}recording=false;
+    }
+    async Task UploadFiles(){try{var files=await JS.InvokeAsync<JsonElement[]>("assisterApi.uploadAttachments","chat-attachments");
+        if(attachments.Count+files.Length>8)throw new Exception("Attach at most eight files.");
+        attachments.AddRange(files);notice="Attachments ready.";error=false;
+    }catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task RemoveAttachment(JsonElement item){try{await Api.Delete("/api/client/attachments/"+item.Text("id"));attachments.Remove(item);}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task ToggleMic(){try{
+        if(!recording){await JS.InvokeVoidAsync("assisterApi.voiceStart");recording=true;connection="Recording";}
+        else{var id=await JS.InvokeAsync<string>("assisterApi.voiceStop");recording=false;connection="Connected";message="Voice input";await Send(id);}
+    }catch(Exception ex){recording=false;connection="Connected";notice=ex.Message;error=true;}}
+    async Task Send(string? audioId=null){if(busy||string.IsNullOrWhiteSpace(message)||string.IsNullOrEmpty(conversationId))return;busy=true;
+        var sent=message;try{
+            var item=await Api.Post("/api/client/conversations/"+Uri.EscapeDataString(conversationId)+"/interactions",
+                new{message=sent.Trim(),idempotencyKey=Guid.NewGuid().ToString(),attachmentIds=attachments.Select(x=>x.Text("id")).ToArray(),audioAttachmentId=audioId,speak,streamSpeech=false});
+            message="";attachments.Clear();activeId=item.Text("id");await RefreshConversation();notice="";error=false;
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}
+    }
+    async Task RefreshConversation(){if(!connected||string.IsNullOrEmpty(conversationId))return;
+        interactions=(await Api.Get("/api/client/conversations/"+Uri.EscapeDataString(conversationId))).Items().ToArray();
+        foreach(var item in interactions){var id=item.Text("id");
+            if(!new[]{"completed","failed","cancelled"}.Contains(item.Text("status"))||!cursors.ContainsKey(id))await LoadEvents(id);
+        }
+        if(interactions.All(x=>new[]{"completed","failed","cancelled"}.Contains(x.Text("status"))))activeId=null;
+    }
+    async Task LoadEvents(string id){
+        var cursor=cursors.GetValueOrDefault(id);
+        for(var i=0;i<8;i++){
+            var page=(await Api.Get("/api/client/interactions/"+Uri.EscapeDataString(id)+"/events?afterSequence="+cursor)).Items().ToArray();
+            if(!eventMap.ContainsKey(id))eventMap[id]=new();
+            foreach(var ev in page){var seq=(long)ev.Number("sequence");if(seq<=cursor)continue;
+                cursor=seq;eventMap[id].Add(ev);if(ev.Text("type")=="tts.audio")audioReady.Add(id);
+            }
+            cursors[id]=cursor;if(page.Length<256)break;
+        }
+    }
+    async Task LoadContext(string id){try{context[id]=await Api.Get("/api/client/interactions/"+id+"/context");traces[id]=await Api.Get("/api/client/interactions/"+id+"/trace");
+        attachmentsFor[id]=await Api.Get("/api/client/interactions/"+id+"/attachments");}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Cancel(){if(activeId is null)return;try{await Api.Post("/api/client/interactions/"+activeId+"/cancel");notice="Cancellation requested.";}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));while(await timer.WaitForNextTickAsync(token)){
+        await InvokeAsync(async()=>{if(connected){try{await RefreshConversation();connection="Connected";StateHasChanged();}catch(Exception ex){connection="Disconnected";notice=ex.Message;error=true;connected=false;StateHasChanged();}}});
+    }}catch(OperationCanceledException){}}
+    public async ValueTask DisposeAsync(){polling.Cancel();polling.Dispose();if(recording){try{await JS.InvokeVoidAsync("assisterApi.voiceCancel");}catch{}}}
+}

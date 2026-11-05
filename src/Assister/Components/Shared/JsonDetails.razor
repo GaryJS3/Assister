@@ -1,0 +1,5 @@
+<details class="json-details"><summary>@Title</summary><pre>@Data.Pretty()</pre></details>
+@code {
+    [Parameter] public string Title { get; set; } = "Details";
+    [Parameter] public JsonElement Data { get; set; }
+}

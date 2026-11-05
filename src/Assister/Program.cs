@@ -14,6 +14,8 @@ var Builder = WebApplication.CreateBuilder(args);
 Builder.Logging.ClearProviders();
 Builder.Logging.AddJsonConsole();
 Builder.Services.AddAssisterServices();
+Builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+Builder.Services.AddScoped<Assister.Components.Services.BrowserApi>();
 if (Builder.Configuration.GetValue("SatelliteBridge:Enabled", false))
 {
     Builder.WebHost.ConfigureKestrel(Options =>
@@ -42,7 +44,6 @@ App.MapGet("/api/voice/stream/{id:guid}.wav", async (Guid Id, VoiceAudioStore Au
     catch (Exception Error) when (Error is IOException or OperationCanceledException or InvalidOperationException)
     { Context.Abort(); }
 });
-App.UseDefaultFiles();
 App.UseStaticFiles();
 App.UseWebSockets();
 App.MapRichClients();
@@ -159,6 +160,9 @@ App.MapGet("/api/homeassistant/entities", (string? Query, int? Limit, HomeAssist
         Entities
     });
 });
+
+App.UseAntiforgery();
+App.MapRazorComponents<Assister.Components.App>().AddInteractiveServerRenderMode();
 
 await App.RunAsync();
 

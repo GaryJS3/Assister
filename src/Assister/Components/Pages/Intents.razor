@@ -1,0 +1,188 @@
+@page "/intents"
+@page "/intents.html"
+@inject BrowserApi Api
+<PageTitle>Intents · Assister</PageTitle>
+<PageHeader Eyebrow="LANGUAGE / INTENT WORKBENCH" Title="Intent workbench" Description="Manage deterministic actions, preview routing and maintain regression tests.">
+    <Actions><button @onclick="Load" disabled="@busy">Refresh definitions</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<div class="tabs" role="tablist" aria-label="Intent workbench sections">
+    @foreach(var p in new[]{("editor","Definitions"),("tests","Regression tests"),("candidates","Teaching candidates")}){
+        <button role="tab" aria-selected="@(panel==p.Item1)" aria-pressed="@(panel==p.Item1)" @onclick="()=>Switch(p.Item1)">@p.Item2</button>
+    }
+</div>
+@if(panel=="editor"){
+    <div class="grid" style="grid-template-columns:minmax(220px,1fr) minmax(300px,1.45fr) minmax(300px,1.2fr)">
+        <section class="card stack">
+            <div class="row"><h2>Definitions</h2><span class="status-pill">@definitions.Count(x=>x.Flag("enabled")) enabled</span></div>
+            <label>Search <input @bind="search" @bind:event="oninput" placeholder="Find an intent…" /></label>
+            <button @onclick="NewDefinition">New custom intent</button>
+            @foreach(var d in definitions.Where(x=>x.Text("name").Contains(search,StringComparison.OrdinalIgnoreCase)||x.Text("actionId").Contains(search,StringComparison.OrdinalIgnoreCase))){
+                <button class="list-button @(selectedId==d.Text("id")?"selected":"")" @onclick="()=>SelectDefinition(d)">
+                    <strong>@d.Text("name")</strong><div class="subtle">@d.Text("actionId") · @(d.Flag("builtIn")?"Built-in":"Custom") · @(d.Flag("enabled")?"Enabled":"Disabled")</div>
+                </button>
+            }
+        </section>
+        <section class="card stack">
+            <h2>@(string.IsNullOrEmpty(selectedId)?"Create intent":"Edit intent")</h2>
+            <small>@(builtIn?"Built-in definition — action and integration are locked":"Custom rule")</small>
+            <label>Name <input maxlength="128" @bind="name" /></label>
+            <label class="check"><input type="checkbox" @bind="enabled" /> Enabled</label>
+            <label>Integration <select @bind="integrationId" @bind:after="IntegrationChanged" disabled="@builtIn">
+                @foreach(var i in integrations){<option value="@i.Text("id")">@i.Text("name")</option>}
+            </select></label>
+            <label>Action <select @bind="actionId" disabled="@builtIn">
+                @foreach(var a in actions.Where(x=>x.Text("integrationId")==integrationId)){<option value="@a.Text("id")">@a.Text("name")</option>}
+            </select></label>
+            <p class="hint">@ActionDetails()</p>
+            <label>Patterns, one per line <textarea rows="6" maxlength="6000" @bind="patterns"></textarea></label>
+            <small>Supported placeholders include {target}, {brightness}, {speed}, {area}, and {time}.</small>
+            <details><summary>Fixed target and values</summary><div class="stack" style="padding-top:.75rem">
+                <label>Target or entity ID <input @bind="target" maxlength="256" /></label>
+                <div class="form-grid">
+                    <label>Brightness % <input type="number" min="0" max="100" @bind="brightness" /></label>
+                    <label>Fan speed % <input type="number" min="0" max="100" @bind="speed" /></label>
+                </div>
+                <label>Area <input @bind="fixedArea" maxlength="128" /></label>
+            </div></details>
+            <label>Response template <textarea rows="3" maxlength="1000" @bind="response"></textarea></label>
+            <div class="actions"><button class="primary" disabled="@busy" @onclick="Save">Save intent</button>
+                @if(!builtIn&&!isNew){<button class="danger" disabled="@busy" @onclick="Delete">Delete</button>}</div>
+        </section>
+        <section class="card stack">
+            <h2>Inspect a request</h2><p class="muted">Preview matching and device targets without executing actions.</p>
+            <label>Request <textarea rows="3" maxlength="1000" @bind="request" placeholder="Set living room light to 100."></textarea></label>
+            <label>Area <input @bind="requestArea" maxlength="128" placeholder="Optional" /></label>
+            <label class="check"><input type="checkbox" @bind="previewDraft" /> Include unsaved changes</label>
+            <button class="primary" disabled="@busy" @onclick="Inspect">Inspect without executing</button>
+            @if(preview.ValueKind==JsonValueKind.Object){
+                <div class="panel"><strong>@preview.Prop("action").Text("name","Routing decision")</strong> <span class="status-pill">@preview.Text("outcome")</span>
+                    <p>@preview.Text("reason")</p>
+                    <p class="mono">@preview.Text("normalized")</p>
+                    <p>Targets: @string.Join(", ",preview.Prop("entityIds").Items().Select(x=>x.String()))</p>
+                    @if(!string.IsNullOrWhiteSpace(preview.Text("response"))){<p>Expected response: @preview.Text("response")</p>}
+                    <JsonDetails Title="Full inspection plan" Data="@preview" />
+                </div>
+                <div class="actions">
+                    <button disabled="@(busy || previewDraft)" @onclick="SavePreviewAsExample">Save as test</button>
+                    <button class="danger" disabled="@(busy||!preview.Flag("canExecute")||previewDraft)" @onclick="ExecutePreview">Execute inspected action</button>
+                </div>
+            }
+            <Notice Message="@executionNotice" />
+            <p class="hint">Execution runs through the actual assistant pipeline and may control devices.</p>
+        </section>
+    </div>
+}else if(panel=="tests"){
+    <section class="card stack"><div class="row"><h2>Saved regression tests</h2><span class="status-pill">@examples.Length tests</span>
+        <button @onclick="NewExample">New test</button><button class="primary" @onclick="RunTests" disabled="@busy">Run all tests</button></div>
+        <p class="muted">@testSummary · Tests inspect intent matching without performing actions.</p>
+        @if(exampleEditing){
+            <div class="panel stack"><h3>@(string.IsNullOrEmpty(exampleId)?"New regression test":"Edit regression test")</h3>
+                <label>Name <input @bind="exampleName" maxlength="128" /></label>
+                <label>Request <textarea @bind="exampleText" rows="2" maxlength="1000"></textarea></label>
+                <label>Area <input @bind="exampleArea" maxlength="128" /></label>
+                <div class="form-grid">
+                    <label>Expected match <select @bind="exampleStatus"><option>matched</option><option>unmatched</option><option>ambiguous</option><option>invalid-request</option><option>timer-route</option></select></label>
+                    <label>Expected rule <select @bind="exampleRule"><option value="">Any / no rule</option>
+                        @foreach(var d in definitions){<option value="@d.Text("id")">@d.Text("name")</option>}
+                    </select></label>
+                    <label>Target <input @bind="exampleTarget" /></label><label>Brightness <input type="number" @bind="exampleBrightness" /></label>
+                </div>
+                <div class="actions"><button class="primary" @onclick="SaveExample" disabled="@busy">Save test</button><button @onclick="()=>exampleEditing=false">Cancel</button></div>
+            </div>
+        }
+        <div class="table-wrap"><table><thead><tr><th>Test</th><th>Expected</th><th>Result</th><th>Actions</th></tr></thead><tbody>
+            @foreach(var e in examples){
+                var result=results.FirstOrDefault(r=>r.Prop("example").Text("id")==e.Text("id"));
+                <tr><td><strong>@e.Text("name")</strong><div class="subtle">@e.Text("text")</div></td>
+                <td>@e.Text("matchStatus")<div class="subtle">@e.Text("expectedRuleId")</div></td>
+                <td>@(result.ValueKind==JsonValueKind.Object?(result.Flag("passed")?"PASS":"FAIL"):"Not run")
+                    @if(result.ValueKind==JsonValueKind.Object){<JsonDetails Title="Test diagnostics" Data="@result" />}</td>
+                <td><div class="actions"><button @onclick="()=>InspectExample(e)">Inspect</button><button @onclick="()=>EditExample(e)">Edit</button>
+                    <button class="danger" @onclick="()=>DeleteExample(e)">Delete</button></div></td></tr>
+            }
+        </tbody></table></div>
+    </section>
+}else{
+    <section class="card"><div class="row"><h2>Recent requests worth teaching</h2><button @onclick="LoadCandidates">Refresh</button></div>
+    @if(candidates.Length==0){<p class="empty">No recent LLM or unmatched requests.</p>}
+    @foreach(var c in candidates){
+        <div class="panel"><p>@c.Text("userText")</p><small>@c.Text("handledBy") · @c.Text("outcome")</small>
+        <p class="muted">@c.Text("rawResponse")</p><button @onclick="()=>InspectCandidate(c)">Inspect request</button></div>
+    }
+    </section>
+}
+@code {
+    JsonElement[] definitions=[],examples=[],actions=[],integrations=[],results=[],candidates=[];
+    JsonElement nativePhrases,selected,preview;
+    string panel="editor",search="",selectedId="",name="",integrationId="",actionId="",patterns="",target="",fixedArea="",response="",request="",requestArea="",notice="",executionNotice="",testSummary="";
+    string exampleId="",exampleName="",exampleText="",exampleArea="",exampleStatus="matched",exampleRule="",exampleTarget="";
+    int? brightness,speed,exampleBrightness;int version;bool busy,error,builtIn,enabled,previewDraft,isNew,exampleEditing;
+    string A(string path)=>"/api/intents"+path; static string Enc(string v)=>Uri.EscapeDataString(v);
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();StateHasChanged();}}
+    async Task Load(){busy=true;try{
+        var catalog=await Api.Get(A("/catalog"));actions=catalog.Prop("actions").Items().ToArray();integrations=catalog.Prop("integrations").Items().ToArray();nativePhrases=catalog.Prop("nativePhrases");
+        definitions=(await Api.Get(A(""))).Items().ToArray();examples=(await Api.Get(A("/examples"))).Items().ToArray();
+        if(!isNew){var next=definitions.FirstOrDefault(x=>x.Text("id")==selectedId);if(next.ValueKind==JsonValueKind.Object)SelectDefinition(next);else if(definitions.Length>0)SelectDefinition(definitions[0]);}
+        notice="";error=false;
+    }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task Switch(string value){panel=value;if(value=="candidates")await LoadCandidates();}
+    void SelectDefinition(JsonElement d){
+        selected=d;selectedId=d.Text("id");name=d.Text("name");actionId=d.Text("actionId");
+        integrationId=actions.FirstOrDefault(x=>x.Text("id")==actionId).Text("integrationId");
+        enabled=d.Flag("enabled");patterns=string.Join("\n",d.Prop("patterns").Items().Select(x=>x.String()));
+        target=d.Text("target");brightness=d.Prop("brightness").ValueKind==JsonValueKind.Number?(int?)d.Number("brightness"):null;
+        speed=d.Prop("speedPercent").ValueKind==JsonValueKind.Number?(int?)d.Number("speedPercent"):null;fixedArea=d.Text("area");response=d.Text("response");
+        version=(int)d.Number("version");builtIn=d.Flag("builtIn");isNew=false;preview=default;
+    }
+    void NewDefinition(){selected=default;selectedId="intent-"+Guid.NewGuid().ToString("N");name="";enabled=true;patterns="hello assister";response="Hello.";
+        actionId="assister.reply";integrationId=actions.FirstOrDefault(x=>x.Text("id")==actionId).Text("integrationId");
+        target="";fixedArea="";brightness=null;speed=null;version=0;builtIn=false;isNew=true;preview=default;}
+    void IntegrationChanged(){actionId=actions.FirstOrDefault(x=>x.Text("integrationId")==integrationId).Text("id");}
+    string ActionDetails(){var a=actions.FirstOrDefault(x=>x.Text("id")==actionId);return a.ValueKind==JsonValueKind.Object?(a.Flag("stateChanging")?"Changes device state · ":"Read-only · ")+string.Join(", ",a.Prop("inputs").Items().Select(x=>x.Text("label"))):"";}
+    object Definition()=>new{id=selectedId,name=name.Trim(),actionId,enabled,
+        patterns=patterns.Split('\n',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries),
+        target=string.IsNullOrWhiteSpace(target)?null:target,brightness,area=string.IsNullOrWhiteSpace(fixedArea)?null:fixedArea,
+        speedPercent=speed,response,builtIn,version};
+    async Task Save(){await Execute(async()=>{
+        if(string.IsNullOrWhiteSpace(name)||string.IsNullOrWhiteSpace(actionId)||string.IsNullOrWhiteSpace(response))throw new Exception("Enter a name, action and response template.");
+        await Api.Put(A("/"+Enc(selectedId)),Definition());isNew=false;await Load();notice="Intent saved.";
+    });}
+    async Task Delete(){if(builtIn||!await Api.Confirm("Delete custom intent "+name+"?"))return;
+        await Execute(async()=>{await Api.Delete(A("/"+Enc(selectedId)+"?version="+version));selectedId="";isNew=false;await Load();notice="Intent deleted.";});}
+    async Task Inspect(){await Execute(async()=>{
+        if(string.IsNullOrWhiteSpace(request))throw new Exception("Enter a request.");
+        preview=await Api.Post(A("/inspect"),previewDraft?new{text=request,area=string.IsNullOrEmpty(requestArea)?null:requestArea,draft=Definition()}:
+            (object)new{text=request,area=string.IsNullOrEmpty(requestArea)?null:requestArea});
+    });}
+    async Task ExecutePreview(){if(preview.ValueKind!=JsonValueKind.Object||!preview.Flag("canExecute")||previewDraft)return;
+        if(!await Api.Confirm("Execute the inspected action? This can change device state."))return;
+        await Execute(async()=>{var r=await Api.Post(A("/execute"),new{text=preview.Text("text"),area=string.IsNullOrWhiteSpace(requestArea)?null:requestArea,fingerprint=preview.Text("fingerprint")});
+            executionNotice=r.Text("outcome")+": "+r.Text("response")+" · Run "+r.Text("runId");preview=default;
+        });}
+    void SavePreviewAsExample(){if(preview.ValueKind!=JsonValueKind.Object)return;
+        var match=preview.Prop("candidates").Items().FirstOrDefault();
+        exampleId="";exampleName=preview.Text("text").Length>128?preview.Text("text")[..128]:preview.Text("text");
+        exampleText=preview.Text("text");exampleArea=requestArea;exampleStatus=preview.Text("matchStatus","matched");
+        exampleRule=match.Prop("definition").Text("id");exampleTarget=match.Prop("intent").Text("target");exampleBrightness=null;
+        exampleEditing=true;panel="tests";}
+    void NewExample(){exampleId="";exampleName="";exampleText="";exampleArea="";exampleStatus="matched";exampleRule="";exampleTarget="";exampleBrightness=null;exampleEditing=true;}
+    void EditExample(JsonElement e){exampleId=e.Text("id");exampleName=e.Text("name");exampleText=e.Text("text");exampleArea=e.Text("area");
+        exampleStatus=e.Text("matchStatus");exampleRule=e.Text("expectedRuleId");exampleTarget=e.Text("expectedTarget");
+        exampleBrightness=e.Prop("expectedBrightness").ValueKind==JsonValueKind.Number?(int?)e.Number("expectedBrightness"):null;exampleEditing=true;}
+    async Task SaveExample(){await Execute(async()=>{
+        var id=string.IsNullOrWhiteSpace(exampleId)?"example-"+Guid.NewGuid().ToString("N"):exampleId;
+        await Api.Put(A("/examples/"+Enc(id)),new{id,name=exampleName,text=exampleText,area=string.IsNullOrWhiteSpace(exampleArea)?null:exampleArea,matchStatus=exampleStatus,expectedRuleId=string.IsNullOrWhiteSpace(exampleRule)?null:exampleRule,expectedTarget=string.IsNullOrWhiteSpace(exampleTarget)?null:exampleTarget,expectedBrightness=exampleBrightness});
+        exampleEditing=false;examples=(await Api.Get(A("/examples"))).Items().ToArray();results=[];notice="Test saved.";
+    });}
+    async Task DeleteExample(JsonElement e){if(!await Api.Confirm("Delete "+e.Text("name")+"?"))return;
+        await Execute(async()=>{await Api.Delete(A("/examples/"+Enc(e.Text("id"))));examples=(await Api.Get(A("/examples"))).Items().ToArray();results=[];});}
+    async Task RunTests(){await Execute(async()=>{results=(await Api.Post(A("/tests"),new{})).Items().ToArray();
+        testSummary=results.Count(x=>x.Flag("passed"))+" / "+results.Length+" passed.";});}
+    async Task InspectExample(JsonElement e){request=e.Text("text");requestArea=e.Text("area");previewDraft=false;panel="editor";await Inspect();}
+    async Task LoadCandidates(){await Execute(async()=>{var all=(await Api.Get("/api/diagnostics/runs")).Items().ToArray();
+        candidates=all.Where(x=>x.Text("handledBy")=="language-model"||x.Text("outcome")=="unmatched")
+            .Where(x=>!string.IsNullOrWhiteSpace(x.Text("userText"))).DistinctBy(x=>x.Text("userText").ToLowerInvariant()).ToArray();});}
+    async Task InspectCandidate(JsonElement c){request=c.Text("userText");requestArea=c.Text("area");previewDraft=false;panel="editor";await Inspect();}
+    async Task Execute(Func<Task> cb){busy=true;try{await cb();error=false;notice="";}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+}

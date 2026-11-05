@@ -1,0 +1,144 @@
+@page "/devices"
+@page "/devices.html"
+@page "/satellites.html"
+@inject BrowserApi Api
+<PageTitle>Devices · Assister</PageTitle>
+<PageHeader Eyebrow="OPERATIONS / DEVICES" Title="Devices" Description="Audio satellites, desktop clients and Android devices with a unified inventory.">
+    <Actions><button disabled="@busy" @onclick="Load">Refresh inventory</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<section class="card">
+    <div class="row"><h2>Satellites</h2><span class="status-pill">@satellites.Length devices</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Area</th><th>Provider</th><th>Connection</th><th>Ownership</th><th>Activity</th><th>Last seen</th></tr></thead><tbody>
+    @foreach(var entry in satellites){
+        var d=entry.Prop("device");var r=entry.Prop("runtime");
+        <tr><td><button @onclick="()=>Select(d.Text("id"))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
+        <td>@d.Text("areaId","Unassigned")</td><td>@d.Text("providerType")</td>
+        <td><span class="status-pill @(r.Text("connectionState")=="Online"?"good":"bad")">@r.Text("connectionState")</span></td>
+        <td>@Ownership(r)</td><td>@Activity(r)</td><td>@r.Date("lastSeen")</td></tr>
+    }
+    </tbody></table></div>
+    @if(satellites.Length==0){<p class="empty">No registered satellites.</p>}
+</section>
+@if(selected.ValueKind==JsonValueKind.Object){
+    var device=selected.Prop("device");var runtime=selected.Prop("runtime");var id=device.Text("id");
+    <section class="card">
+        <div class="row"><h2>@device.Text("name")</h2><span class="status-pill">@runtime.Text("connectionState")</span></div>
+        <div class="tabs" aria-label="Device detail sections">
+            @foreach(var t in Tabs){<button aria-pressed="@(tab==t)" @onclick="()=>SetTab(t)">@t</button>}
+        </div>
+        @if(!string.IsNullOrWhiteSpace(runtime.Text("lastError"))){<Notice Message="@runtime.Text("lastError")" Error="true" />}
+        @if(!string.IsNullOrWhiteSpace(runtime.Text("configurationDrift"))){<Notice Message="@runtime.Text("configurationDrift")" Error="true" />}
+        @if(tab=="Status"){
+            <div class="grid">
+                @foreach(var row in new[]{("Connection",runtime.Text("connectionState")),("Endpoint",device.Text("endpoint")),("Provider",device.Text("providerType")),("Model",runtime.Text("model")),("Firmware",runtime.Text("firmwareVersion")),("ESPHome",runtime.Text("espHomeVersion")),("API",runtime.Text("apiVersion")),("Voice ownership",Ownership(runtime)),("Activity",Activity(runtime))}){
+                    <div class="panel"><small>@row.Item1</small><div><strong>@row.Item2</strong></div></div>
+                }
+            </div>
+            <JsonDetails Title="Observed capabilities" Data="@runtime.Prop("capabilities")" />
+            @if(runtime.Number("voiceOwnership")==3){<button @onclick="()=>Command("POST",SatellitePath(id)+"/retry-ownership")">Retry voice ownership</button>}
+        }else if(tab=="Voice"){
+            <div class="grid">
+                <div class="panel"><h3>Active wake words</h3>@string.Join(", ",runtime.Prop("voiceConfiguration").Prop("activeWakeWords").Items().Select(x=>x.String()))</div>
+                <div class="panel"><h3>Last wake word</h3>@runtime.Text("wakeWord","None")</div>
+                <div class="panel"><h3>Current voice session</h3>@runtime.Text("currentVoiceSessionId","None")</div>
+                <div class="panel"><h3>Conversation</h3>@runtime.Text("conversationId","None")</div>
+            </div>
+            <JsonDetails Title="Voice configuration" Data="@runtime.Prop("voiceConfiguration")" />
+        }else if(tab=="Playback"){
+            <div class="stack">
+                <div class="row"><span>Playback: @runtime.Text("currentPlaybackState")</span><span>Mute: @runtime.Prop("muteState").String()</span></div>
+                <label>Announcement <textarea rows="2" maxlength="500" @bind="announcement"></textarea></label>
+                <label>Importance <select @bind="importance"><option value="notify">Notify</option><option value="high-importance">High importance</option><option value="acknowledge">Repeat until acknowledged</option><option value="alarm">Alarm</option></select></label>
+                <div class="actions"><button disabled="@(busy || runtime.Text("connectionState")!="Online")" @onclick="()=>Command("POST",SatellitePath(id)+"/announcement",new{message=announcement,importance})">Play announcement</button>
+                <button disabled="@busy" @onclick="()=>Command("POST",SatellitePath(id)+"/stop")">Stop / cancel</button></div>
+                <label>Volume: @volume% <input type="range" min="0" max="100" @bind="volume" /></label>
+                <button disabled="@(busy || !runtime.Prop("capabilities").Flag("volumeControl"))" @onclick="()=>Command("PUT",SatellitePath(id)+"/volume",new{volume=volume/100.0})">Set volume</button>
+            </div>
+        }else if(tab=="Groups"){
+            <p class="muted">Groups can include audio satellites, Windows clients and Android devices belonging to the same owner.</p>
+            @foreach(var owner in groups.Prop("owners").Items()){
+                var name=owner.String();var membership=groups.Prop("satellites").Items().FirstOrDefault(x=>x.Text("owner")==name&&x.Text("satelliteId")==id);
+                <div class="panel stack"><label>Groups for @name (comma-separated)
+                    <input value="@GroupValue(id,name,membership)" @onchange="e=>SetGroup(id,name,e.Value?.ToString()??"")" maxlength="2100" />
+                </label><button disabled="@busy" @onclick="()=>SaveSatelliteGroups(id,name,membership)">Save groups</button></div>
+            }
+        }else if(tab=="Configuration"){
+            <p class="muted">Runtime wake-word selection; firmware provisioning is outside Assister.</p>
+            <p>Maximum enabled models: @runtime.Prop("voiceConfiguration").Number("maxActiveWakeWords")</p>
+            @foreach(var word in runtime.Prop("voiceConfiguration").Prop("availableWakeWords").Items()){
+                <label class="check"><input type="checkbox" checked="@wakeWords.Contains(word.Text("id"))" @onchange="e=>ToggleWake(word.Text("id"),e.Value is true)" />@word.Text("name")</label>
+            }
+            <button disabled="@(busy || !runtime.Prop("capabilities").Flag("wakeWordConfiguration") || runtime.Number("voiceOwnership")!=2)" @onclick="()=>SaveWakeWords(id,runtime)">Apply wake words</button>
+            <JsonDetails Title="Device configuration" Data="@device" />
+        }else if(tab=="Diagnostics"){
+            <div class="actions"><button @onclick="()=>LoadDiagnostics(id)">Refresh diagnostics</button>
+            <button @onclick="()=>Command("POST",SatellitePath(id)+"/logs",new{enabled=true})">Read logs (60 seconds)</button>
+            <button @onclick="()=>Command("POST",SatellitePath(id)+"/logs",new{enabled=false})">Stop logs</button></div>
+            <h3>Recent traces</h3>
+            @foreach(var trace in traces.Take(20)){<p><a href="@("/?run="+Uri.EscapeDataString(trace.Text("runId")))">@trace.Text("userText",trace.Text("runId"))</a> · @trace.Text("outcome")</p>}
+            <h3>Device events</h3>
+            @foreach(var e in events.Reverse().Take(50)){<p class="subtle">@e.Date("at") · @e.Text("type") · @e.Text("detail")</p>}
+        }
+    </section>
+}
+<section class="card"><h2>Registered clients</h2>
+    @foreach(var section in new[]{("windows","Windows"),("android","Android"),("other","Web / other")}){
+        var matches=clients.Where(c=>section.Item1=="other"?!new[]{"windows","android"}.Contains(c.Text("clientType")):c.Text("clientType")==section.Item1).ToArray();
+        <h3>@section.Item2 (@matches.Length)</h3>
+        @foreach(var c in matches){
+            var clientId=c.Text("clientId");
+            <details class="panel"><summary><strong>@c.Text("deviceName",clientId)</strong> <span class="status-pill @(c.Flag("online")?"good":"")">@(c.Flag("online")?"Online":"Offline")</span></summary>
+                <p class="muted">Client: @clientId · Owner: @c.Text("owner") · Version: @c.Text("clientVersion") · Last seen: @c.Date("lastSeen")</p>
+                <JsonDetails Title="Hardware and capabilities" Data="@c" />
+                <label>Groups (comma-separated) <input value="@ClientGroupValue(c)" @onchange="e=>clientGroups[clientId]=e.Value?.ToString()??"" " /></label>
+                <button disabled="@busy" @onclick="()=>SaveClientGroups(c)">Save groups</button>
+            </details>
+        }
+    }
+</section>
+<section class="card"><h2>Shared device groups</h2>
+    @foreach(var entry in groups.Prop("satellites").Items()){
+        <div class="panel"><strong>@entry.Text("owner")</strong> · @entry.Text("satelliteId")<p>@string.Join(", ",entry.Prop("groups").Items().Select(x=>x.String()))</p></div>
+    }
+</section>
+@code {
+    [SupplyParameterFromQuery(Name="id")] [Parameter] public string? Id {get;set;}
+    static readonly string[] Tabs=["Status","Voice","Playback","Groups","Diagnostics","Configuration"];
+    static readonly string[] Owners=["Unknown","Available","Owned by Assister","Conflict","Unsupported"];
+    static readonly string[] Activities=["Idle","Wake detected","Capturing audio","Speech complete","Transcribing","Routing","Generating response","Synthesizing","Waiting for playback","Playing response","Complete","Cancelled","Disconnected","STT failed","Routing failed","TTS failed","Playback failed"];
+    JsonElement[] satellites=[],clients=[],events=[],traces=[];JsonElement groups,selected;
+    Dictionary<string,string> edits=new(),clientGroups=new();HashSet<string> wakeWords=new();
+    string tab="Status",announcement="This is an Assister test announcement.",importance="notify",notice="";int volume=60;bool busy,error;
+    static string Ownership(JsonElement r) {int i=(int)r.Number("voiceOwnership");return i>=0&&i<Owners.Length?Owners[i]:"Unknown";}
+    static string Activity(JsonElement r){int i=(int)r.Number("activity");return i>=0&&i<Activities.Length?Activities[i]:"Unknown";}
+    static string SatellitePath(string id)=>"/api/satellites/"+Uri.EscapeDataString(id);
+    string GroupValue(string id,string owner,JsonElement m){var key=id+"|"+owner;return edits.TryGetValue(key,out var value)?value:string.Join(", ",m.Prop("groups").Items().Select(x=>x.String()));}
+    void SetGroup(string id,string owner,string val)=>edits[id+"|"+owner]=val;
+    string ClientGroupValue(JsonElement c)=>clientGroups.TryGetValue(c.Text("clientId"),out var val)?val:string.Join(", ",c.Prop("groups").Items().Select(x=>x.String()));
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();StateHasChanged();}}
+    async Task Load(){busy=true;try{
+        satellites=(await Api.Get("/api/satellites")).Items().ToArray();
+        clients=(await Api.Get("/api/devices/clients")).Items().ToArray();
+        groups=await Api.Get("/api/devices/groups");
+        if(selected.ValueKind!=JsonValueKind.Object && Id is not null)Select(Id);
+        else if(selected.ValueKind==JsonValueKind.Object)selected=satellites.FirstOrDefault(x=>x.Prop("device").Text("id")==selected.Prop("device").Text("id"));
+        error=false;
+    }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    void Select(string id){selected=satellites.FirstOrDefault(x=>x.Prop("device").Text("id")==id);tab="Status";
+        var words=selected.Prop("runtime").Prop("voiceConfiguration").Prop("activeWakeWords").Items().Select(x=>x.String());wakeWords=words.ToHashSet();
+        volume=(int)Math.Round(selected.Prop("runtime").Number("currentVolume")*100);}
+    async Task SetTab(string next){tab=next;if(next=="Diagnostics")await LoadDiagnostics(selected.Prop("device").Text("id"));}
+    void ToggleWake(string id,bool enabled){if(enabled)wakeWords.Add(id);else wakeWords.Remove(id);}
+    async Task SaveWakeWords(string id,JsonElement r){if(wakeWords.Count>r.Prop("voiceConfiguration").Number("maxActiveWakeWords")){notice="Too many active wake words.";error=true;return;}
+        await Command("PUT",SatellitePath(id)+"/wake-words",wakeWords.ToArray());}
+    async Task SaveSatelliteGroups(string id,string owner,JsonElement existing){var list=GroupValue(id,owner,existing).Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        await Command("PUT","/api/devices/satellites/"+Uri.EscapeDataString(id)+"/groups",new{owner,groups=list});}
+    async Task SaveClientGroups(JsonElement c){var id=c.Text("clientId");var list=ClientGroupValue(c).Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        await Command("PUT","/api/devices/clients/"+Uri.EscapeDataString(id)+"/groups",new{groups=list});}
+    async Task LoadDiagnostics(string id){try{
+        events=(await Api.Get(SatellitePath(id)+"/events")).Items().ToArray();traces=(await Api.Get(SatellitePath(id)+"/traces")).Items().ToArray();
+    }catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Command(string method,string path,object? body=null){busy=true;try{await Api.Request(method,path,body);notice="Command submitted.";error=false;await Load();}
+        catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+}

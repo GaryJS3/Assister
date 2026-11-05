@@ -1,0 +1,50 @@
+@page "/ai-server"
+@page "/ai-server.html"
+@inject BrowserApi Api
+<PageTitle>AI server · Assister</PageTitle>
+<PageHeader Eyebrow="CONFIGURATION / LANGUAGE MODEL" Title="AI server" Description="OpenAI-compatible endpoint and generation controls." />
+<Notice Message="@notice" Error="@error" />
+<div class="split">
+    <section class="card stack">
+        <h2>Connection</h2>
+        <label>Base URL <input type="url" @bind="baseUrl" placeholder="http://localhost:8080/v1" /></label>
+        <label>Model <input @bind="model" maxlength="256" /></label>
+        <label>API key <input type="password" autocomplete="new-password" @bind="key" placeholder="Leave empty to preserve existing key" /></label>
+        <label class="check"><input type="checkbox" @bind="clearKey" /> Remove configured API key</label>
+        <p class="hint">Stored on the server. Existing keys are never returned to the browser.</p>
+    </section>
+    <section class="card stack">
+        <h2>Generation</h2>
+        <div class="form-grid">
+            <label>Temperature <input type="number" min="0" max="2" step="0.1" @bind="temperature" /></label>
+            <label>Maximum tokens <input type="number" min="1" max="4096" @bind="maxTokens" /></label>
+            <label>Timeout (seconds) <input type="number" min="1" max="120" @bind="timeout" /></label>
+            <label>Thinking mode <select @bind="thinking"><option value="">Server default</option><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
+        </div>
+        <p class="muted">Explicit thinking settings require the backend to support chat_template_kwargs.enable_thinking.</p>
+        <div class="actions"><button class="primary" disabled="@busy" @onclick="Save">Save settings</button><button disabled="@busy" @onclick="Load">Reload</button></div>
+    </section>
+</div>
+@code {
+    string baseUrl="", model="", key="", thinking="", notice="";
+    double temperature=.2; int maxTokens=1024, timeout=30; bool clearKey, busy, error;
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await Load(); StateHasChanged(); } }
+    async Task Load() {
+        try {
+            var s=await Api.Get("/api/settings/ai-server");
+            baseUrl=s.Text("baseUrl"); model=s.Text("model"); temperature=s.Number("temperature");
+            maxTokens=(int)s.Number("maxTokens"); timeout=(int)s.Number("timeoutSeconds");
+            thinking=s.Prop("enableThinking").ValueKind == JsonValueKind.Null ? "" : s.Prop("enableThinking").String();
+            key=""; clearKey=false; error=false; notice="";
+        } catch (Exception ex) { notice=ex.Message; error=true; }
+    }
+    async Task Save() {
+        busy=true;
+        try {
+            var value=await Api.Put("/api/settings/ai-server",new {baseUrl,model,apiKey=key,temperature,maxTokens,
+                timeoutSeconds=timeout,enableThinking=thinking==""?(bool?)null:thinking=="true",clearApiKey=clearKey});
+            key="";clearKey=false; notice="Settings saved; new requests use the updated configuration.";error=false;
+            baseUrl=value.Text("baseUrl");model=value.Text("model");
+        } catch(Exception ex){notice=ex.Message;error=true;} finally{busy=false;}
+    }
+}

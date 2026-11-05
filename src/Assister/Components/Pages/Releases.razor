@@ -1,0 +1,42 @@
+@page "/releases"
+@page "/releases.html"
+@inject BrowserApi Api
+<PageTitle>Releases · Assister</PageTitle>
+<PageHeader Eyebrow="CLIENT DISTRIBUTION" Title="Client releases" Description="Published installers and packages for your client devices.">
+    <Actions><button @onclick="Load" disabled="@busy">Refresh</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<div class="split">
+    <section class="card"><h2>Available releases</h2>
+    @if (releases.Length==0) { <p class="empty">No published packages.</p> }
+    @foreach(var r in releases){
+        <article class="panel"><div class="row"><h3>@r.Text("appId")</h3><span class="status-pill">v@r.Text("version")</span></div>
+        <p class="muted">@r.Text("platform") · @((r.Number("size")/1048576).ToString("F1")) MiB · @r.Date("publishedAt")</p>
+        <p>@r.Text("notes","No release notes.")</p><small class="mono">SHA-256 @r.Text("sha256")</small>
+        <p><a href="@r.Text("downloadUrl")" download>Download @r.Text("fileName") ↓</a></p></article>
+    }
+    </section>
+    <section class="card stack"><h2>Publish a release</h2>
+        <label>App ID <input required maxlength="64" @bind="appId" placeholder="assister" /></label>
+        <label>Platform <input required maxlength="64" @bind="platform" placeholder="android-arm64" /></label>
+        <label>Version <input required maxlength="40" @bind="version" placeholder="1.0.0" /></label>
+        <label>Package (.apk / .exe) <input id="release-file" type="file" accept=".apk,.exe" /></label>
+        <label>Release notes <textarea rows="4" maxlength="4000" @bind="notes"></textarea></label>
+        <label>Upload bearer token <input type="password" autocomplete="off" @bind="token" /></label>
+        <p class="hint">Packages up to 512 MiB upload directly from the browser. Existing versions cannot be overwritten.</p>
+        <button class="primary" disabled="@busy" @onclick="Publish">Publish release</button>
+    </section>
+</div>
+@code {
+    JsonElement[] releases=[]; string notice="",appId="",platform="",version="",notes="",token="";bool busy,error;
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();StateHasChanged();}}
+    async Task Load(){try{releases=(await Api.Get("/api/updates")).Items().ToArray();error=false;}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Publish(){busy=true;notice="Uploading package…";error=false;
+        try{
+            if(string.IsNullOrWhiteSpace(appId)||string.IsNullOrWhiteSpace(platform)||string.IsNullOrWhiteSpace(version)||string.IsNullOrWhiteSpace(token))throw new Exception("Complete all required fields.");
+            var path="/api/updates/"+Uri.EscapeDataString(appId)+"/"+Uri.EscapeDataString(platform)+"/"+Uri.EscapeDataString(version)+"?notes="+Uri.EscapeDataString(notes);
+            await Api.Upload(path,"release-file",token);
+            token="";notice="Release published.";await Load();
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}
+    }
+}

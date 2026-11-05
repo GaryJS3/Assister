@@ -1,0 +1,223 @@
+@page "/calendars"
+@page "/calendars.html"
+@inject BrowserApi Api
+@inject IJSRuntime JS
+<PageTitle>Calendars · Assister</PageTitle>
+<PageHeader Eyebrow="GOOGLE CALENDAR / CONNECTED SCHEDULES" Title="Calendars" Description="Manage service accounts, calendar notifications, and upcoming events.">
+    <Actions><button disabled="@busy" @onclick="Refresh">Refresh accounts</button></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<div class="two-col">
+    <section>
+        <div class="card stack"><h2>Connect a Google service account</h2>
+            <p class="muted">Share the calendar with the service account email. Grant event write access only if editing is needed. Credentials are encrypted by the server.</p>
+            <label>Account name <input @bind="accountName" maxlength="100" placeholder="Family calendar" /></label>
+            <label>Service account JSON key <InputFile OnChange="ReadKey" accept=".json,application/json" /></label>
+            <button disabled="@busy" @onclick="Connect">Connect account</button>
+        </div>
+        @if(accounts.Length==0){<p class="empty">No connected accounts.</p>}
+        @foreach(var account in accounts){
+            var accountId=account.Text("id");
+            <section class="card stack">
+                <div class="row"><h2>@account.Text("name")</h2><small>@account.Text("email")</small></div>
+                <div class="actions"><button disabled="@busy" @onclick="()=>Discover(accountId)">Discover calendars</button>
+                    <button class="danger" disabled="@busy" @onclick="()=>Disconnect(account)">Disconnect</button></div>
+                <label>Add shared calendar by ID <input value="@CalendarIdFor(accountId)" @onchange="e=>calendarIds[accountId]=e.Value?.ToString()??"" " placeholder="calendar@example.com" /></label>
+                <button disabled="@busy" @onclick="()=>AddCalendar(accountId)">Add calendar</button>
+                @foreach(var cal in account.Prop("calendars").Items()){
+                    var state=GetState(account,cal);
+                    <details class="panel">
+                        <summary><strong>@cal.Text("name")</strong> <span class="status-pill @(state.Enabled?"good":"")">@(state.Enabled?"Subscribed":"Not subscribed")</span></summary>
+                        <div class="stack" style="padding-top:1rem">
+                            <label class="check"><input type="checkbox" @bind="state.Enabled" /> Subscribe to this calendar</label>
+                            <label class="check"><input type="checkbox" @bind="state.Announce" /> Send Assister notifications</label>
+                            <fieldset><legend>Satellite recipients</legend>
+                                <label class="check"><input type="checkbox" @bind="state.AllSatellites" /> All satellites (current and future)</label>
+                                @if(!state.AllSatellites){
+                                    @foreach(var sat in satellites){
+                                        var id=sat.Text("id");
+                                        <label class="check"><input type="checkbox" checked="@state.SatelliteIds.Contains(id)" @onchange="e=>Toggle(state.SatelliteIds,id,e.Value is true)" />@sat.Text("name",id)</label>
+                                    }
+                                }
+                            </fieldset>
+                            <fieldset><legend>Rich client recipients</legend>
+                                <label class="check"><input type="checkbox" @bind="state.AllRichClients" /> All clients for available owners</label>
+                                @if(!state.AllRichClients){
+                                    @foreach(var client in clients){
+                                        var key=client.Text("owner")+"|"+client.Text("clientId");
+                                        <label class="check"><input type="checkbox" checked="@state.RichClients.Contains(key)" @onchange="e=>Toggle(state.RichClients,key,e.Value is true)" />@client.Text("name",client.Text("clientId")) · @client.Text("owner")</label>
+                                    }
+                                }
+                            </fieldset>
+                            <fieldset class="stack"><legend>Assister notification schedule</legend>
+                                <h3>Before events</h3>
+                                @foreach(var rule in state.Before.ToArray()){
+                                    <div class="row"><input type="number" min="0" max="525600" @bind="rule.Amount" aria-label="Advance amount" />
+                                        <select @bind="rule.Unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select>
+                                        <span>before</span><button @onclick="()=>state.Before.Remove(rule)">Remove</button></div>
+                                }
+                                <button disabled="@(state.Before.Count>=10)" @onclick="()=>state.Before.Add(new AdvanceRule())">Add advance rule</button>
+                                <h3>Daily agendas</h3>
+                                @foreach(var daily in state.DailyTimes.ToArray()){
+                                    <div class="row"><input type="time" value="@daily.Time" @onchange="e=>daily.Time=e.Value?.ToString()??"08:00"" />
+                                        <button @onclick="()=>state.DailyTimes.Remove(daily)">Remove</button></div>
+                                }
+                                <button disabled="@(state.DailyTimes.Count>=4)" @onclick="()=>state.DailyTimes.Add(new DailyTime())">Add daily agenda time</button>
+                                <label>Time zone <input maxlength="100" @bind="state.TimeZone" /></label>
+                            </fieldset>
+                            <button class="primary" disabled="@busy" @onclick="()=>SaveSubscription(accountId,cal,state)">Save subscription</button>
+                        </div>
+                    </details>
+                }
+            </section>
+        }
+    </section>
+    <section class="card stack">
+        <div class="row"><h2>Events and agenda</h2><button @onclick="NewEvent" disabled="@(string.IsNullOrEmpty(selectedCalendar))">Add event</button></div>
+        <label>Subscribed calendar <select @bind="selectedCalendar" @bind:after="ResetEvents">
+            <option value="">Choose a calendar</option>
+            @foreach(var a in accounts){@foreach(var cal in a.Prop("calendars").Items().Where(x=>x.Flag("enabled"))){
+                <option value="@(a.Text("id")+"|"+cal.Text("id"))">@a.Text("name") / @cal.Text("name")</option>
+            }}
+        </select></label>
+        <div class="form-grid">
+            <label>From <input type="date" @bind="from" /></label>
+            <label>Through <input type="date" @bind="to" /></label>
+        </div>
+        <button disabled="@(busy||string.IsNullOrEmpty(selectedCalendar))" @onclick="()=>LoadEvents(false)">Fetch events</button>
+        @if(eventEditing){
+            <section class="panel stack">
+                <h3>@(editingId is null?"Add event":"Edit event")</h3>
+                <label>Title <input @bind="summary" maxlength="256" /></label>
+                <label>Location <input @bind="location" maxlength="1000" /></label>
+                <label>Description <textarea rows="3" maxlength="8000" @bind="description"></textarea></label>
+                <label class="check"><input type="checkbox" @bind="allDay" /> All-day event</label>
+                <div class="form-grid">
+                    @if(allDay){
+                        <label>Start <input type="date" @bind="eventStart" /></label><label>End (exclusive) <input type="date" @bind="eventEnd" /></label>
+                    }else{
+                        <label>Start <input type="datetime-local" @bind="eventStart" /></label><label>End <input type="datetime-local" @bind="eventEnd" /></label>
+                    }
+                </div>
+                <label>Google notification <select @bind="notification">
+                    <option value="preserve">Preserve existing / defaults for new events</option><option value="default">Calendar defaults</option>
+                    <option value="none">None</option><option value="0">At start</option><option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option>
+                    <option value="1440">1 day</option><option value="custom">Custom</option>
+                </select></label>
+                @if(notification=="custom"){<label>Lead times, minutes (comma-separated) <input @bind="customMinutes" /></label>}
+                <div class="actions"><button class="primary" disabled="@busy" @onclick="SaveEvent">Save event</button><button @onclick="()=>eventEditing=false">Cancel</button></div>
+            </section>
+        }
+        @if(events.Length==0){<p class="empty">Select a calendar and fetch events.</p>}
+        @foreach(var ev in events){
+            <article class="panel">
+                <h3>@ev.Text("summary","Untitled event")</h3>
+                <p class="muted">@EventTime(ev.Prop("start")) → @EventTime(ev.Prop("end"))</p>
+                @if(!string.IsNullOrEmpty(ev.Text("location"))){<p>@ev.Text("location")</p>}
+                @if(!string.IsNullOrEmpty(ev.Text("description"))){<p>@ev.Text("description")</p>}
+                <div class="actions"><button @onclick="()=>EditEvent(ev)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>PrepareDelete(ev)">Remove</button></div>
+            </article>
+        }
+        @if(!string.IsNullOrEmpty(nextPage)){<button disabled="@busy" @onclick="()=>LoadEvents(true)">Load more events</button>}
+        @if(!string.IsNullOrEmpty(deleteConfirmation)){
+            <section class="notice notice-error"><p>Delete event “@deleteSummary”? This cannot be undone.</p>
+                <div class="actions"><button class="danger" @onclick="ConfirmDelete">Confirm removal</button><button @onclick="()=>deleteConfirmation=null">Cancel</button></div>
+            </section>
+        }
+    </section>
+</div>
+@code {
+    sealed class AdvanceRule {public int Amount{get;set;}=10;public string Unit{get;set;}="minutes";}
+    sealed class DailyTime {public string Time{get;set;}="08:00";}
+    sealed class SubscriptionState {
+        public bool Enabled{get;set;} public bool Announce{get;set;} public bool AllSatellites{get;set;} public bool AllRichClients{get;set;}
+        public HashSet<string> SatelliteIds{get;set;}=new();public HashSet<string> RichClients{get;set;}=new();
+        public List<AdvanceRule> Before{get;set;}=new();public List<DailyTime> DailyTimes{get;set;}=new();
+        public string TimeZone{get;set;}="America/New_York";
+    }
+    JsonElement[] accounts=[],satellites=[],clients=[],events=[];
+    Dictionary<string,SubscriptionState> subscriptions=new();Dictionary<string,string> calendarIds=new();
+    string accountName="",keyJson="",notice="",selectedCalendar="",from=DateTime.Today.ToString("yyyy-MM-dd"),to=DateTime.Today.AddDays(7).ToString("yyyy-MM-dd"),summary="",location="",description="",eventStart="",eventEnd="",notification="preserve",customMinutes="";
+    string? nextPage,editingId,editingEtag,deleteConfirmation,deleteSummary;bool busy,error,allDay,eventEditing;
+    static string Enc(string id)=>Uri.EscapeDataString(id);
+    string CalendarIdFor(string account)=>calendarIds.GetValueOrDefault(account,"");
+    string Prefix()=>"/api/calendars/"+string.Join("/",selectedCalendar.Split('|').Select(Enc));
+    void ResetEvents(){events=[];nextPage=null;eventEditing=false;}
+    static void Toggle(HashSet<string> list,string item,bool yes){if(yes)list.Add(item);else list.Remove(item);}
+    SubscriptionState GetState(JsonElement a,JsonElement c){
+        var key=a.Text("id")+"|"+c.Text("id");if(subscriptions.TryGetValue(key,out var existing))return existing;
+        var s=new SubscriptionState {Enabled=c.Flag("enabled"),Announce=c.Flag("announce"),AllSatellites=c.Flag("allSatellites"),AllRichClients=c.Flag("allRichClients")};
+        s.SatelliteIds=c.Prop("satelliteIds").Items().Select(x=>x.String()).ToHashSet();
+        if(s.SatelliteIds.Count==0&&!string.IsNullOrEmpty(c.Text("satelliteId")))s.SatelliteIds.Add(c.Text("satelliteId"));
+        s.RichClients=c.Prop("richClients").Items().Select(x=>x.Text("owner")+"|"+x.Text("clientId")).ToHashSet();
+        var setting=c.Prop("notifications");
+        s.Before=setting.Prop("before").Items().Select(x=>new AdvanceRule{Amount=(int)x.Number("amount"),Unit=x.Text("unit","minutes")}).ToList();
+        s.DailyTimes=setting.Prop("dailyTimes").Items().Select(x=>new DailyTime{Time=x.String()}).ToList();
+        s.TimeZone=setting.Text("timeZone","America/New_York");
+        subscriptions[key]=s;return s;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Refresh();StateHasChanged();}}
+    async Task Refresh(){busy=true;try{
+        accounts=(await Api.Get("/api/calendars/accounts")).Items().ToArray();
+        clients=(await Api.Get("/api/calendars/recipients")).Items().ToArray();
+        satellites=(await Api.Get("/api/satellites")).Items().Select(x=>x.Prop("device")).ToArray();
+        subscriptions.Clear();notice="";error=false;
+    }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task ReadKey(InputFileChangeEventArgs e){try{
+        if(e.File.Size>32768)throw new Exception("Service account key is too large.");
+        using var reader=new StreamReader(e.File.OpenReadStream(maxAllowedSize:32768));keyJson=await reader.ReadToEndAsync();
+    }catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task Connect(){await Execute(async()=>{await Api.Post("/api/calendars/accounts",new{name=accountName,credential=keyJson});accountName="";keyJson="";await Refresh();notice="Account connected.";});}
+    async Task Discover(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/discover");await Refresh();notice="Calendar discovery completed.";});}
+    async Task Disconnect(JsonElement a){if(!await Api.Confirm("Disconnect "+a.Text("name")+"? Google events will be retained."))return;
+        await Execute(async()=>{await Api.Delete("/api/calendars/accounts/"+Enc(a.Text("id")));await Refresh();notice="Account disconnected.";});}
+    async Task AddCalendar(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/calendar-list",new{calendarId=CalendarIdFor(id)});calendarIds[id]="";await Refresh();notice="Calendar added.";});}
+    async Task SaveSubscription(string account,string cal,SubscriptionState s){await Execute(async()=>{
+        var rich=s.RichClients.Select(key=>{var parts=key.Split('|',2);return new{owner=parts[0],clientId=parts.Length>1?parts[1]:""};}).ToArray();
+        await Api.Put("/api/calendars/"+Enc(account)+"/subscriptions/"+Enc(cal.Text("id")),
+            new{enabled=s.Enabled,announce=s.Announce,allSatellites=s.AllSatellites,allRichClients=s.AllRichClients,
+            satelliteIds=s.SatelliteIds.ToArray(),richClients=rich,notifications=new{before=s.Before.Select(x=>new{amount=x.Amount,unit=x.Unit}).ToArray(),
+            dailyTimes=s.DailyTimes.Select(x=>x.Time).ToArray(),timeZone=s.TimeZone}});
+        await Refresh();notice="Subscription saved.";
+    });}
+    async Task LoadEvents(bool more){await Execute(async()=>{
+        if(string.IsNullOrEmpty(selectedCalendar))throw new Exception("Choose a calendar.");
+        if(!DateOnly.TryParse(from,out var first)||!DateOnly.TryParse(to,out var last)||last<first)throw new Exception("Choose a valid date range.");
+        var start=await JS.InvokeAsync<string>("assisterApi.toIso",from+"T00:00");
+        var end=await JS.InvokeAsync<string>("assisterApi.toIso",last.AddDays(1).ToString("yyyy-MM-dd")+"T00:00");
+        var url=Prefix()+"/events?from="+Enc(start)+"&to="+Enc(end)+(more&&!string.IsNullOrEmpty(nextPage)?"&page="+Enc(nextPage):"");
+        var result=await Api.Get(url);var chunk=result.Prop("items").Items().ToArray();
+        events=more?events.Concat(chunk).ToArray():chunk;nextPage=result.Text("nextPageToken");
+    });}
+    static string EventTime(JsonElement date)=>date.Text("date",date.Text("dateTime","Unknown"));
+    void NewEvent(){editingId=null;editingEtag=null;summary="";location="";description="";allDay=false;notification="preserve";
+        eventStart=DateTime.Now.ToString("yyyy-MM-ddTHH:mm");eventEnd=DateTime.Now.AddHours(1).ToString("yyyy-MM-ddTHH:mm");eventEditing=true;}
+    void EditEvent(JsonElement e){editingId=e.Text("id");editingEtag=e.Text("etag");summary=e.Text("summary");location=e.Text("location");description=e.Text("description");
+        allDay=!string.IsNullOrEmpty(e.Prop("start").Text("date"));notification="preserve";
+        eventStart=allDay?e.Prop("start").Text("date"):TimeForInput(e.Prop("start").Text("dateTime"));
+        eventEnd=allDay?e.Prop("end").Text("date"):TimeForInput(e.Prop("end").Text("dateTime"));eventEditing=true;}
+    static string TimeForInput(string iso)=>DateTimeOffset.TryParse(iso,out var parsed)?parsed.LocalDateTime.ToString("yyyy-MM-ddTHH:mm"):"";
+    async Task SaveEvent(){await Execute(async()=>{
+        if(string.IsNullOrWhiteSpace(summary)||string.IsNullOrWhiteSpace(eventStart)||string.IsNullOrWhiteSpace(eventEnd)||string.CompareOrdinal(eventEnd,eventStart)<=0)throw new Exception("Provide an event title and valid start/end times.");
+        object start=allDay?new{date=eventStart}:new{dateTime=await JS.InvokeAsync<string>("assisterApi.toIso",eventStart)};
+        object end=allDay?new{date=eventEnd}:new{dateTime=await JS.InvokeAsync<string>("assisterApi.toIso",eventEnd)};
+        object? reminders=null;
+        if(notification=="default")reminders=new{useDefault=true};
+        else if(notification=="none")reminders=new{useDefault=false,overrides=Array.Empty<object>()};
+        else if(notification=="custom"){
+            var mins=customMinutes.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).Distinct().ToArray();
+            if(mins.Length>5||mins.Any(x=>x<0||x>40320))throw new Exception("Choose up to five reminder times between 0 and 40320 minutes.");
+            reminders=new{useDefault=false,overrides=mins.Select(x=>new{method="popup",minutes=x}).ToArray()};
+        }else if(notification!="preserve")reminders=new{useDefault=false,overrides=new[]{new{method="popup",minutes=int.Parse(notification)}}};
+        var payload=new Dictionary<string,object?>{{"summary",summary},{"location",location},{"description",description},{"start",start},{"end",end}};
+        if(reminders is not null)payload["reminders"]=reminders;
+        if(editingId is null)await Api.Post(Prefix()+"/events",payload);
+        else await Api.Patch(Prefix()+"/events/"+Enc(editingId),payload,editingEtag);
+        eventEditing=false;await LoadEvents(false);notice="Event saved.";
+    });}
+    async Task PrepareDelete(JsonElement ev){await Execute(async()=>{var v=await Api.Post(Prefix()+"/events/"+Enc(ev.Text("id"))+"/prepare-delete");
+        deleteConfirmation=v.Text("confirmation");deleteSummary=v.Text("summary");});}
+    async Task ConfirmDelete(){await Execute(async()=>{await Api.Post("/api/calendars/confirm-delete",new{confirmation=deleteConfirmation});deleteConfirmation=null;await LoadEvents(false);notice="Event removed.";});}
+    async Task Execute(Func<Task> action){busy=true;try{await action();error=false;}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+}

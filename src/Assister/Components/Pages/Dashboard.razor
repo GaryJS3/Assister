@@ -1,0 +1,118 @@
+@page "/"
+@page "/index.html"
+@implements IAsyncDisposable
+@inject BrowserApi Api
+<PageTitle>Operations dashboard · Assister</PageTitle>
+<PageHeader Eyebrow="OPERATIONS / PIPELINE" Title="Assistant operations" Description="Monitor health, inspect execution traces, and run diagnostics.">
+    <Actions><button disabled="@loading" @onclick="Refresh">Refresh</button><span class="status-pill">@connection</span></Actions>
+</PageHeader>
+<Notice Message="@notice" Error="@error" />
+<section class="grid" aria-label="Component health">
+    @foreach(var c in health.Prop("components").Items()){
+        <article class="card"><div class="row"><strong>@c.Text("name")</strong><span class="status-pill @(c.Text("status").Equals("Healthy",StringComparison.OrdinalIgnoreCase)?"good":"")">@c.Text("status")</span></div>
+        <p class="muted">@c.Text("detail")</p>
+        @if(c.Text("name")=="Home Assistant"){<button disabled="@loading" @onclick="Rebuild">Rebuild cache</button>}
+        </article>
+    }
+</section>
+<div class="tabs" role="tablist" aria-label="Diagnostic panels">
+    <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="()=>panel="explorer"">Run explorer</button>
+    <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="()=>panel="debug"">Debug chat</button>
+</div>
+@if(panel=="explorer"){
+    <div class="split">
+        <section class="card">
+            <h2>Recent interactions</h2>
+            <div class="stack">
+                <label>Search <input placeholder="Request, response or ID" @bind="search" @bind:event="oninput" /></label>
+                <div class="form-grid">
+                    <label>Source <select @bind="source"><option value="">All sources</option><option>voice</option><option>rich-client</option><option>debug</option><option>text</option></select></label>
+                    <label>Outcome <select @bind="outcome"><option value="">All outcomes</option><option>succeeded</option><option>failed</option><option>cancelled</option><option>running</option><option>unavailable</option><option>ambiguous</option></select></label>
+                </div>
+                <div class="tabs">@foreach(var q in new[]{"All","Failures","LLM","Direct","Voice","Debug"}){<button aria-pressed="@(quick==q)" @onclick="()=>quick=q">@q</button>}</div>
+                <small>@Filtered.Length of @runs.Length interactions · refresh every 3 seconds</small>
+                @foreach(var run in Filtered.Take(150)){
+                    <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="()=>SelectRun(run.Text("runId"))">
+                        <strong>@run.Text("userText","Waiting for transcript…")</strong>
+                        <div class="subtle">@run.Text("source") · @run.Date("startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
+                        <span class="status-pill @(run.Text("outcome")=="succeeded"?"good":run.Flag("hasFailures")?"bad":"")">@run.Text("outcome")</span>
+                    </button>
+                }
+                @if(Filtered.Length==0){<p class="empty">No matching interactions.</p>}
+            </div>
+        </section>
+        <section class="card">
+            @if(selectedRun.ValueKind!=JsonValueKind.Object){<div class="empty">Select an interaction to inspect the pipeline.</div>}
+            else{
+                <div class="row"><h2>Run details</h2><span class="status-pill">@selectedRun.Text("outcome")</span></div>
+                <p>@selectedRun.Text("userText")</p>
+                <div class="grid">
+                    @foreach(var field in new[]{("Source",selectedRun.Text("source")),("Handled by",selectedRun.Text("handledBy")),("Duration",selectedRun.Number("durationMilliseconds").ToString("F0")+" ms"),("Satellite",selectedRun.Text("satelliteId")),("Run ID",selectedRun.Text("runId"))}){
+                        <div class="panel"><small>@field.Item1</small><div class="mono">@field.Item2</div></div>
+                    }
+                </div>
+                <h3>Assistant response</h3><p>@selectedRun.Text("rawResponse")</p>
+                @if(selectedRun.Text("spokenResponse")!=selectedRun.Text("rawResponse")){<details><summary>Spoken output</summary><p>@selectedRun.Text("spokenResponse")</p></details>}
+                <h3>Pipeline stages</h3>
+                @foreach(var step in selectedRun.Prop("steps").Items().OrderBy(x=>x.Number("sequence"))){
+                    <details class="panel"><summary><span class="status-pill @(step.Text("status")=="failed"?"bad":"")">@step.Text("status")</span> @step.Text("name") · @step.Text("kind") · @step.Number("durationMilliseconds").ToString("F0") ms</summary><JsonDetails Title="Stage metadata" Data="@step" /></details>
+                }
+                <JsonDetails Title="Full run record" Data="@selectedRun" />
+            }
+        </section>
+    </div>
+}else{
+    <div class="split">
+        <section class="card stack"><h2>Debug session</h2><p class="muted">This uses the real request coordinator and can execute device commands. No microphone or audio output.</p>
+            <label>Area <input @bind="area" placeholder="office" /></label>
+            <label>Synthetic satellite ID <input @bind="satellite" maxlength="128" /></label>
+            <p class="mono">@((conversation??"New conversation"))</p>
+            <button @onclick="NewConversation">New conversation</button>
+        </section>
+        <section class="card stack"><h2>Messages</h2>
+            <div aria-live="polite">
+                @foreach(var m in messages){<article class="panel"><strong>@m.Role</strong><p>@m.Content</p>@if(m.RunId is not null){<button @onclick="()=>InspectFromDebug(m.RunId)">Inspect run</button>}</article>}
+                @if(messages.Count==0){<p class="empty">Send a request to exercise the assistant.</p>}
+            </div>
+            <label>Message <textarea rows="3" maxlength="1000" @bind="message" placeholder="Ask Assister…"></textarea></label>
+            <button class="primary" disabled="@sending" @onclick="Send">@(sending?"Processing…":"Send request")</button>
+        </section>
+    </div>
+}
+@code {
+    [Parameter][SupplyParameterFromQuery(Name="run")] public string? RunQuery {get;set;}
+    record MessageRow(string Role,string Content,string? RunId=null);
+    JsonElement[] runs=[];JsonElement health,selectedRun;
+    string? selectedId,conversation;string panel="explorer",connection="Connecting",notice="",search="",source="",outcome="",quick="All",area="",satellite="debug-ui",message="";
+    bool loading,error,sending,newConversation=true;List<MessageRow> messages=new();
+    CancellationTokenSource poll=new();
+    JsonElement[] Filtered=>runs.Where(r=>(string.IsNullOrWhiteSpace(search)||r.Pretty().Contains(search,StringComparison.OrdinalIgnoreCase))&&
+        (source==""||r.Text("source")==source)&&(outcome==""||r.Text("outcome")==outcome)&&
+        (quick=="All"||quick=="Voice"&&r.Text("source")=="voice"||quick=="Debug"&&r.Text("source")=="debug"||
+        quick=="LLM"&&r.Text("handledBy")=="language-model"||quick=="Direct"&&r.Text("handledBy")=="direct-intent"||
+        quick=="Failures"&&(r.Flag("hasFailures")||!new[]{"succeeded","running","no-speech"}.Contains(r.Text("outcome"))))).ToArray();
+    protected override async Task OnAfterRenderAsync(bool firstRender){
+        if(firstRender){satellite=(await Api.Storage("assister-debug-satellite"))??"debug-ui";conversation=await Api.Storage("assister-debug-conversation");newConversation=string.IsNullOrEmpty(conversation);
+            selectedId=RunQuery;await Refresh();StateHasChanged();_ = Poll(poll.Token);}
+    }
+    async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(token)){await InvokeAsync(async()=>{await Refresh();StateHasChanged();});}}catch(OperationCanceledException){}}
+    async Task Refresh(){if(loading)return;loading=true;try{
+        runs=(await Api.Get("/api/diagnostics/runs")).Items().ToArray();health=await Api.Get("/api/diagnostics/health");
+        connection="Live · "+DateTime.Now.ToString("T");
+        selectedId??=runs.FirstOrDefault().Text("runId");
+        if(!string.IsNullOrEmpty(selectedId)) await LoadSelected();
+        error=false;
+    }catch(Exception ex){connection="Offline";notice=ex.Message;error=true;}finally{loading=false;}}
+    async Task LoadSelected(){if(selectedId is null)return;try{selectedRun=await Api.Get("/api/diagnostics/runs/"+Uri.EscapeDataString(selectedId));}catch{selectedRun=default;}}
+    async Task SelectRun(string id){selectedId=id;await LoadSelected();}
+    async Task Rebuild(){try{await Api.Post("/api/homeassistant/cache/rebuild");notice="Home Assistant cache rebuilt.";error=false;await Refresh();}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task NewConversation(){conversation=null;messages.Clear();newConversation=true;await Api.SetStorage("assister-debug-conversation",null);}
+    async Task Send(){if(string.IsNullOrWhiteSpace(message)||sending)return;sending=true;var prompt=message.Trim();messages.Add(new("You",prompt));message="";
+        try{var r=await Api.Post("/api/test/message",new{message=prompt,satelliteId=satellite,area=string.IsNullOrWhiteSpace(area)?null:area,conversationId=conversation,newConversation});
+            conversation=r.Text("conversationId");newConversation=false;
+            await Api.SetStorage("assister-debug-conversation",conversation);await Api.SetStorage("assister-debug-satellite",satellite);
+            messages.Add(new("Assister",r.Text("response")+"\n"+r.Text("outcome"),r.Text("runId")));await Refresh();notice="";error=false;
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{sending=false;}}
+    async Task InspectFromDebug(string? id){selectedId=id;panel="explorer";await LoadSelected();}
+    public ValueTask DisposeAsync(){poll.Cancel();poll.Dispose();return ValueTask.CompletedTask;}
+}

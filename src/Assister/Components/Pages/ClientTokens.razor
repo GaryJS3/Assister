@@ -1,0 +1,62 @@
+@page "/client-tokens"
+@page "/client-tokens.html"
+@inject BrowserApi Api
+<PageTitle>Client tokens · Assister</PageTitle>
+<PageHeader Eyebrow="ADMINISTRATION / CLIENT ACCESS" Title="Client tokens" Description="Manage separate device identities and owners." />
+<Notice Message="@notice" Error="@error" />
+@if(!unlocked){
+    <section class="card stack" style="max-width:560px"><h2>Administrator access</h2><p class="muted">Enter the dedicated client-management credential. It is held only for this page session.</p>
+    <label>Administrator credential <input type="password" @bind="admin" autocomplete="off" /></label>
+    <button class="primary" disabled="@busy" @onclick="Unlock">Unlock management</button></section>
+}else{
+    <div class="toolbar"><p class="muted">Tokens are shown only when issued or rotated; active tokens cannot be recovered.</p><button @onclick="Lock">Lock</button></div>
+    @if(!string.IsNullOrEmpty(issued)){
+        <section class="card stack"><h2>New token — @issuedClient</h2><p>Copy the token now. It will not be shown again.</p>
+        <input readonly value="@issued" class="mono" /><div class="actions"><button @onclick="Copy">Copy</button><button @onclick="HideIssued">Hide token</button></div></section>
+    }
+    <div class="split">
+        <section class="card stack"><h2>Create client identity</h2>
+            <label>Client ID <input @bind="clientId" maxlength="64" placeholder="pixel-8-pro" /></label>
+            <label>Owner <input @bind="owner" maxlength="128" placeholder="gary" /></label>
+            <button class="primary" disabled="@busy" @onclick="Create">Create token</button>
+            <p class="hint">Devices with the same owner share accessible conversations and notifications.</p>
+        </section>
+        <section class="card"><div class="row"><h2>Configured clients</h2><button disabled="@busy" @onclick="Load">Refresh</button></div>
+            @foreach(var c in clients){
+                <article class="panel stack"><div class="row"><strong>@c.Text("clientId")</strong><span class="status-pill @(c.Flag("revoked")?"bad":"good")">@(c.Flag("revoked")?"Revoked":"Active")</span></div>
+                    <p class="muted">@(c.Flag("managed")?"Managed":"Server configuration") · Owner: @c.Text("owner")</p>
+                    <label>Reassign owner <input value="@OwnerValue(c)" @onchange="e=>SetOwner(c.Text("clientId"),e.Value?.ToString()??"")" /></label>
+                    <div class="actions"><button disabled="@busy" @onclick="()=>ChangeOwner(c)">Save owner</button>
+                    <button disabled="@busy" @onclick="()=>Rotate(c)">@(c.Flag("revoked")?"Issue replacement":"Rotate token")</button>
+                    @if(!c.Flag("revoked")){<button class="danger" disabled="@busy" @onclick="()=>Revoke(c)">Revoke</button>}</div>
+                </article>
+            }
+        </section>
+    </div>
+}
+@code {
+    JsonElement[] clients=[]; Dictionary<string,string> owners=new();
+    string admin="",clientId="",owner="",issued="",issuedClient="",notice="";bool unlocked,busy,error;
+    void Lock(){admin="";unlocked=false;HideIssued();clients=[];owners.Clear();}
+    void HideIssued(){issued="";issuedClient="";}
+    string OwnerValue(JsonElement c)=>owners.TryGetValue(c.Text("clientId"),out var v)?v:c.Text("owner");
+    void SetOwner(string id,string value)=>owners[id]=value;
+    protected override Task OnAfterRenderAsync(bool firstRender)=>Task.CompletedTask;
+    async Task Unlock(){await Load();if(!error)unlocked=true;}
+    async Task Load(){busy=true;try{clients=(await Api.Request("GET","/api/devices/credentials",null,admin)).Items().ToArray();owners=clients.ToDictionary(x=>x.Text("clientId"),x=>x.Text("owner"));notice="";error=false;}catch(Exception ex){notice=ex.Message;error=true;Lock();}finally{busy=false;}}
+    async Task Create(){busy=true;try{
+        var value=await Api.Post("/api/devices/credentials",new {clientId,owner},admin);issued=value.Text("token");issuedClient=value.Text("clientId");clientId="";await Load();notice="Client identity created.";
+        }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task ChangeOwner(JsonElement c){var id=c.Text("clientId");var newOwner=OwnerValue(c).Trim();if(newOwner==c.Text("owner"))return;
+        if(!await Api.Confirm("Reassign "+id+" to "+newOwner+"? Existing history stays with the previous owner."))return;
+        await Action(async()=>{await Api.Put("/api/devices/credentials/"+Uri.EscapeDataString(id)+"/owner",new {owner=newOwner},admin);await Load();notice="Owner updated.";});
+    }
+    async Task Rotate(JsonElement c){var id=c.Text("clientId");if(!await Api.Confirm("Replace "+id+"'s token? Its existing token will stop working immediately."))return;
+        await Action(async()=>{HideIssued();var value=await Api.Post("/api/devices/credentials/"+Uri.EscapeDataString(id)+"/rotate",null,admin);issued=value.Text("token");issuedClient=id;await Load();notice="Replacement token issued.";});
+    }
+    async Task Revoke(JsonElement c){var id=c.Text("clientId");if(!await Api.Confirm("Revoke "+id+" immediately?"))return;
+        await Action(async()=>{HideIssued();await Api.Delete("/api/devices/credentials/"+Uri.EscapeDataString(id),admin);await Load();notice="Credential revoked.";});
+    }
+    async Task Action(Func<Task> callback){busy=true;try{await callback();error=false;}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task Copy(){try{await Api.Copy(issued);notice="Copied to clipboard.";}catch(Exception ex){notice=ex.Message;error=true;}}
+}
