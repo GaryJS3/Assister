@@ -88,6 +88,14 @@ public sealed class SatelliteManager
                 await Listener.StopAcknowledgementListeningAsync(Token);
         }
     }
+    // Snapshot pending occurrences only; schedules and future announcements are untouched.
+    public async Task<int> AcknowledgePendingAsync(CancellationToken Token)
+    {
+        var Count = 0;
+        foreach (var Id in PendingAnnouncementIds)
+            if (await AcknowledgeAsync(Id, "acknowledge", Token)) Count++;
+        return Count;
+    }
     public async Task<bool> AcknowledgeAsync(string Id, string Text, CancellationToken Token)
     {
         if (!AnnouncementLevels.IsAcknowledgement(Text) || !Announcements.TryRemove(Id, out var Acknowledged)) return false;

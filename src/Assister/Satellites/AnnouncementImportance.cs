@@ -22,6 +22,11 @@ public static class AnnouncementLevels
         return Enum.IsDefined(Importance);
     }
 
+    // Global commands are deliberately narrower than the local listening-window vocabulary.
+    public static bool IsGlobalAcknowledgement(string Text) => Regex.IsMatch(Text.Trim(),
+        @"^(?:please\s+)?(?:acknowledge|acknowledged|dismiss)(?:\s+(?:all\s+)?(?:(?:satellite\s+)?alerts|notifications|reminders|alarms))?[.!?]*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
     public static bool IsAcknowledgement(string Text) => Regex.IsMatch(Text,
         @"\b(?:acknowledged?|stop|cancel|heard|dismiss|dismissed|got\s+it|understood)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));

@@ -14,6 +14,29 @@ namespace Assister.Tests;
 public sealed class AnnouncementTests
 {
     [Theory]
+    [InlineData("acknowledge", true)]
+    [InlineData("acknowledge alerts", true)]
+    [InlineData("Please dismiss all satellite alerts.", true)]
+    [InlineData("cancel my reminder", false)]
+    [InlineData("what happens when I acknowledge alerts", false)]
+    [InlineData("acknowledge the office alert", false)]
+    public void GlobalAcknowledgementRequiresAnExplicitWholeCommand(string Text, bool Expected)
+        => Assert.Equal(Expected, AnnouncementLevels.IsGlobalAcknowledgement(Text));
+
+    [Fact]
+    public async Task GlobalAcknowledgementClearsIndependentPendingOccurrencesOnly()
+    {
+        var (Manager, _, _) = Setup();
+        foreach (var Id in new[] { "kitchen", "office" })
+            await Manager.AnnounceAsync(Id, "Reminder", new Speech(), default, Importance: AnnouncementImportance.Acknowledge);
+        Assert.Equal(2, await Manager.AcknowledgePendingAsync(default));
+        Assert.Empty(Manager.PendingAnnouncementIds);
+        Assert.Equal(0, await Manager.AcknowledgePendingAsync(default));
+        await Manager.AnnounceAsync("kitchen", "Tomorrow", new Speech(), default, Importance: AnnouncementImportance.Acknowledge);
+        Assert.Single(Manager.PendingAnnouncementIds);
+    }
+
+    [Theory]
     [InlineData(AnnouncementImportance.HighImportance, 9)]
     [InlineData(AnnouncementImportance.Alarm, 5)]
     public async Task UrgentLevelsAddBeepsAndHighImportanceSpeaksTwice(AnnouncementImportance Importance, int Chunks)

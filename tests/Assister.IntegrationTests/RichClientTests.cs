@@ -14,6 +14,56 @@ namespace Assister.IntegrationTests;
 
 public sealed class RichClientTests
 {
+    [Theory]
+    [InlineData("acknowledge")]
+    [InlineData("acknowledge alerts")]
+    public async Task PhoneAcknowledgementClearsSatelliteAlertsWithoutModel(string Message)
+    {
+        using var App = new TestApplication(UseFake: false);
+        using var Http = App.CreateClient();
+        Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        var Client = new Assister.Client.AssisterClient(Http);
+        var Manager = App.Services.GetRequiredService<Assister.Satellites.SatelliteManager>();
+        var Speaker = new AcknowledgementSpeaker();
+        Manager.Register(Speaker);
+        Manager.Update(Speaker.SatelliteId, State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync(Speaker.SatelliteId, "Reminder: vitamins.",
+            new AcknowledgementSpeech(), default,
+            Importance: Assister.Satellites.AnnouncementImportance.Acknowledge);
+        Assert.Single(Manager.PendingAnnouncementIds);
+        var Conversation = await Client.CreateConversationAsync();
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        foreach (var Expected in new[] { "Acknowledged pending satellite alerts.", "There are no pending satellite alerts to acknowledge." })
+        {
+            var Item = await Client.SubmitAsync(Conversation.Id, Message, Guid.NewGuid().ToString(), Deadline.Token);
+            var Final = await WaitTerminal(Http, Item.Id, Deadline.Token);
+            Assert.Equal("completed", Final.Status);
+            var Run = App.Services.GetRequiredService<Assister.Diagnostics.RunStore>().Get(Final.RunId!.Value);
+            Assert.NotNull(Run);
+            Assert.Equal("satellite-acknowledgement", Run.HandledBy);
+            Assert.Equal(Expected, Run.RawResponse);
+            Assert.Empty(Manager.PendingAnnouncementIds);
+        }
+    }
+
+    private sealed class AcknowledgementSpeech : ITextToSpeechProvider
+    {
+        public async IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text, TextToSpeechOptions Options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken Token)
+        { await Task.Yield(); yield return new(new byte[2], 16000, 2, 1); }
+    }
+
+    private sealed class AcknowledgementSpeaker : Assister.Satellites.ISatelliteConnection
+    {
+        public string SatelliteId => "ack-test-speaker";
+        public string Name => "Bedroom";
+        public string? Area => null;
+        public async IAsyncEnumerable<AudioChunk> ReceiveAudioAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken CancellationToken) { await Task.CompletedTask; yield break; }
+        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken CancellationToken)
+        { await foreach (var Chunk in Audio.WithCancellation(CancellationToken)) { } }
+        public Task SendEventAsync(Assister.Satellites.SatelliteEvent Event, CancellationToken CancellationToken) => Task.CompletedTask;
+    }
+
     [Fact]
     public async Task OneTimeAlarmDeliveryCompletesAndDoesNotRepeatTomorrow()
     {

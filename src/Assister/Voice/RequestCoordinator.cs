@@ -13,7 +13,8 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
     HomeAssistantStateCache Cache, ILogger<RequestCoordinator> Logger, ToolLoop? LanguageModel = null, TimerIntentHandler? Timers = null, RunStore? Diagnostics = null,
     IConfiguration? Configuration = null, IntegrationActionDispatcher? Actions = null, Assister.Satellites.SatelliteManager? Satellites = null,
     DeviceNameRecovery? NameRecovery = null, Assister.Modules.Reminders.ReminderIntentHandler? Reminders = null,
-    Assister.Satellites.AnnouncementHandler? Announcements = null) : IRequestCoordinator
+    Assister.Satellites.AnnouncementHandler? Announcements = null,
+    Assister.Interactions.RichNotificationBridge? Rich = null) : IRequestCoordinator
 {
     public Task<RequestResult> ProcessAsync(UserRequest Request, CancellationToken CancellationToken) => ProcessWithHistoryAsync(Request, [], CancellationToken);
 
@@ -51,6 +52,13 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
             return Result(Assister.Satellites.AnnouncementLevels.Capabilities, "succeeded", "capabilities");
 
+        if (Satellites is not null && Rich?.Owner(Request.SatelliteId) is not null
+            && Assister.Satellites.AnnouncementLevels.IsGlobalAcknowledgement(Request.Message))
+        {
+            var Count = await Satellites.AcknowledgePendingAsync(CancellationToken);
+            return Result(Count > 0 ? "Acknowledged pending satellite alerts." : "There are no pending satellite alerts to acknowledge.",
+                "succeeded", "satellite-acknowledgement");
+        }
         if (Satellites is not null && await Satellites.AcknowledgeAsync(Request.SatelliteId, Request.Message, CancellationToken))
             return Result("Acknowledged.", "succeeded", "satellite-acknowledgement");
         if (Announcements is not null && await Announcements.TryHandleAsync(Request, DeviceContext, CancellationToken) is { } AnnouncementResponse)
