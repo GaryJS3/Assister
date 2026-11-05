@@ -81,3 +81,6 @@ window.assisterApi.toIso = value => new Date(value).toISOString();
 // Chunk large JSON responses over interop while retaining browser-origin cookie authorization.
 assisterApi.requestStream = async (...args) => new Blob([JSON.stringify(await assisterApi.request(...args))], {type:'application/json'});
 assisterApi.uploadStream = async (...args) => new Blob([JSON.stringify(await assisterApi.upload(...args))], {type:'application/json'});
+
+assisterApi.timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+assisterApi.locale = () => navigator.language || 'en-US';

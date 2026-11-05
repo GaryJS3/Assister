@@ -34,7 +34,7 @@
                 @foreach(var run in Filtered.Take(150)){
                     <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="@(() => SelectRun(run.Text("runId")))">
                         <strong>@run.Text("userText","Waiting for transcript…")</strong>
-                        <div class="subtle">@run.Text("source") · @run.Date("startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
+                        <div class="subtle">@run.Text("source") · @Api.Date(run,"startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
                         <span class="status-pill @(run.Text("outcome")=="succeeded"?"good":run.Flag("hasFailures")?"bad":"")">@run.Text("outcome")</span>
                     </button>
                 }
@@ -98,7 +98,7 @@
     async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(token)){await InvokeAsync(async()=>{await Refresh();StateHasChanged();});}}catch(OperationCanceledException){}}
     async Task Refresh(){if(loading)return;loading=true;try{
         runs=(await Api.Get("/api/diagnostics/runs")).Items().ToArray();health=await Api.Get("/api/diagnostics/health");
-        connection="Live · "+DateTime.Now.ToString("T");
+        connection="Live · "+Api.Clock.Now.ToString("T");
         selectedId??=runs.FirstOrDefault().Text("runId");
         if(!string.IsNullOrEmpty(selectedId)) await LoadSelected();
         error=false;

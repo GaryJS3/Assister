@@ -15,7 +15,7 @@
         <tr><td><button @onclick="@(() => Select(d.Text("id")))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
         <td>@d.Text("areaId","Unassigned")</td><td>@d.Text("providerType")</td>
         <td><span class="status-pill @(r.Text("connectionState")=="Online"?"good":"bad")">@r.Text("connectionState")</span></td>
-        <td>@Ownership(r)</td><td>@Activity(r)</td><td>@r.Date("lastSeen")</td></tr>
+        <td>@Ownership(r)</td><td>@Activity(r)</td><td>@Api.Date(r,"lastSeen")</td></tr>
     }
     </tbody></table></div>
     @if(satellites.Length==0){<p class="empty">No registered satellites.</p>}
@@ -78,7 +78,7 @@
             <h3>Recent traces</h3>
             @foreach(var trace in traces.Take(20)){<p><a href="@("/?run="+Uri.EscapeDataString(trace.Text("runId")))">@trace.Text("userText",trace.Text("runId"))</a> · @trace.Text("outcome")</p>}
             <h3>Device events</h3>
-            @foreach(var e in events.Reverse().Take(50)){<p class="subtle">@e.Date("at") · @e.Text("type") · @e.Text("detail")</p>}
+            @foreach(var e in events.Reverse().Take(50)){<p class="subtle">@Api.Date(e,"at") · @e.Text("type") · @e.Text("detail")</p>}
         }
     </section>
 }
@@ -89,7 +89,7 @@
         @foreach(var c in matches){
             var clientId=c.Text("clientId");
             <details class="panel"><summary><strong>@c.Text("deviceName",clientId)</strong> <span class="status-pill @(c.Flag("online")?"good":"")">@(c.Flag("online")?"Online":"Offline")</span></summary>
-                <p class="muted">Client: @clientId · Owner: @c.Text("owner") · Version: @c.Text("clientVersion") · Last seen: @c.Date("lastSeen")</p>
+                <p class="muted">Client: @clientId · Owner: @c.Text("owner") · Version: @c.Text("clientVersion") · Last seen: @Api.Date(c,"lastSeen")</p>
                 <JsonDetails Title="Hardware and capabilities" Data="@c" />
                 <label>Groups (comma-separated) <input value="@ClientGroupValue(c)" @onchange="@((ChangeEventArgs e) => clientGroups[clientId] = e.Value?.ToString() ?? string.Empty)" /></label>
                 <button disabled="@busy" @onclick="()=>SaveClientGroups(c)">Save groups</button>

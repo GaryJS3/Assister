@@ -13,7 +13,7 @@
         <article class="panel">
             <h3>@item.Text("message")</h3>
             <p class="muted">@(item.Flag("oneTime")?"Once":item.Prop("weekday").ValueKind == JsonValueKind.Null?"Daily":Days[(int)item.Number("weekday")]) at @($"{(int)item.Number("hour"):00}:{(int)item.Number("minute"):00}") · @item.Text("importance")</p>
-            <p class="subtle">Next: @item.Date("nextDueAt") · @item.Text("timeZone")</p>
+            <p class="subtle">Next: @Api.Date(item,"nextDueAt") · @item.Text("timeZone")</p>
             <p class="subtle">Destination: @item.Text("satelliteId")</p>
             <div class="actions"><button @onclick="()=>Edit(item)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>Remove(item)">Remove</button></div>
         </article>

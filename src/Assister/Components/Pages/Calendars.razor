@@ -140,8 +140,8 @@
     }
     JsonElement[] accounts=[],satellites=[],clients=[],events=[];
     Dictionary<string,SubscriptionState> subscriptions=new();Dictionary<string,string> calendarIds=new();
-    string accountName="",keyJson="",notice="",selectedCalendar="",from=DateTime.Today.ToString("yyyy-MM-dd"),to=DateTime.Today.AddDays(7).ToString("yyyy-MM-dd"),summary="",location="",description="",eventStart="",eventEnd="",notification="preserve",customMinutes="";
-    string? nextPage,editingId,editingEtag,deleteConfirmation,deleteSummary;bool busy,error,allDay,eventEditing;
+    string accountName="",keyJson="",notice="",selectedCalendar="",from="",to="",summary="",location="",description="",eventStart="",eventEnd="",notification="preserve",customMinutes="";
+    string? nextPage,editingId,editingEtag,deleteConfirmation,deleteSummary,originalStart,originalEnd;bool busy,error,allDay,eventEditing;
     static string Enc(string id)=>Uri.EscapeDataString(id);
     string CalendarIdFor(string account)=>calendarIds.GetValueOrDefault(account,"");
     string Prefix()=>"/api/calendars/"+string.Join("/",selectedCalendar.Split('|').Select(Enc));
@@ -159,7 +159,7 @@
         s.TimeZone=setting.Text("timeZone","America/New_York");
         subscriptions[key]=s;return s;
     }
-    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Refresh();StateHasChanged();}}
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Api.InitializeClock();from=Api.Clock.Now.ToString("yyyy-MM-dd");to=Api.Clock.Now.AddDays(7).ToString("yyyy-MM-dd");await Refresh();StateHasChanged();}}
     async Task Refresh(){busy=true;try{
         accounts=(await Api.Get("/api/calendars/accounts")).Items().ToArray();
         clients=(await Api.Get("/api/calendars/recipients")).Items().ToArray();
@@ -193,17 +193,19 @@
         events=more?events.Concat(chunk).ToArray():chunk;nextPage=result.Text("nextPageToken");
     });}
     static string EventTime(JsonElement date)=>date.Text("date",date.Text("dateTime","Unknown"));
-    void NewEvent(){editingId=null;editingEtag=null;summary="";location="";description="";allDay=false;notification="preserve";
-        eventStart=DateTime.Now.ToString("yyyy-MM-ddTHH:mm");eventEnd=DateTime.Now.AddHours(1).ToString("yyyy-MM-ddTHH:mm");eventEditing=true;}
+    void NewEvent(){editingId=null;editingEtag=null;originalStart=null;originalEnd=null;summary="";location="";description="";allDay=false;notification="preserve";
+        eventStart=Api.Clock.Now.ToString("yyyy-MM-ddTHH:mm");eventEnd=Api.Clock.Convert(DateTimeOffset.UtcNow.AddHours(1)).ToString("yyyy-MM-ddTHH:mm");eventEditing=true;}
     void EditEvent(JsonElement e){editingId=e.Text("id");editingEtag=e.Text("etag");summary=e.Text("summary");location=e.Text("location");description=e.Text("description");
         allDay=!string.IsNullOrEmpty(e.Prop("start").Text("date"));notification="preserve";
+        originalStart=allDay?null:e.Prop("start").Text("dateTime");originalEnd=allDay?null:e.Prop("end").Text("dateTime");
         eventStart=allDay?e.Prop("start").Text("date"):TimeForInput(e.Prop("start").Text("dateTime"));
         eventEnd=allDay?e.Prop("end").Text("date"):TimeForInput(e.Prop("end").Text("dateTime"));eventEditing=true;}
-    static string TimeForInput(string iso)=>DateTimeOffset.TryParse(iso,out var parsed)?parsed.LocalDateTime.ToString("yyyy-MM-ddTHH:mm"):"";
+    string TimeForInput(string iso)=>Api.Clock.Input(iso);
+    async Task<string> EventIso(string input,string? original)=>Api.Clock.Unchanged(input,original)?original!:await JS.InvokeAsync<string>("assisterApi.toIso",input);
     async Task SaveEvent(){await Execute(async()=>{
         if(string.IsNullOrWhiteSpace(summary)||string.IsNullOrWhiteSpace(eventStart)||string.IsNullOrWhiteSpace(eventEnd)||string.CompareOrdinal(eventEnd,eventStart)<=0)throw new Exception("Provide an event title and valid start/end times.");
-        object start=allDay?new{date=eventStart}:new{dateTime=await JS.InvokeAsync<string>("assisterApi.toIso",eventStart)};
-        object end=allDay?new{date=eventEnd}:new{dateTime=await JS.InvokeAsync<string>("assisterApi.toIso",eventEnd)};
+        object start=allDay?new{date=eventStart}:new{dateTime=await EventIso(eventStart,originalStart)};
+        object end=allDay?new{date=eventEnd}:new{dateTime=await EventIso(eventEnd,originalEnd)};
         object? reminders=null;
         if(notification=="default")reminders=new{useDefault=true};
         else if(notification=="none")reminders=new{useDefault=false,overrides=Array.Empty<object>()};

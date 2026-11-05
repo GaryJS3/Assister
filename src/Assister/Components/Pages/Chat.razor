@@ -29,7 +29,7 @@
                 @foreach(var item in interactions){
                     var id=item.Text("id");
                     <article class="panel">
-                        <div class="row"><strong>YOU</strong><small>@item.Date("createdAt")</small></div>
+                        <div class="row"><strong>YOU</strong><small>@Api.Date(item,"createdAt")</small></div>
                         <p>@item.Text("input")</p><h3>ASSISTER</h3>
                         <p style="white-space:pre-wrap">@ResponseFor(item)</p>
                         <span class="status-pill @(item.Text("status")=="completed"?"good":item.Text("status")=="failed"?"bad":"")">@item.Text("status")</span>

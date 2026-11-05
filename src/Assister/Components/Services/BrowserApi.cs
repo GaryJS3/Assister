@@ -6,6 +6,16 @@ namespace Assister.Components.Services;
 /// <summary>Fetches from the user's browser so existing API cookies and browser-side authorization work unchanged.</summary>
 public sealed class BrowserApi(IJSRuntime Javascript)
 {
+    public BrowserClock Clock { get; } = new();
+    private Task? clockInitialization;
+    public Task InitializeClock() => clockInitialization ??= InitializeClockCore();
+    private async Task InitializeClockCore()
+    {
+        var zone = await Javascript.InvokeAsync<string>("assisterApi.timeZone");
+        var locale = await Javascript.InvokeAsync<string>("assisterApi.locale");
+        Clock.Configure(zone, locale);
+    }
+    public string Date(JsonElement value, string name) => Clock.Format(value.Text(name));
     public ValueTask<JsonElement> Get(string path) => Request("GET", path);
     public ValueTask<JsonElement> Post(string path, object? body = null, string? token = null) => Request("POST", path, body, token);
     public ValueTask<JsonElement> Put(string path, object? body = null, string? token = null) => Request("PUT", path, body, token);
@@ -17,6 +27,7 @@ public sealed class BrowserApi(IJSRuntime Javascript)
         Read("assisterApi.uploadStream", path, inputId, token);
     private async ValueTask<JsonElement> Read(string identifier, params object?[] arguments)
     {
+        await InitializeClock();
         await using var reference = await Javascript.InvokeAsync<IJSStreamReference>(identifier, arguments);
         await using var stream = await reference.OpenReadStreamAsync(16 * 1024 * 1024);
         using var document = await JsonDocument.ParseAsync(stream);
@@ -37,7 +48,9 @@ public static class JsonView
     public static string String(this JsonElement value, string fallback = "") => value.ValueKind switch
     {
         JsonValueKind.String => value.GetString() ?? fallback,
-        JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
+        JsonValueKind.True => "true",
+        JsonValueKind.False => "false",
+        JsonValueKind.Number => value.ToString(),
         _ => fallback
     };
     public static bool Flag(this JsonElement value, string name) => value.Prop(name).ValueKind == JsonValueKind.True;
@@ -48,6 +61,5 @@ public static class JsonView
     public static string Pretty(this JsonElement value) =>
         value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "" :
         JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
-    public static string Date(this JsonElement value, string name) =>
-        DateTimeOffset.TryParse(value.Text(name), out var parsed) ? parsed.ToLocalTime().ToString("g") : "—";
+
 }
