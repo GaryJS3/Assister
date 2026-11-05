@@ -4,7 +4,7 @@
 @inject NavigationManager Navigation
 @inject BrowserApi Api
 <PageTitle>Intents · Assister</PageTitle>
-<PageHeader Eyebrow="LANGUAGE / INTENT WORKBENCH" Title="Intent workbench" Description="Manage deterministic actions, preview routing and maintain regression tests.">
+<PageHeader Title="Intents">
     <Actions><button @onclick="Load" disabled="@(busy||Editing||exampleEditing)">Refresh definitions</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />

@@ -2,10 +2,8 @@
 @page "/index.html"
 @implements IAsyncDisposable
 @inject BrowserApi Api
-<PageTitle>Operations dashboard · Assister</PageTitle>
-<PageHeader Eyebrow="OPERATIONS / PIPELINE" Title="Assistant operations" Description="Monitor health, inspect execution traces, and run diagnostics.">
-    <Actions><button disabled="@loading" @onclick="Refresh">Refresh</button><span class="status-pill">@connection</span></Actions>
-</PageHeader>
+<PageTitle>Overview · Assister</PageTitle>
+<h1 class="visually-hidden">Overview</h1>
 <Notice Message="@notice" Error="@error" />
 <section class="health-grid" aria-label="Component health">
     @foreach(var c in health.Prop("components").Items()){
@@ -15,9 +13,15 @@
         </details>
     }
 </section>
-<div class="tabs" role="tablist" aria-label="Diagnostic panels">
-    <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="@(() => panel = "explorer")">Run explorer</button>
-    <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
+<div class="dashboard-toolbar">
+    <div class="tabs" role="tablist" aria-label="Diagnostic panels">
+        <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="@(() => panel = "explorer")">Run explorer</button>
+        <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
+    </div>
+    <div class="row">
+        <button disabled="@loading" @onclick="Refresh">Refresh</button>
+        <span class="status-pill">@connection</span>
+    </div>
 </div>
 @if(panel=="explorer"){
     <div class="split run-workspace">

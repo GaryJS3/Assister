@@ -3,7 +3,7 @@
 @inject BrowserApi Api
 @inject IJSRuntime JS
 <PageTitle>Calendars · Assister</PageTitle>
-<PageHeader Eyebrow="GOOGLE CALENDAR / CONNECTED SCHEDULES" Title="Calendars" Description="Manage service accounts, calendar notifications, and upcoming events.">
+<PageHeader Title="Calendars">
     <Actions><button disabled="@(busy||eventEditing)" @onclick="Refresh">Refresh accounts</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />

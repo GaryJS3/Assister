@@ -1,10 +1,9 @@
-<div class="page-header">
-    <div><p class="eyebrow">@Eyebrow</p><h1>@Title</h1>@if (!string.IsNullOrEmpty(Description)) { <p class="page-description">@Description</p> }</div>
-    @if (Actions is not null) { <div class="page-actions">@Actions</div> }
-</div>
+<h1 class="visually-hidden">@Title</h1>
+@if (Actions is not null)
+{
+    <div class="page-actions">@Actions</div>
+}
 @code {
-    [Parameter] public string Title { get; set; } = "";
-    [Parameter] public string Eyebrow { get; set; } = "OVERVIEW";
-    [Parameter] public string? Description { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public RenderFragment? Actions { get; set; }
 }

@@ -21,11 +21,9 @@
     </aside>
     @if (menuOpen) { <button class="sidebar-scrim" aria-label="Close navigation" @onclick="Close"></button> }
     <div class="content-frame">
-        <header class="topbar">
+        <div class="mobile-nav">
             <button class="mobile-menu ghost" @onclick="Toggle" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="@menuOpen">☰</button>
-            <span class="topbar-title">ASSISTER / ADMINISTRATION</span>
-            <span class="topbar-badge">SERVER · LIVE</span>
-        </header>
+        </div>
         <main class="content" id="main-content">@Body</main>
     </div>
 </div>

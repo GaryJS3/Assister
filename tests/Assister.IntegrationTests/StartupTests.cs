@@ -19,7 +19,7 @@ public sealed class StartupTests
         Assert.Equal("Degraded", Status.RootElement.GetProperty("status").GetString());
         Assert.Equal("Healthy", Status.RootElement.GetProperty("database").GetString());
         Assert.DoesNotContain("secret-test-token", Status.RootElement.GetRawText());
-        Assert.Contains("Assistant operations", await Client.GetStringAsync("/"));
+        Assert.Contains("Run explorer", await Client.GetStringAsync("/"));
         var Diagnostics = await Client.GetStringAsync("/api/diagnostics/health");
         Assert.Contains("Database", Diagnostics);
         Assert.Contains("Satellites", Diagnostics);

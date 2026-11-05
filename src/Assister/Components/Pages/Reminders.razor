@@ -2,7 +2,7 @@
 @page "/reminders.html"
 @inject BrowserApi Api
 <PageTitle>Reminders · Assister</PageTitle>
-<PageHeader Eyebrow="SCHEDULE / REMINDERS" Title="Reminders" Description="Manage scheduled announcements to satellites.">
+<PageHeader Title="Reminders">
     <Actions><button @onclick="Load" disabled="@busy">Refresh</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />
