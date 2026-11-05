@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace Assister.Modules.GoogleCalendar;
 
-public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory Clients)
+public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory Clients, ILogger<GoogleCalendarClient>? Logger = null)
 {
     private readonly SemaphoreSlim Gate = new(1);
     private readonly Dictionary<string, (string Value, DateTimeOffset Expires)> Tokens = [];
@@ -41,8 +41,44 @@ public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory
         if (Etag is not null) Request.Headers.TryAddWithoutValidation("If-Match", Etag);
         if (Body is not null) Request.Content = JsonContent.Create(Body);
         using var Response = await Clients.CreateClient("google-calendar").SendAsync(Request, Ct);
-        if (!Response.IsSuccessStatusCode) throw new InvalidOperationException($"Google Calendar returned {(int)Response.StatusCode}. Check sharing permissions; refresh before retrying changes.");
+        if (!Response.IsSuccessStatusCode)
+        {
+            var Message = await FailureMessage(Response, Method, Path, Ct);
+            Logger?.LogWarning("{CalendarFailure}", Message);
+            throw new InvalidOperationException(Message);
+        }
         return Response.StatusCode == System.Net.HttpStatusCode.NoContent ? new JsonObject { ["status"] = "deleted" } : (await Response.Content.ReadFromJsonAsync<JsonObject>(Ct))!;
+    }
+    public static async Task<string> FailureMessage(HttpResponseMessage Response, HttpMethod Method, string Path, CancellationToken Ct)
+    {
+        // Google returns the reason in the JSON body. Never expose the raw body, which may include account data.
+        var Reasons = new List<string>();
+        try
+        {
+            var Body = await Response.Content.ReadFromJsonAsync<JsonObject>(Ct);
+            if (Body?["error"] is JsonObject Error)
+                foreach (var Collection in new[] { "errors", "details" })
+                    if (Error[Collection] is JsonArray Items)
+                        foreach (var Item in Items.OfType<JsonObject>())
+                            if (Item["reason"] is JsonValue Value && Value.TryGetValue<string>(out var Reason)
+                                && Reason.Length <= 80 && System.Text.RegularExpressions.Regex.IsMatch(Reason, @"^[A-Za-z0-9_]+$")) Reasons.Add(Reason);
+        }
+        catch (Exception Error) when (Error is System.Text.Json.JsonException or InvalidOperationException or NotSupportedException) { }
+        var Disabled = Reasons.Any(R => R is "accessNotConfigured" or "SERVICE_DISABLED" or "serviceDisabled");
+        var Hint = Disabled
+            ? "Enable the Google Calendar API in the Google Cloud project that owns this service account: https://console.cloud.google.com/apis/library/calendar-json.googleapis.com . Wait a few minutes after enabling it, then fetch calendars again."
+            : Reasons.Any(R => R is "rateLimitExceeded" or "userRateLimitExceeded" or "quotaExceeded" or "RATE_LIMIT_EXCEEDED")
+                ? "Google has limited Calendar API requests. Wait before retrying and check the project's Calendar API quota."
+            : Reasons.Any(R => R is "insufficientPermissions" or "ACCESS_TOKEN_SCOPE_INSUFFICIENT")
+                ? "Google rejected the Calendar authorization scope. Check service account and organization access policies."
+            : (int)Response.StatusCode == 412
+                ? "This event changed since it was fetched. Refresh the event and review the changes before trying again."
+            : Path.StartsWith("users/me/calendarList", StringComparison.Ordinal) && Method == HttpMethod.Get
+                ? "Google denied calendar-list access. Check that the Google Calendar API is enabled in the service account's Cloud project and that organization policies allow it. Calendar sharing alone does not explain every 403."
+                : "Check that the calendar is shared with the service account email and grants the required read or edit permission. Refresh before retrying changes.";
+        var Operation = Path.StartsWith("users/me/calendarList", StringComparison.Ordinal) ? "calendar list" : "calendar events";
+        var ReasonText = Reasons.Count == 0 ? "" : " (" + string.Join(", ", Reasons.Distinct().Take(4)) + ")";
+        return $"Google Calendar returned {(int)Response.StatusCode} while accessing {Operation}{ReasonText}. {Hint}";
     }
     public static string Escape(string Id) => Uri.EscapeDataString(Id);
     public static string EventsPath(string CalendarId) => "calendars/" + Escape(CalendarId) + "/events";
