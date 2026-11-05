@@ -134,6 +134,74 @@ public sealed class GoogleCalendarTests : IDisposable
         var Queued = Notices.List("alice","phone"); Assert.Equal(2,Queued.Length); Assert.Equal(new[] {Now,Now.AddMinutes(5)},Queued.Select(N=>N.DueAt));
     }
     private CalendarStore Store() => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = DirectoryName }).Build());
+    private async Task<ServiceProvider> SchedulerServices()
+    {
+        var Services = new ServiceCollection();
+        Services.AddDbContext<AssisterDbContext>(O => O.UseSqlite("Data Source=" + Path.Combine(DirectoryName,"schedule-tests.db") + ";Pooling=False"));
+        Services.AddScoped<LocalStore>(); Services.AddSingleton<ITextToSpeechProvider,Speech>();
+        var Provider=Services.BuildServiceProvider();
+        await using var Scope=Provider.CreateAsyncScope(); await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Database.MigrateAsync();
+        return Provider;
+    }
+    [Theory]
+    [InlineData(10,"minutes",10)]
+    [InlineData(0,"minutes",0)]
+    [InlineData(2,"hours",120)]
+    [InlineData(2,"days",2880)]
+    public async Task AssisterAdvanceRulesNotifyEventsEvenWhenGoogleRemindersAreDisabled(int Amount,string Unit,int Minutes)
+    {
+        var Store=this.Store();var A=Store.Add("Home",Credential());var Now=DateTimeOffset.UtcNow;
+        var Config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Assister:DataPath"]=DirectoryName,["RichClients:Clients:phone:Token"]=new string('a',32),["RichClients:Clients:phone:Owner"]="alice"}).Build();
+        using var Notices=new NotificationStore(Config);
+        var Rules=new CalendarNotificationSettings([new(Amount,Unit)],[],"America/New_York").Validate();
+        var Calendar=new CalendarSubscription("shared","Shared",true,Announce:true,RichClients:[new("phone","alice")],Notifications:Rules);
+        Store.Update(A.Id,A=>A with{Calendars=[Calendar]}); Assert.Equal(Minutes,Assert.Single(this.Store().Get(A.Id).Calendars).Notifications!.Before[0].Minutes);
+        var Handler=new FakeGoogle{EventStart=Now.AddMinutes(Minutes+1),EventReminders=JsonNode.Parse("{\"useDefault\":false,\"overrides\":[]}")!.AsObject()};
+        var Client=new GoogleCalendarClient(Store,new Factory(Handler));await using var Provider=await SchedulerServices();
+        CalendarScheduler Scheduler()=>new(Store,Client,Provider.GetRequiredService<IServiceScopeFactory>(),new SatelliteManager(),Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance,Notices,new CalendarRecipients(Config));
+        await Scheduler().Tick(A.Id,Calendar,Now,default);Assert.Empty(Notices.List("alice","phone"));
+        await Scheduler().Tick(A.Id,Calendar,Now.AddMinutes(1),default);await Scheduler().Tick(A.Id,Calendar,Now.AddMinutes(1).AddSeconds(30),default);
+        var Items=Notices.List("alice","phone");Assert.Equal(2,Items.Length);Assert.All(Items,N=>Assert.Equal(Now.AddMinutes(1),N.DueAt));
+        Assert.Contains(Items,N=>N.Text.Contains("No reminder"));
+    }
+    [Fact]
+    public async Task DailyAgendaIncludesEveryPageAndEarlierAllDayEventsAndKeepsStableSnapshotForRetries()
+    {
+        var Store=this.Store();var A=Store.Add("Home",Credential());var Now=DateTimeOffset.UtcNow;
+        var Config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Assister:DataPath"]=DirectoryName,["RichClients:Clients:phone:Token"]=new string('a',32),["RichClients:Clients:phone:Owner"]="alice"}).Build();
+        using var Notices=new NotificationStore(Config);await using var Provider=await SchedulerServices();
+        var Zone=TimeZoneInfo.FindSystemTimeZoneById("America/New_York");var Local=TimeZoneInfo.ConvertTime(Now,Zone);var Date=DateOnly.FromDateTime(Local.DateTime);
+        var Time=Local.ToString("HH:mm");var Due=CalendarNotificationSettings.LocalTime(Date,TimeOnly.Parse(Time),Zone);
+        var Calendar=new CalendarSubscription("shared","Shared",true,Announce:true,AllRichClients:true,Notifications:new([], [Time], Zone.Id));Store.Update(A.Id,A=>A with{Calendars=[Calendar]});
+        JsonObject Timed(string Id,string Title,string? Status=null)=>new(){["id"]=Id,["summary"]=Title,["status"]=Status??"confirmed",["start"]=new JsonObject{["dateTime"]=Due.AddHours(-1).ToString("O")}};
+        var Handler=new FakeGoogle{EventStart=Now,EventPages=[new JsonArray(Timed("a","Earlier meeting"),new JsonObject{["id"]="all-day",["summary"]="All-day birthday",["start"]=new JsonObject{["date"]=Date.ToString("yyyy-MM-dd")}}),new JsonArray(Timed("recurring-1","Recurring instance"),Timed("gone","Cancelled meeting","cancelled"))]};
+        var Client=new GoogleCalendarClient(Store,new Factory(Handler));
+        CalendarScheduler Scheduler()=>new(Store,Client,Provider.GetRequiredService<IServiceScopeFactory>(),new SatelliteManager(),Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance,Notices,new CalendarRecipients(Config));
+        await Scheduler().Tick(A.Id,Calendar,Due.AddSeconds(-1),default);Assert.Empty(Notices.List("alice","phone"));
+        await Scheduler().Tick(A.Id,Calendar,Now,default);
+        var First=Assert.Single(Notices.List("alice","phone"));Assert.Equal(Due,First.DueAt);Assert.Contains("3 events",First.Text);Assert.Contains("Earlier meeting",First.Text);Assert.Contains("All day: All-day birthday",First.Text);Assert.Contains("Recurring instance",First.Text);Assert.DoesNotContain("Cancelled meeting",First.Text);
+        Handler.EventPages=[new JsonArray(Timed("new","Changed after snapshot"))];
+        Config["RichClients:Clients:tablet:Token"]=new string('b',32);Config["RichClients:Clients:tablet:Owner"]="bob";
+        await Scheduler().Tick(A.Id,Calendar,Now.AddSeconds(30),default);
+        Assert.Single(Notices.List("alice","phone"));Assert.Equal(First.Text,Assert.Single(Notices.List("bob","tablet")).Text);
+        Handler.EventPages=[new JsonArray()];
+        var Tomorrow=CalendarNotificationSettings.LocalTime(Date.AddDays(1),TimeOnly.Parse(Time),Zone);
+        await Scheduler().Tick(A.Id,Calendar,Tomorrow.AddSeconds(30),default);
+        Assert.Equal(2,Notices.List("alice","phone").Length);Assert.Contains(Notices.List("alice","phone"),N=>N.Text.Contains("No events today"));
+    }
+    [Fact]
+    public void LongAgendasAreSplitWithoutDroppingEventsAndSchedulesHandleDst()
+    {
+        var Items=Enumerable.Range(0,120).Select(I=>new JsonObject{["summary"]="Event "+I+new string('x',60),["start"]=new JsonObject{["date"]="2026-11-04"}}).ToArray();
+        var Parts=CalendarScheduler.AgendaParts("Family",Items,TimeZoneInfo.Utc,new(2026,11,4));
+        Assert.True(Parts.Length>1);Assert.All(Parts,P=>Assert.True(P.Length<=1700));Assert.Contains("Event 119",string.Join(" ",Parts));
+        var Zone=TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        Assert.Equal(DateTimeOffset.Parse("2026-03-08T07:00:00Z"),CalendarNotificationSettings.LocalTime(new(2026,3,8),new(2,30),Zone));
+        Assert.Equal(DateTimeOffset.Parse("2026-11-01T06:30:00Z"),CalendarNotificationSettings.LocalTime(new(2026,11,1),new(1,30),Zone));
+        Assert.Throws<ArgumentException>(()=>new CalendarNotificationSettings([new(366,"days")],[],"UTC").Validate());
+        Assert.Throws<ArgumentException>(()=>new CalendarNotificationSettings([], ["25:00"],"UTC").Validate());
+        Assert.Throws<ArgumentException>(()=>new CalendarNotificationSettings([], [],"invalid-zone").Validate());
+    }
     private static string Credential()
     {
         using var Rsa = RSA.Create(2048);
@@ -243,6 +311,7 @@ public sealed class GoogleCalendarTests : IDisposable
         public JsonArray CalendarDefaults = [];
         public JsonObject? EventReminders;
         public string EventStatus = "confirmed";
+        public JsonArray[]? EventPages;
         public DateTimeOffset? EventStart;
         public int AuthCalls, Deletes; public string? IfMatch;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Ct)
@@ -258,6 +327,12 @@ public sealed class GoogleCalendarTests : IDisposable
             if (EventStart is { } At)
             {
                 if (Request.RequestUri.AbsolutePath.Contains("calendarList")) return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { timeZone="UTC",defaultReminders=CalendarDefaults }) };
+                if(EventPages is not null)
+                {
+                    var Index=Request.RequestUri.Query.Contains("pageToken=")?int.Parse(System.Text.RegularExpressions.Regex.Match(Request.RequestUri.Query,@"pageToken=(\d+)").Groups[1].Value):0;
+                    var Page=new JsonObject{["items"]=EventPages[Index].DeepClone()};if(Index+1<EventPages.Length)Page["nextPageToken"]=(Index+1).ToString();
+                    return new(HttpStatusCode.OK){Content=JsonContent.Create(Page)};
+                }
                 return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { items = new object[] {
                     new { id = "recurring-instance", summary = "Dentist", status=EventStatus, start = new { dateTime = At }, reminders = EventReminders ?? JsonSerializer.SerializeToNode(new { useDefault = false, overrides = new[] { new { method = "popup", minutes = ReminderLead } } })!.AsObject() },
                     new { id = "silent", summary = "No reminder", start = new { dateTime = At }, reminders = new { useDefault = false, overrides = Array.Empty<object>() } }

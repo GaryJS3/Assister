@@ -32,9 +32,12 @@ public sealed class GoogleCalendarDashboardTests
                 Assert.Equal(HttpStatusCode.BadRequest,Bad.StatusCode);
                 var NoTargets=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,satelliteIds=Array.Empty<string>(),richClients=Array.Empty<object>()});
                 Assert.Equal(HttpStatusCode.BadRequest,NoTargets.StatusCode);
-                var All=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,allSatellites=true,allRichClients=true});
+                var InvalidSchedule=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,allRichClients=true,notifications=new {before=new[]{new{amount=-1,unit="days"}},dailyTimes=new[]{"08:00"},timeZone="America/New_York"}});
+                Assert.Equal(HttpStatusCode.BadRequest,InvalidSchedule.StatusCode);
+                var All=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,allSatellites=true,allRichClients=true,notifications=new{before=new[]{new{amount=10,unit="minutes"},new{amount=2,unit="hours"},new{amount=1,unit="days"}},dailyTimes=new[]{"08:00"},timeZone="America/New_York"}});
                 Assert.Equal(HttpStatusCode.NoContent,All.StatusCode);
                 var Dynamic=Assert.Single(Store.Get(Account.Id).Calendars); Assert.True(Dynamic.AllSatellites); Assert.True(Dynamic.AllRichClients); Assert.Empty(Dynamic.SatelliteTargets); Assert.Empty(Dynamic.RichClients!);
+                Assert.Equal(new[]{10,120,1440},Dynamic.Notifications!.Before.Select(R=>R.Minutes));Assert.Equal(["08:00"],Dynamic.Notifications.DailyTimes);
                 var Save=await Http.PutAsJsonAsync(Path,new {enabled=true,announce=true,satelliteIds=new[]{"kitchen","office","kitchen"},richClients=new[]{new{clientId="phone",owner="gary"}}});
                 Assert.Equal(HttpStatusCode.NoContent,Save.StatusCode);
                 var Saved=Assert.Single(Store.Get(Account.Id).Calendars); Assert.Equal(["kitchen","office"],Saved.SatelliteTargets); Assert.Equal("",Saved.SatelliteId); Assert.Equal(new CalendarRichRecipient("phone","gary"),Assert.Single(Saved.RichClients!));
@@ -45,6 +48,7 @@ public sealed class GoogleCalendarDashboardTests
             }
             var Persisted=new CalendarStore(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Assister:DataPath"]=PathName}).Build());
             Assert.Equal(["kitchen"],Assert.Single(Assert.Single(Persisted.Snapshot()).Calendars).SatelliteTargets);
+            Assert.Equal(["08:00"],Assert.Single(Assert.Single(Persisted.Snapshot()).Calendars).Notifications!.DailyTimes);
         }
         finally {Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();if(Directory.Exists(PathName))Directory.Delete(PathName,true);}
     }

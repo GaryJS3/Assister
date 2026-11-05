@@ -48,6 +48,7 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
     }
     public async Task Tick(string Account, CalendarSubscription Calendar, DateTimeOffset Now, CancellationToken Ct)
     {
+        if (Calendar.Notifications is { Before.Length: 0, DailyTimes.Length: 0 }) return;
         await using var Scope = Scopes.CreateAsyncScope();
         var SatelliteTargets = Calendar.AllSatellites
             ? await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Satellites.AsNoTracking().Where(S => S.Enabled).Select(S => S.Id).ToArrayAsync(Ct)
@@ -57,63 +58,135 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
         var Metadata = await Client.Send(Account, HttpMethod.Get, "users/me/calendarList/" + GoogleCalendarClient.Escape(Calendar.Id), null, Ct);
         var Store = Scope.ServiceProvider.GetRequiredService<LocalStore>();
         var Speech = Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>();
-        string? Next = null;
-        do
+        var ZoneId = Metadata["timeZone"]?.GetValue<string>() ?? "UTC";
+        var LocalSchedule = Calendar.Notifications;
+        var LeadTimes = LocalSchedule?.Before.Select(R => R.Minutes).Distinct().ToArray();
+        if (LocalSchedule is not null)
         {
-            var Page = await Client.Events(Account, Calendar.Id, Now.AddMinutes(-5), Now.AddDays(28).AddMinutes(1), Next, Ct);
-            foreach (var Item in Page["items"]!.AsArray().OfType<JsonObject>())
+            var Zone = TimeZoneInfo.FindSystemTimeZoneById(LocalSchedule.TimeZone);
+            var Today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(Now, Zone).DateTime);
+            foreach (var Date in new[] { Today.AddDays(-1), Today })
+                foreach (var Time in LocalSchedule.DailyTimes)
+                {
+                    var Due = CalendarNotificationSettings.LocalTime(Date, TimeOnly.ParseExact(Time, "HH:mm", CultureInfo.InvariantCulture), Zone);
+                    if (Due > Now || Due < Now.AddMinutes(-5)) continue;
+                    var From = CalendarNotificationSettings.LocalTime(Date, TimeOnly.MinValue, Zone);
+                    var To = CalendarNotificationSettings.LocalTime(Date.AddDays(1), TimeOnly.MinValue, Zone);
+                    var AgendaKey = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Date, Time, Zone = Zone.Id });
+                    var Saved = await Store.QueryAsync("SELECT Payload FROM GoogleCalendarAgendas WHERE AgendaKey=$p0", Ct, AgendaKey);
+                    string[] Parts;
+                    if (Saved.Count != 0) Parts = System.Text.Json.JsonSerializer.Deserialize<string[]>(Saved[0][0])!;
+                    else
+                    {
+                        var DailyEvents = await Events(From, To);
+                        Parts = AgendaParts(Calendar.Name, DailyEvents, Zone, Date);
+                        await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarAgendas VALUES($p0,$p1,$p2)", Ct, AgendaKey,
+                            System.Text.Json.JsonSerializer.Serialize(Parts), To.AddDays(1).ToUnixTimeSeconds());
+                    }
+                    for (var Part = 0; Part < Parts.Length; Part++)
+                        await SendToRecipients("", To, -1, Parts[Part], Parts[Part], Due, To.AddMinutes(5), AgendaKey, Part);
+                }
+        }
+        if (LeadTimes is null || LeadTimes.Length != 0)
+        {
+            var LookAhead = LeadTimes is null ? 40320 : LeadTimes.Max();
+            foreach (var Item in await Events(Now.AddMinutes(-5), Now.AddMinutes(LookAhead).AddMinutes(1)))
             {
-                if (Item["status"]?.GetValue<string>() == "cancelled" || Start(Item, Metadata["timeZone"]?.GetValue<string>() ?? "UTC") is not { } At || At < Now.AddMinutes(-5)) continue;
-                foreach (var Minutes in ReminderMinutes(Item, Metadata["defaultReminders"] as JsonArray ?? []))
+                if (Item["status"]?.GetValue<string>() == "cancelled" || Start(Item, ZoneId) is not { } At || At < Now.AddMinutes(-5)) continue;
+                foreach (var Minutes in LeadTimes ?? ReminderMinutes(Item, Metadata["defaultReminders"] as JsonArray ?? []))
                 {
                     if (At < Now && Minutes != 0) continue;
                     var Due = At.AddMinutes(-Minutes);
                     // A five-minute grace period tolerates polling delays without replaying old notifications after downtime.
                     if (Due > Now || Due < Now.AddMinutes(-5)) continue;
-                    var Text = "Upcoming event: " + (Item["summary"]?.GetValue<string>() ?? "Untitled event") + (Minutes == 0 ? ". Starting now." : $". Starts in {Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes))} minutes.");
-                    foreach (var Target in RichTargets)
-                    {
-                        var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, Target.ClientId, Target.Owner });
-                        await Deliver(Key, async () =>
-                        {
-                            if (Notifications is null || Recipients?.Available(Target) != true) return false;
-                            // Deterministic request fields let the notification store deduplicate a retry after a crash.
-                            var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
-                            if (Title.Length > 500) Title = Title[..500];
-                            var StableText = "Upcoming event: " + Title + ". Starts " + At.ToString("MMMM d, yyyy 'at' h:mm tt zzz", CultureInfo.InvariantCulture) + ".";
-                            var RetryKey = "calendar:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Key)));
-                            Notifications.Create(Target.Owner, new("reminder", StableText, RetryKey, DueAt: Due,
-                                ExpiresAt: Minutes == 0 ? At.AddMinutes(5) : At, TargetClientId: Target.ClientId));
-                            await Task.CompletedTask;
-                            return true; // Persisted for the client to receive; never a claim of display/playback.
-                        });
-                    }
-                    foreach (var Target in SatelliteTargets)
-                    {
-                        // Keep the original key shape so a migrated single-target subscription cannot replay delivery.
-                        var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, SatelliteId = Target });
-                        await Deliver(Key, async () => Satellites.ConnectedIds.Contains(Target) && !Satellites.IsBusy(Target)
-                            && await Satellites.AnnounceAsync(Target, Text, Speech, Ct));
-                    }
-
-                    async Task Deliver(string Key, Func<Task<bool>> Send)
-                    {
-                        if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) return;
-                        try
-                        {
-                            if (await Send()) await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
-                        }
-                        catch (OperationCanceledException) when (Ct.IsCancellationRequested) { throw; }
-                        catch (Exception Error)
-                        {
-                            LastError = "A calendar notification recipient could not be reached. Other recipients continue independently.";
-                            Logger.LogWarning("Calendar recipient delivery deferred ({FailureType}).", Error.GetType().Name);
-                        }
-                    }
+                    var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
+                    if (Title.Length > 500) Title = Title[..500];
+                    var StableText = "Upcoming event: " + Title + ". Starts " + At.ToString("MMMM d, yyyy 'at' h:mm tt zzz", CultureInfo.InvariantCulture) + ".";
+                    var Text = Minutes >= 60 ? StableText : "Upcoming event: " + Title + (Minutes == 0 ? ". Starting now." : $". Starts in {Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes))} minutes.");
+                    await SendToRecipients(Item["id"]!.GetValue<string>(), At, Minutes, Text, StableText, Due, Minutes == 0 ? At.AddMinutes(5) : At);
                 }
             }
-            Next = Page["nextPageToken"]?.GetValue<string>();
-        } while (Next is not null);
-        await Store.ExecuteAsync("DELETE FROM GoogleCalendarDeliveries WHERE ExpiresAt < $p0", Ct, Now.ToUnixTimeSeconds());
+        }
+        await Store.ExecuteAsync("DELETE FROM GoogleCalendarDeliveries WHERE ExpiresAt < $p0; DELETE FROM GoogleCalendarAgendas WHERE ExpiresAt < $p0", Ct, Now.ToUnixTimeSeconds());
+
+        async Task<List<JsonObject>> Events(DateTimeOffset From, DateTimeOffset To)
+        {
+            var Items = new List<JsonObject>(); string? Next = null;
+            do
+            {
+                var Page = await Client.Events(Account, Calendar.Id, From, To, Next, Ct);
+                Items.AddRange(Page["items"]!.AsArray().OfType<JsonObject>());
+                Next = Page["nextPageToken"]?.GetValue<string>();
+            } while (Next is not null);
+            return Items;
+        }
+
+        async Task SendToRecipients(string EventId, DateTimeOffset At, int Minutes, string Text, string StableText,
+            DateTimeOffset Due, DateTimeOffset Expires, string? AgendaKey = null, int Part = 0)
+        {
+            foreach (var Target in RichTargets)
+            {
+                var Key = AgendaKey is null
+                    ? System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = EventId, At, Minutes, Target.ClientId, Target.Owner })
+                    : System.Text.Json.JsonSerializer.Serialize(new { AgendaKey, Part, Target.ClientId, Target.Owner });
+                await Deliver(Key, async () =>
+                {
+                    if (Notifications is null || Recipients?.Available(Target) != true) return false;
+                    var RetryKey = "calendar:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Key)));
+                    Notifications.Create(Target.Owner, new("reminder", StableText, RetryKey, DueAt: Due,
+                        ExpiresAt: Expires, TargetClientId: Target.ClientId));
+                    await Task.CompletedTask;
+                    return true; // Persisted for the client to receive; never a claim of display/playback.
+                });
+            }
+            foreach (var Target in SatelliteTargets)
+            {
+                // Keep the original key shape so a migrated single-target subscription cannot replay delivery.
+                var Key = AgendaKey is null
+                    ? System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = EventId, At, Minutes, SatelliteId = Target })
+                    : System.Text.Json.JsonSerializer.Serialize(new { AgendaKey, Part, SatelliteId = Target });
+                await Deliver(Key, async () => Satellites.ConnectedIds.Contains(Target) && !Satellites.IsBusy(Target)
+                    && await Satellites.AnnounceAsync(Target, Text, Speech, Ct));
+            }
+
+            async Task Deliver(string Key, Func<Task<bool>> Send)
+            {
+                if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) return;
+                try
+                {
+                    if (await Send()) await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
+                }
+                catch (OperationCanceledException) when (Ct.IsCancellationRequested) { throw; }
+                catch (Exception Error)
+                {
+                    LastError = "A calendar notification recipient could not be reached. Other recipients continue independently.";
+                    Logger.LogWarning("Calendar recipient delivery deferred ({FailureType}).", Error.GetType().Name);
+                }
+            }
+        }
+    }
+
+    public static string[] AgendaParts(string CalendarName, IReadOnlyList<JsonObject> Events, TimeZoneInfo Zone, DateOnly Date)
+    {
+        var Lines = new List<string>();
+        foreach (var Item in Events.Where(E => E["status"]?.GetValue<string>() != "cancelled"))
+        {
+            var At = Start(Item, Zone.Id);
+            if (At is null) continue;
+            var Local = TimeZoneInfo.ConvertTime(At.Value, Zone);
+            var When = Item["start"]?["date"] is not null ? "All day" : Local.ToString(DateOnly.FromDateTime(Local.DateTime) == Date ? "h:mm tt" : "MMM d 'at' h:mm tt", CultureInfo.InvariantCulture);
+            var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
+            Lines.Add(When + ": " + Title[..Math.Min(Title.Length, 500)] + ".");
+        }
+        CalendarName = CalendarName[..Math.Min(CalendarName.Length, 100)];
+        var Header = "Today's events for " + CalendarName + ": " + (Lines.Count == 0 ? "No events today." : Lines.Count + " event" + (Lines.Count == 1 ? ". " : "s. "));
+        var Parts = new List<string>(); var Text = Header;
+        foreach (var Line in Lines)
+        {
+            if (Text.Length + Line.Length + 1 > 1700) { Parts.Add(Text); Text = "Today's events for " + CalendarName + ", continued. "; }
+            Text += Line + " ";
+        }
+        Parts.Add(Text.TrimEnd());
+        return Parts.ToArray();
     }
 }
