@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Assister.Contracts;
 using Assister.Persistence;
 using Assister.Satellites;
+using Assister.Interactions;
 
 namespace Assister.Tests;
 
@@ -36,6 +37,79 @@ public sealed class GoogleCalendarTests : IDisposable
         Assert.Contains("Google Calendar API is enabled", Message); Assert.DoesNotContain("private proxy", Message);
     }
     private readonly string DirectoryName = Path.Combine(Path.GetTempPath(), "assister-calendar-tests-" + Guid.NewGuid());
+    [Fact]
+    public void LegacySatelliteSurvivesRestartAndExplicitEmptySelectionClearsIt()
+    {
+        var Store = this.Store(); var A = Store.Add("Home", Credential());
+        Store.Update(A.Id, A => A with { Calendars = [new("c", "Calendar", true, "kitchen", true)] });
+        var Legacy = Assert.Single(this.Store().Get(A.Id).Calendars);
+        Assert.Equal(["kitchen"], Legacy.SatelliteTargets);
+        Assert.Empty((Legacy with { SatelliteIds = [] }).SatelliteTargets);
+    }
+    [Theory]
+    [InlineData("overrides", 10)]
+    [InlineData("defaults", 30)]
+    [InlineData("none", -1)]
+    [InlineData("cancelled", -1)]
+    [InlineData("failure", 10)]
+    public async Task EventSettingsControlMultipleSatellitesAndRichRecipients(string Mode, int ExpectedMinutes)
+    {
+        var Store = this.Store(); var A = Store.Add("Home", Credential()); var Now = DateTimeOffset.UtcNow;
+        var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
+            ["Assister:DataPath"] = DirectoryName, ["RichClients:Clients:phone:Token"] = new string('a',32), ["RichClients:Clients:phone:Owner"] = "alice",
+            ["RichClients:Clients:tablet:Token"] = new string('b',32), ["RichClients:Clients:tablet:Owner"] = "bob"
+        }).Build();
+        using var Notifications = new NotificationStore(Config);
+        var Recipients = new CalendarRecipients(Config);
+        var Calendar = new CalendarSubscription("shared", "Shared", true, Announce:true, SatelliteIds:["kitchen","office","offline"], RichClients:[new("phone","alice"),new("tablet","bob")]);
+        Store.Update(A.Id, A => A with { Calendars = [Calendar] });
+        var Handler = new FakeGoogle { EventStart = Now.AddMinutes(30), EventStatus = Mode == "cancelled" ? "cancelled" : "confirmed",
+            CalendarDefaults = JsonNode.Parse("[{\"method\":\"popup\",\"minutes\":30}]")!.AsArray(),
+            EventReminders = JsonNode.Parse(Mode == "defaults" ? "{\"useDefault\":true}" : Mode == "none" ? "{\"useDefault\":false,\"overrides\":[]}" : "{\"useDefault\":false,\"overrides\":[{\"method\":\"popup\",\"minutes\":10},{\"method\":\"email\",\"minutes\":10}]}")!.AsObject() };
+        var Client = new GoogleCalendarClient(Store, new Factory(Handler));
+        var Services = new ServiceCollection(); Services.AddDbContext<AssisterDbContext>(O => O.UseSqlite("Data Source=" + Path.Combine(DirectoryName,"recipients.db") + ";Pooling=False"));
+        Services.AddScoped<LocalStore>(); Services.AddSingleton<ITextToSpeechProvider,Speech>();
+        await using var Provider = Services.BuildServiceProvider();
+        await using (var Scope = Provider.CreateAsyncScope()) await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Database.MigrateAsync();
+        var Manager = new SatelliteManager(); var Kitchen = new Speaker { Fail = Mode == "failure" }; var Office = new Speaker("office");
+        foreach (var Speaker in new[] {Kitchen,Office}) { Manager.Register(Speaker); Manager.Update(Speaker.SatelliteId, S => S with { Capabilities = new() { AnnouncementPlayback = true } }); }
+        CalendarScheduler Scheduler() => new(Store, Client, Provider.GetRequiredService<IServiceScopeFactory>(), Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance, Notifications, Recipients);
+        await Scheduler().Tick(A.Id, Calendar, Now, default);
+        if (Mode == "overrides") { Assert.Equal(0, Kitchen.Deliveries); Assert.Empty(Notifications.List("alice","phone")); }
+        var Due = ExpectedMinutes == 10 ? Now.AddMinutes(20) : Now;
+        await Scheduler().Tick(A.Id, Calendar, Due, default);
+        await Scheduler().Tick(A.Id, Calendar, Due.AddSeconds(30), default);
+        if (ExpectedMinutes == -1) { Assert.Equal(0,Kitchen.Deliveries); Assert.Equal(0,Office.Deliveries); Assert.Empty(Notifications.List("alice","phone")); return; }
+        var KitchenDeliveries = Mode == "failure" ? 0 : 1;
+        Assert.Equal(KitchenDeliveries,Kitchen.Deliveries); Assert.Equal(1,Office.Deliveries);
+        var Notice = Assert.Single(Notifications.List("alice","phone"));
+        Assert.Equal(Due, Notice.DueAt); Assert.Equal(Now.AddMinutes(30), Notice.ExpiresAt); Assert.Equal("phone",Notice.TargetClientId);
+        Assert.Single(Notifications.List("bob","tablet")); Assert.Empty(Notifications.List("alice","laptop")); Assert.Empty(Notifications.List("bob","phone"));
+        var Offline = new Speaker("offline"); Manager.Register(Offline); Manager.Update("offline", S => S with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Scheduler().Tick(A.Id, Calendar, Due.AddMinutes(1), default);
+        Assert.Equal(1,Offline.Deliveries); Assert.Equal(KitchenDeliveries,Kitchen.Deliveries); Assert.Single(Notifications.List("alice","phone"));
+        // Reassignment/revocation must not send the next occurrence to a different owner or a revoked credential.
+        Config["RichClients:Clients:phone:Owner"] = "other"; Config["RichClients:Clients:tablet:Token"] = "";
+        Handler.EventStart = Now.AddDays(1).AddMinutes(30);
+        await Scheduler().Tick(A.Id, Calendar, Due.AddDays(1), default);
+        Assert.Empty(Notifications.List("other","phone")); Assert.Single(Notifications.List("bob","tablet"));
+    }
+    [Fact]
+    public async Task RichOnlySubscriptionQueuesEvenWithNoConnectedSatellites()
+    {
+        var Store = this.Store(); var A = Store.Add("Home", Credential()); var Now = DateTimeOffset.UtcNow;
+        var Config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Assister:DataPath"]=DirectoryName, ["RichClients:Clients:phone:Token"]=new string('a',32), ["RichClients:Clients:phone:Owner"]="alice" }).Build();
+        using var Notices = new NotificationStore(Config);
+        var Calendar = new CalendarSubscription("shared","Shared",true,Announce:true,SatelliteIds:[],RichClients:[new("phone","alice")]); Store.Update(A.Id,A=>A with { Calendars=[Calendar] });
+        var Client = new GoogleCalendarClient(Store,new Factory(new FakeGoogle {EventStart=Now.AddMinutes(10), EventReminders=JsonNode.Parse("{\"useDefault\":false,\"overrides\":[{\"method\":\"popup\",\"minutes\":10},{\"method\":\"popup\",\"minutes\":5}]}")!.AsObject()}));
+        var Services = new ServiceCollection(); Services.AddDbContext<AssisterDbContext>(O=>O.UseSqlite("Data Source="+Path.Combine(DirectoryName,"rich.db")+";Pooling=False")); Services.AddScoped<LocalStore>(); Services.AddSingleton<ITextToSpeechProvider,Speech>();
+        await using var Provider=Services.BuildServiceProvider(); await using(var Scope=Provider.CreateAsyncScope()) await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Database.MigrateAsync();
+        var Scheduler=new CalendarScheduler(Store,Client,Provider.GetRequiredService<IServiceScopeFactory>(),new SatelliteManager(),Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance,Notices,new CalendarRecipients(Config));
+        await Scheduler.Tick(A.Id,Calendar,Now,default); Assert.Single(Notices.List("alice","phone",true));
+        await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(5),default);
+        await Scheduler.Tick(A.Id,Calendar,Now.AddMinutes(5).AddSeconds(30),default);
+        var Queued = Notices.List("alice","phone"); Assert.Equal(2,Queued.Length); Assert.Equal(new[] {Now,Now.AddMinutes(5)},Queued.Select(N=>N.DueAt));
+    }
     private CalendarStore Store() => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = DirectoryName }).Build());
     private static string Credential()
     {
@@ -70,6 +144,7 @@ public sealed class GoogleCalendarTests : IDisposable
         Manager.Update("kitchen", S => S with { Capabilities = new() { AnnouncementPlayback = true } });
         CalendarScheduler Scheduler() => new(Store, Client, Provider.GetRequiredService<IServiceScopeFactory>(), Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance);
         await Scheduler().Tick(A.Id, Calendar, Now, default);
+        Calendar = Calendar with { SatelliteId = "", SatelliteIds = ["kitchen"] };
         await Scheduler().Tick(A.Id, Calendar, Now.AddSeconds(30), default);
         Assert.Equal(1, Speaker.Deliveries);
         Assert.Contains("Dentist", Speaker.Text);
@@ -142,6 +217,9 @@ public sealed class GoogleCalendarTests : IDisposable
     {
         public int TokenLifetime = 3600;
         public int ReminderLead = 10;
+        public JsonArray CalendarDefaults = [];
+        public JsonObject? EventReminders;
+        public string EventStatus = "confirmed";
         public DateTimeOffset? EventStart;
         public int AuthCalls, Deletes; public string? IfMatch;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Ct)
@@ -156,9 +234,9 @@ public sealed class GoogleCalendarTests : IDisposable
             if (Request.Method == HttpMethod.Delete) { Deletes++; IfMatch = Request.Headers.GetValues("If-Match").Single(); return new(HttpStatusCode.NoContent); }
             if (EventStart is { } At)
             {
-                if (Request.RequestUri.AbsolutePath.Contains("calendarList")) return new(HttpStatusCode.OK) { Content = new StringContent("{\"timeZone\":\"UTC\",\"defaultReminders\":[]}") };
+                if (Request.RequestUri.AbsolutePath.Contains("calendarList")) return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { timeZone="UTC",defaultReminders=CalendarDefaults }) };
                 return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { items = new object[] {
-                    new { id = "recurring-instance", summary = "Dentist", start = new { dateTime = At }, reminders = new { useDefault = false, overrides = new[] { new { method = "popup", minutes = ReminderLead } } } },
+                    new { id = "recurring-instance", summary = "Dentist", status=EventStatus, start = new { dateTime = At }, reminders = EventReminders ?? JsonSerializer.SerializeToNode(new { useDefault = false, overrides = new[] { new { method = "popup", minutes = ReminderLead } } })!.AsObject() },
                     new { id = "silent", summary = "No reminder", start = new { dateTime = At }, reminders = new { useDefault = false, overrides = Array.Empty<object>() } }
                 } })) };
             }
@@ -170,12 +248,13 @@ public sealed class GoogleCalendarTests : IDisposable
         public async IAsyncEnumerable<AudioChunk> SynthesizeAsync(string Text, TextToSpeechOptions Options, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken Token)
         { await Task.CompletedTask; yield return new(new byte[2], 16000, 2, 1); }
     }
-    private sealed class Speaker : ISatelliteConnection
+    private sealed class Speaker(string Id = "kitchen") : ISatelliteConnection
     {
-        public string SatelliteId => "kitchen"; public string Name => "Kitchen"; public string? Area => null;
+        public string SatelliteId => Id; public string Name => Id; public string? Area => null;
         public int Deliveries; public string Text = "";
+        public bool Fail;
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new NotSupportedException();
         public Task SendEventAsync(SatelliteEvent Event, CancellationToken Token) { Text += JsonSerializer.Serialize(Event); return Task.CompletedTask; }
-        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) { await foreach (var Chunk in Audio.WithCancellation(Token)) { } Deliveries++; }
+        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) { if (Fail) throw new IOException("Simulated speaker failure"); await foreach (var Chunk in Audio.WithCancellation(Token)) { } Deliveries++; }
     }
 }
