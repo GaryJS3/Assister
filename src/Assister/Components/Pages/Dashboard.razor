@@ -16,8 +16,8 @@
     }
 </section>
 <div class="tabs" role="tablist" aria-label="Diagnostic panels">
-    <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="()=>panel="explorer"">Run explorer</button>
-    <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="()=>panel="debug"">Debug chat</button>
+    <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="@(() => panel = "explorer")">Run explorer</button>
+    <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
 </div>
 @if(panel=="explorer"){
     <div class="split">
@@ -32,7 +32,7 @@
                 <div class="tabs">@foreach(var q in new[]{"All","Failures","LLM","Direct","Voice","Debug"}){<button aria-pressed="@(quick==q)" @onclick="()=>quick=q">@q</button>}</div>
                 <small>@Filtered.Length of @runs.Length interactions · refresh every 3 seconds</small>
                 @foreach(var run in Filtered.Take(150)){
-                    <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="()=>SelectRun(run.Text("runId"))">
+                    <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="@(() => SelectRun(run.Text("runId")))">
                         <strong>@run.Text("userText","Waiting for transcript…")</strong>
                         <div class="subtle">@run.Text("source") · @run.Date("startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
                         <span class="status-pill @(run.Text("outcome")=="succeeded"?"good":run.Flag("hasFailures")?"bad":"")">@run.Text("outcome")</span>

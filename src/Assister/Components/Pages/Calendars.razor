@@ -22,7 +22,7 @@
                 <div class="row"><h2>@account.Text("name")</h2><small>@account.Text("email")</small></div>
                 <div class="actions"><button disabled="@busy" @onclick="()=>Discover(accountId)">Discover calendars</button>
                     <button class="danger" disabled="@busy" @onclick="()=>Disconnect(account)">Disconnect</button></div>
-                <label>Add shared calendar by ID <input value="@CalendarIdFor(accountId)" @onchange="e=>calendarIds[accountId]=e.Value?.ToString()??"" " placeholder="calendar@example.com" /></label>
+                <label>Add shared calendar by ID <input value="@CalendarIdFor(accountId)" @onchange="@((ChangeEventArgs e) => calendarIds[accountId] = e.Value?.ToString() ?? string.Empty)" placeholder="calendar@example.com" /></label>
                 <button disabled="@busy" @onclick="()=>AddCalendar(accountId)">Add calendar</button>
                 @foreach(var cal in account.Prop("calendars").Items()){
                     var state=GetState(account,cal);
@@ -59,13 +59,13 @@
                                 <button disabled="@(state.Before.Count>=10)" @onclick="()=>state.Before.Add(new AdvanceRule())">Add advance rule</button>
                                 <h3>Daily agendas</h3>
                                 @foreach(var daily in state.DailyTimes.ToArray()){
-                                    <div class="row"><input type="time" value="@daily.Time" @onchange="e=>daily.Time=e.Value?.ToString()??"08:00"" />
+                                    <div class="row"><input type="time" value="@daily.Time" @onchange="@((ChangeEventArgs e) => daily.Time = e.Value?.ToString() ?? "08:00")" />
                                         <button @onclick="()=>state.DailyTimes.Remove(daily)">Remove</button></div>
                                 }
                                 <button disabled="@(state.DailyTimes.Count>=4)" @onclick="()=>state.DailyTimes.Add(new DailyTime())">Add daily agenda time</button>
                                 <label>Time zone <input maxlength="100" @bind="state.TimeZone" /></label>
                             </fieldset>
-                            <button class="primary" disabled="@busy" @onclick="()=>SaveSubscription(accountId,cal,state)">Save subscription</button>
+                            <button class="primary" disabled="@busy" @onclick="() => SaveSubscription(accountId, cal.Text("id"), state)">Save subscription</button>
                         </div>
                     </details>
                 }
@@ -81,8 +81,8 @@
             }}
         </select></label>
         <div class="form-grid">
-            <label>From <input type="date" @bind="from" /></label>
-            <label>Through <input type="date" @bind="to" /></label>
+            <label>From <input type="date" value="@from" @onchange="e => from = e.Value?.ToString() ?? string.Empty" /></label>
+            <label>Through <input type="date" value="@to" @onchange="e => to = e.Value?.ToString() ?? string.Empty" /></label>
         </div>
         <button disabled="@(busy||string.IsNullOrEmpty(selectedCalendar))" @onclick="()=>LoadEvents(false)">Fetch events</button>
         @if(eventEditing){
@@ -94,9 +94,9 @@
                 <label class="check"><input type="checkbox" @bind="allDay" /> All-day event</label>
                 <div class="form-grid">
                     @if(allDay){
-                        <label>Start <input type="date" @bind="eventStart" /></label><label>End (exclusive) <input type="date" @bind="eventEnd" /></label>
+                        <label>Start <input type="date" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End (exclusive) <input type="date" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
                     }else{
-                        <label>Start <input type="datetime-local" @bind="eventStart" /></label><label>End <input type="datetime-local" @bind="eventEnd" /></label>
+                        <label>Start <input type="datetime-local" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End <input type="datetime-local" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
                     }
                 </div>
                 <label>Google notification <select @bind="notification">
@@ -175,7 +175,7 @@
     async Task AddCalendar(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/calendar-list",new{calendarId=CalendarIdFor(id)});calendarIds[id]="";await Refresh();notice="Calendar added.";});}
     async Task SaveSubscription(string account,string cal,SubscriptionState s){await Execute(async()=>{
         var rich=s.RichClients.Select(key=>{var parts=key.Split('|',2);return new{owner=parts[0],clientId=parts.Length>1?parts[1]:""};}).ToArray();
-        await Api.Put("/api/calendars/"+Enc(account)+"/subscriptions/"+Enc(cal.Text("id")),
+        await Api.Put("/api/calendars/"+Enc(account)+"/subscriptions/"+Enc(cal),
             new{enabled=s.Enabled,announce=s.Announce,allSatellites=s.AllSatellites,allRichClients=s.AllRichClients,
             satelliteIds=s.SatelliteIds.ToArray(),richClients=rich,notifications=new{before=s.Before.Select(x=>new{amount=x.Amount,unit=x.Unit}).ToArray(),
             dailyTimes=s.DailyTimes.Select(x=>x.Time).ToArray(),timeZone=s.TimeZone}});

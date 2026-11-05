@@ -12,7 +12,7 @@
     <div class="table-wrap"><table><thead><tr><th>Name</th><th>Area</th><th>Provider</th><th>Connection</th><th>Ownership</th><th>Activity</th><th>Last seen</th></tr></thead><tbody>
     @foreach(var entry in satellites){
         var d=entry.Prop("device");var r=entry.Prop("runtime");
-        <tr><td><button @onclick="()=>Select(d.Text("id"))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
+        <tr><td><button @onclick="@(() => Select(d.Text("id")))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
         <td>@d.Text("areaId","Unassigned")</td><td>@d.Text("providerType")</td>
         <td><span class="status-pill @(r.Text("connectionState")=="Online"?"good":"bad")">@r.Text("connectionState")</span></td>
         <td>@Ownership(r)</td><td>@Activity(r)</td><td>@r.Date("lastSeen")</td></tr>
@@ -36,7 +36,7 @@
                 }
             </div>
             <JsonDetails Title="Observed capabilities" Data="@runtime.Prop("capabilities")" />
-            @if(runtime.Number("voiceOwnership")==3){<button @onclick="()=>Command("POST",SatellitePath(id)+"/retry-ownership")">Retry voice ownership</button>}
+            @if(runtime.Number("voiceOwnership")==3){<button @onclick="@(() => Command("POST", SatellitePath(id) + "/retry-ownership"))">Retry voice ownership</button>}
         }else if(tab=="Voice"){
             <div class="grid">
                 <div class="panel"><h3>Active wake words</h3>@string.Join(", ",runtime.Prop("voiceConfiguration").Prop("activeWakeWords").Items().Select(x=>x.String()))</div>
@@ -50,31 +50,31 @@
                 <div class="row"><span>Playback: @runtime.Text("currentPlaybackState")</span><span>Mute: @runtime.Prop("muteState").String()</span></div>
                 <label>Announcement <textarea rows="2" maxlength="500" @bind="announcement"></textarea></label>
                 <label>Importance <select @bind="importance"><option value="notify">Notify</option><option value="high-importance">High importance</option><option value="acknowledge">Repeat until acknowledged</option><option value="alarm">Alarm</option></select></label>
-                <div class="actions"><button disabled="@(busy || runtime.Text("connectionState")!="Online")" @onclick="()=>Command("POST",SatellitePath(id)+"/announcement",new{message=announcement,importance})">Play announcement</button>
-                <button disabled="@busy" @onclick="()=>Command("POST",SatellitePath(id)+"/stop")">Stop / cancel</button></div>
+                <div class="actions"><button disabled="@(busy || runtime.Text("connectionState")!="Online")" @onclick="@(() => Command("POST", SatellitePath(id) + "/announcement", new { message = announcement, importance }))">Play announcement</button>
+                <button disabled="@busy" @onclick="@(() => Command("POST", SatellitePath(id) + "/stop"))">Stop / cancel</button></div>
                 <label>Volume: @volume% <input type="range" min="0" max="100" @bind="volume" /></label>
-                <button disabled="@(busy || !runtime.Prop("capabilities").Flag("volumeControl"))" @onclick="()=>Command("PUT",SatellitePath(id)+"/volume",new{volume=volume/100.0})">Set volume</button>
+                <button disabled="@(busy || !runtime.Prop("capabilities").Flag("volumeControl"))" @onclick="@(() => Command("PUT", SatellitePath(id) + "/volume", new { volume = volume / 100.0 }))">Set volume</button>
             </div>
         }else if(tab=="Groups"){
             <p class="muted">Groups can include audio satellites, Windows clients and Android devices belonging to the same owner.</p>
             @foreach(var owner in groups.Prop("owners").Items()){
                 var name=owner.String();var membership=groups.Prop("satellites").Items().FirstOrDefault(x=>x.Text("owner")==name&&x.Text("satelliteId")==id);
                 <div class="panel stack"><label>Groups for @name (comma-separated)
-                    <input value="@GroupValue(id,name,membership)" @onchange="e=>SetGroup(id,name,e.Value?.ToString()??"")" maxlength="2100" />
+                    <input value="@GroupValue(id,name,membership)" @onchange="@((ChangeEventArgs e) => SetGroup(id, name, e.Value?.ToString() ?? string.Empty))" maxlength="2100" />
                 </label><button disabled="@busy" @onclick="()=>SaveSatelliteGroups(id,name,membership)">Save groups</button></div>
             }
         }else if(tab=="Configuration"){
             <p class="muted">Runtime wake-word selection; firmware provisioning is outside Assister.</p>
             <p>Maximum enabled models: @runtime.Prop("voiceConfiguration").Number("maxActiveWakeWords")</p>
             @foreach(var word in runtime.Prop("voiceConfiguration").Prop("availableWakeWords").Items()){
-                <label class="check"><input type="checkbox" checked="@wakeWords.Contains(word.Text("id"))" @onchange="e=>ToggleWake(word.Text("id"),e.Value is true)" />@word.Text("name")</label>
+                <label class="check"><input type="checkbox" checked="@wakeWords.Contains(word.Text("id"))" @onchange="@((ChangeEventArgs e) => ToggleWake(word.Text("id"), e.Value is true))" />@word.Text("name")</label>
             }
             <button disabled="@(busy || !runtime.Prop("capabilities").Flag("wakeWordConfiguration") || runtime.Number("voiceOwnership")!=2)" @onclick="()=>SaveWakeWords(id,runtime)">Apply wake words</button>
             <JsonDetails Title="Device configuration" Data="@device" />
         }else if(tab=="Diagnostics"){
             <div class="actions"><button @onclick="()=>LoadDiagnostics(id)">Refresh diagnostics</button>
-            <button @onclick="()=>Command("POST",SatellitePath(id)+"/logs",new{enabled=true})">Read logs (60 seconds)</button>
-            <button @onclick="()=>Command("POST",SatellitePath(id)+"/logs",new{enabled=false})">Stop logs</button></div>
+            <button @onclick="@(() => Command("POST", SatellitePath(id) + "/logs", new { enabled = true }))">Read logs (60 seconds)</button>
+            <button @onclick="@(() => Command("POST", SatellitePath(id) + "/logs", new { enabled = false }))">Stop logs</button></div>
             <h3>Recent traces</h3>
             @foreach(var trace in traces.Take(20)){<p><a href="@("/?run="+Uri.EscapeDataString(trace.Text("runId")))">@trace.Text("userText",trace.Text("runId"))</a> · @trace.Text("outcome")</p>}
             <h3>Device events</h3>
@@ -91,7 +91,7 @@
             <details class="panel"><summary><strong>@c.Text("deviceName",clientId)</strong> <span class="status-pill @(c.Flag("online")?"good":"")">@(c.Flag("online")?"Online":"Offline")</span></summary>
                 <p class="muted">Client: @clientId · Owner: @c.Text("owner") · Version: @c.Text("clientVersion") · Last seen: @c.Date("lastSeen")</p>
                 <JsonDetails Title="Hardware and capabilities" Data="@c" />
-                <label>Groups (comma-separated) <input value="@ClientGroupValue(c)" @onchange="e=>clientGroups[clientId]=e.Value?.ToString()??"" " /></label>
+                <label>Groups (comma-separated) <input value="@ClientGroupValue(c)" @onchange="@((ChangeEventArgs e) => clientGroups[clientId] = e.Value?.ToString() ?? string.Empty)" /></label>
                 <button disabled="@busy" @onclick="()=>SaveClientGroups(c)">Save groups</button>
             </details>
         }

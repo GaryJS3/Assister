@@ -23,7 +23,7 @@
         <label>Remind me to <textarea rows="3" maxlength="500" @bind="message"></textarea></label>
         <div class="form-grid">
             <label>Repeat <select @bind="weekday"><option value="">Every day</option>@for(int day=0;day<7;day++){<option value="@day">Every @Days[day]</option>}</select></label>
-            <label>At <input type="time" @bind="time" /></label>
+            <label>At <input type="time" value="@time" @onchange="e => time = e.Value?.ToString() ?? string.Empty" /></label>
         </div>
         <label>Time zone <input @bind="zone" maxlength="100" /></label>
         <label>Announce on <select @bind="satellite"><option value="all">All satellites</option>

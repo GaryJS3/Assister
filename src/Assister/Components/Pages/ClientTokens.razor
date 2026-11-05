@@ -25,7 +25,7 @@
             @foreach(var c in clients){
                 <article class="panel stack"><div class="row"><strong>@c.Text("clientId")</strong><span class="status-pill @(c.Flag("revoked")?"bad":"good")">@(c.Flag("revoked")?"Revoked":"Active")</span></div>
                     <p class="muted">@(c.Flag("managed")?"Managed":"Server configuration") · Owner: @c.Text("owner")</p>
-                    <label>Reassign owner <input value="@OwnerValue(c)" @onchange="e=>SetOwner(c.Text("clientId"),e.Value?.ToString()??"")" /></label>
+                    <label>Reassign owner <input value="@OwnerValue(c)" @onchange="@((ChangeEventArgs e) => SetOwner(c.Text("clientId"), e.Value?.ToString() ?? string.Empty))" /></label>
                     <div class="actions"><button disabled="@busy" @onclick="()=>ChangeOwner(c)">Save owner</button>
                     <button disabled="@busy" @onclick="()=>Rotate(c)">@(c.Flag("revoked")?"Issue replacement":"Rotate token")</button>
                     @if(!c.Flag("revoked")){<button class="danger" disabled="@busy" @onclick="()=>Revoke(c)">Revoke</button>}</div>

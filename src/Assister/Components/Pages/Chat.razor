@@ -63,7 +63,7 @@
                 <div class="actions">
                     <button disabled="@busy" @onclick="ToggleMic">@(recording?"Stop and send recording":"Record voice")</button>
                     <button disabled="@(busy||string.IsNullOrEmpty(activeId))" @onclick="Cancel">Cancel current run</button>
-                    <button class="primary" disabled="@busy" @onclick="Send">@(busy?"Processing…":"Send")</button>
+                    <button class="primary" disabled="@busy" @onclick="() => Send()">@(busy?"Processing…":"Send")</button>
                 </div>
                 <small class="muted">Requests can execute real device commands. Microphone access requires HTTPS or localhost.</small>
             </div>
