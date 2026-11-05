@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,6 +16,25 @@ namespace Assister.Tests;
 
 public sealed class GoogleCalendarTests : IDisposable
 {
+    [Theory]
+    [InlineData("accessNotConfigured", "Enable the Google Calendar API")]
+    [InlineData("SERVICE_DISABLED", "Enable the Google Calendar API")]
+    [InlineData("rateLimitExceeded", "quota")]
+    [InlineData("insufficientPermissions", "authorization scope")]
+    public async Task GoogleFailureIncludesSpecificReasonAndActionWithoutRawMessage(string Reason, string Expected)
+    {
+        using var Response = new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = JsonContent.Create(new { error = new { message = "sensitive-body-should-not-appear", errors = new[] { new { reason = Reason } } } }) };
+        var Message = await GoogleCalendarClient.FailureMessage(Response, HttpMethod.Get, "users/me/calendarList", default);
+        Assert.Contains(Reason, Message); Assert.Contains(Expected, Message);
+        Assert.DoesNotContain("sensitive-body", Message);
+    }
+    [Fact]
+    public async Task NonJsonFailureStillProvidesSafeDiagnostic()
+    {
+        using var Response = new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new StringContent("private proxy response") };
+        var Message = await GoogleCalendarClient.FailureMessage(Response, HttpMethod.Get, "users/me/calendarList", default);
+        Assert.Contains("Google Calendar API is enabled", Message); Assert.DoesNotContain("private proxy", Message);
+    }
     private readonly string DirectoryName = Path.Combine(Path.GetTempPath(), "assister-calendar-tests-" + Guid.NewGuid());
     private CalendarStore Store() => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = DirectoryName }).Build());
     private static string Credential()
