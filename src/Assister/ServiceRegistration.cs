@@ -23,6 +23,7 @@ public static class ServiceRegistration
         Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarStore>();
         Services.AddSingleton<Assister.Modules.GoogleCalendar.GoogleCalendarClient>();
         Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarDeletion>();
+        Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarRecipients>();
         Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarScheduler>();
         Services.AddHostedService(S => S.GetRequiredService<Assister.Modules.GoogleCalendar.CalendarScheduler>());
         Services.AddHttpClient("google-calendar", C => C.Timeout = TimeSpan.FromSeconds(10))

@@ -3,7 +3,14 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Assister.Modules.GoogleCalendar;
 
-public sealed record CalendarSubscription(string Id, string Name, bool Enabled = false, string SatelliteId = "", bool Announce = false);
+public sealed record CalendarRichRecipient(string ClientId, string Owner);
+public sealed record CalendarSubscription(string Id, string Name, bool Enabled = false, string SatelliteId = "", bool Announce = false,
+    string[]? SatelliteIds = null, CalendarRichRecipient[]? RichClients = null)
+{
+    // Old saved subscriptions retain their single target until explicitly saved in the new editor.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] SatelliteTargets => SatelliteIds ?? (string.IsNullOrWhiteSpace(SatelliteId) ? [] : [SatelliteId]);
+}
 public sealed record CalendarAccount(string Id, string Name, string Email, string ProtectedKey, CalendarSubscription[] Calendars);
 public sealed class CalendarStore
 {

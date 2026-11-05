@@ -22,7 +22,8 @@ public sealed class CalendarDeletion
     }
 }
 public sealed record AccountInput(string Name, string Credential);
-public sealed record SubscriptionInput(bool Enabled, string SatelliteId, bool Announce);
+public sealed record SubscriptionInput(bool Enabled, string? SatelliteId = null, bool Announce = false,
+    string[]? SatelliteIds = null, CalendarRichRecipient[]? RichClients = null);
 public sealed record CalendarIdInput(string CalendarId);
 public sealed record ConfirmationInput(string Confirmation);
 public sealed record DefaultReminderInput(int? Minutes);
@@ -40,6 +41,7 @@ public static class CalendarEndpoints
         });
         Group.MapGet("/accounts", (CalendarStore Store) => Store.Snapshot().Select(A => new { A.Id, A.Name, A.Email, A.Calendars }));
         Group.MapGet("/status", (CalendarScheduler Scheduler) => new { Scheduler.LastChecked, Scheduler.LastError });
+        Group.MapGet("/recipients", (CalendarRecipients Recipients) => Recipients.Clients());
         Group.MapPost("/accounts", (AccountInput Input, CalendarStore Store) => { var A = Store.Add(Input.Name, Input.Credential); return Results.Ok(new { A.Id, A.Name, A.Email }); });
         Group.MapDelete("/accounts/{account}", (string Account, CalendarStore Store) => { Store.Remove(Account); return Results.NoContent(); });
         Group.MapPost("/{account}/discover", async (string Account, GoogleCalendarClient Client, CancellationToken Ct) => await Client.Discover(Account, Ct));
@@ -54,12 +56,16 @@ public static class CalendarEndpoints
             if (Input.Minutes is < 0 or > 40320) throw new ArgumentException("Notification minutes must be between 0 and 40320.");
             return await Client.Send(Account, HttpMethod.Patch, "users/me/calendarList/" + GoogleCalendarClient.Escape(Calendar), new JsonObject { ["defaultReminders"] = Input.Minutes is { } Minutes ? new JsonArray(new JsonObject { ["method"] = "popup", ["minutes"] = Minutes }) : new JsonArray() }, Ct);
         });
-        Group.MapPut("/{account}/subscriptions/{calendar}", (string Account, string Calendar, SubscriptionInput Input, CalendarStore Store) =>
+        Group.MapPut("/{account}/subscriptions/{calendar}", (string Account, string Calendar, SubscriptionInput Input, CalendarStore Store, CalendarRecipients Recipients) =>
         {
             if (!Store.Get(Account).Calendars.Any(C => C.Id == Calendar)) throw new ArgumentException("Fetch this calendar before subscribing.");
-            if (Input.SatelliteId is null || Input.SatelliteId.Length > 128) throw new ArgumentException("Invalid satellite ID.");
-            if (Input.Announce && string.IsNullOrWhiteSpace(Input.SatelliteId)) throw new ArgumentException("Choose an announcement satellite.");
-            Store.Update(Account, A => A with { Calendars = A.Calendars.Select(C => C.Id == Calendar ? C with { Enabled = Input.Enabled, Announce = Input.Announce, SatelliteId = Input.SatelliteId } : C).ToArray() });
+            var Satellites = Input.SatelliteIds ?? (string.IsNullOrWhiteSpace(Input.SatelliteId) ? [] : new[] { Input.SatelliteId });
+            var Clients = Input.RichClients ?? [];
+            if (Satellites.Length > 64 || Satellites.Any(Id => string.IsNullOrWhiteSpace(Id) || Id.Length > 128)) throw new ArgumentException("Choose at most 64 valid satellites.");
+            if (Clients.Length > 64 || Clients.Any(C => C is null || !Recipients.Available(C))) throw new ArgumentException("Choose available Rich API clients with their current owners. Refresh recipients if a client was revoked or reassigned.");
+            Satellites = Satellites.Distinct(StringComparer.Ordinal).ToArray(); Clients = Clients.Distinct().ToArray();
+            if (Input.Announce && Satellites.Length + Clients.Length == 0) throw new ArgumentException("Choose at least one satellite or Rich API client for notifications.");
+            Store.Update(Account, A => A with { Calendars = A.Calendars.Select(C => C.Id == Calendar ? C with { Enabled = Input.Enabled, Announce = Input.Announce, SatelliteId = "", SatelliteIds = Satellites, RichClients = Clients } : C).ToArray() });
             return Results.NoContent();
         });
         Group.MapGet("/{account}/{calendar}/events", async (string Account, string Calendar, DateTimeOffset From, DateTimeOffset To, string? Page, GoogleCalendarClient Client, CancellationToken Ct) => await Client.Events(Account, Calendar, From, To, Page, Ct));

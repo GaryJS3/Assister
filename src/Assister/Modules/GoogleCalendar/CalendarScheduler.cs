@@ -3,11 +3,15 @@ using System.Text.Json.Nodes;
 using Assister.Contracts;
 using Assister.Persistence;
 using Assister.Satellites;
+using Assister.Interactions;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Assister.Modules.GoogleCalendar;
 
 public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClient Client, IServiceScopeFactory Scopes,
-    SatelliteManager Satellites, ILogger<CalendarScheduler> Logger) : BackgroundService
+    SatelliteManager Satellites, ILogger<CalendarScheduler> Logger, NotificationStore? Notifications = null,
+    CalendarRecipients? Recipients = null) : BackgroundService
 {
     public string? LastError { get; private set; }
     public DateTimeOffset? LastChecked { get; private set; }
@@ -43,7 +47,9 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
     }
     public async Task Tick(string Account, CalendarSubscription Calendar, DateTimeOffset Now, CancellationToken Ct)
     {
-        if (!Satellites.ConnectedIds.Contains(Calendar.SatelliteId) || Satellites.IsBusy(Calendar.SatelliteId)) return;
+        var SatelliteTargets = Calendar.SatelliteTargets.Distinct(StringComparer.Ordinal).ToArray();
+        var RichTargets = (Calendar.RichClients ?? []).Distinct().Where(C => Recipients?.Available(C) == true).ToArray();
+        if (!SatelliteTargets.Any(Id => Satellites.ConnectedIds.Contains(Id) && !Satellites.IsBusy(Id)) && RichTargets.Length == 0) return;
         var Metadata = await Client.Send(Account, HttpMethod.Get, "users/me/calendarList/" + GoogleCalendarClient.Escape(Calendar.Id), null, Ct);
         await using var Scope = Scopes.CreateAsyncScope();
         var Store = Scope.ServiceProvider.GetRequiredService<LocalStore>();
@@ -61,11 +67,46 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
                     var Due = At.AddMinutes(-Minutes);
                     // A five-minute grace period tolerates polling delays without replaying old notifications after downtime.
                     if (Due > Now || Due < Now.AddMinutes(-5)) continue;
-                    var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, Calendar.SatelliteId });
-                    if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) continue;
                     var Text = "Upcoming event: " + (Item["summary"]?.GetValue<string>() ?? "Untitled event") + (Minutes == 0 ? ". Starting now." : $". Starts in {Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes))} minutes.");
-                    if (await Satellites.AnnounceAsync(Calendar.SatelliteId, Text, Speech, Ct))
-                        await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
+                    foreach (var Target in RichTargets)
+                    {
+                        var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, Target.ClientId, Target.Owner });
+                        await Deliver(Key, async () =>
+                        {
+                            if (Notifications is null || Recipients?.Available(Target) != true) return false;
+                            // Deterministic request fields let the notification store deduplicate a retry after a crash.
+                            var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
+                            if (Title.Length > 500) Title = Title[..500];
+                            var StableText = "Upcoming event: " + Title + ". Starts " + At.ToString("MMMM d, yyyy 'at' h:mm tt zzz", CultureInfo.InvariantCulture) + ".";
+                            var RetryKey = "calendar:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Key)));
+                            Notifications.Create(Target.Owner, new("reminder", StableText, RetryKey, DueAt: Due,
+                                ExpiresAt: Minutes == 0 ? At.AddMinutes(5) : At, TargetClientId: Target.ClientId));
+                            await Task.CompletedTask;
+                            return true; // Persisted for the client to receive; never a claim of display/playback.
+                        });
+                    }
+                    foreach (var Target in SatelliteTargets)
+                    {
+                        // Keep the original key shape so a migrated single-target subscription cannot replay delivery.
+                        var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, SatelliteId = Target });
+                        await Deliver(Key, async () => Satellites.ConnectedIds.Contains(Target) && !Satellites.IsBusy(Target)
+                            && await Satellites.AnnounceAsync(Target, Text, Speech, Ct));
+                    }
+
+                    async Task Deliver(string Key, Func<Task<bool>> Send)
+                    {
+                        if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) return;
+                        try
+                        {
+                            if (await Send()) await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
+                        }
+                        catch (OperationCanceledException) when (Ct.IsCancellationRequested) { throw; }
+                        catch (Exception Error)
+                        {
+                            LastError = "A calendar notification recipient could not be reached. Other recipients continue independently.";
+                            Logger.LogWarning("Calendar recipient delivery deferred ({FailureType}).", Error.GetType().Name);
+                        }
+                    }
                 }
             }
             Next = Page["nextPageToken"]?.GetValue<string>();
