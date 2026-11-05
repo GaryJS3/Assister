@@ -24,6 +24,14 @@ public sealed class LocalStore(AssisterDbContext Database)
         await using var Command = await CommandAsync(Sql, Values, Token);
         return await Command.ExecuteNonQueryAsync(Token);
     }
+    public async Task ExecuteTransactionAsync(string Sql, CancellationToken Token, params object?[] Values)
+    {
+        await using var Command = await CommandAsync(Sql, Values, Token);
+        await using var Transaction = await Command.Connection!.BeginTransactionAsync(Token);
+        Command.Transaction = Transaction;
+        await Command.ExecuteNonQueryAsync(Token);
+        await Transaction.CommitAsync(Token);
+    }
     public async Task<IReadOnlyList<string[]>> QueryAsync(string Sql, CancellationToken Token, params object?[] Values)
     {
         await using var Command = await CommandAsync(Sql, Values, Token);

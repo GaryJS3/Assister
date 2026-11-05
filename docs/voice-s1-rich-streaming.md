@@ -1,5 +1,9 @@
 # S1: rich-client streaming speech
 
+Deployed revision and real-provider/browser results are recorded in
+[voice-s1-deployment.md](voice-s1-deployment.md). The live gain is smaller than the
+synthetic result below, and full synthesis completion was slower in the live sample.
+
 Implemented locally October 23, 2026, on top of S0 in the working tree based on
 `b1eb4189dd431331224f6ad5b96c03ba35a319a6`. Deployment verification is tracked separately from these initial local measurements.
 
@@ -70,7 +74,7 @@ node --test tests/browser/*.test.cjs
 
 ## Validation and remaining acceptance
 
-Release tests: 391 unit/component plus 58 integration tests passed; all 17 browser
+Release tests: 391 unit/component plus 58 integration tests passed; all 18 browser
 script tests passed. Coverage includes early segment delivery during a gated
 generation, pre-completion playback reports, owner isolation, retained WAV size,
 cancel, changed authoritative answer, TTS failure, a full queue released on failure,
@@ -92,7 +96,8 @@ Reproduce the browser-only harness from the repository root:
 `http://localhost:8559/` and select **Run browser verification**. It binds only to
 localhost and does not contact production services.
 
-Deployment, real provider timing, audible long-reply acceptance on the intended
-client/device, end-of-speech to first useful playback, and device cancellation
-remain unverified. Native clients continue buffered playback until they implement
-the segment player; S2 satellite transports are unchanged.
+The initial local validation left deployment and live-provider/browser checks
+open; these have since been exercised in the deployment report above. Independent
+acoustic timing and physical-device acceptance remain open. Native clients continue
+buffered playback until they implement the segment player; S2 satellite transports
+are unchanged.

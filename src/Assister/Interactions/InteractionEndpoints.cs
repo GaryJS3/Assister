@@ -9,6 +9,7 @@ public static class InteractionEndpoints
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static void MapRichClients(this WebApplication App)
     {
+        App.MapDeviceGroups();
         // Management API follows the same access boundary as the existing satellite management API.
         App.MapGet("/api/devices/clients", (ClientSignals Signals) => Signals.Devices());
         App.MapPut("/api/devices/clients/{id}/groups", (string Id, DeviceGroups Request, ClientSignals Signals) =>

@@ -17,6 +17,60 @@ public sealed class RichClientTests
     private const string Token = "local-client-test-credential-123456789";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     [Fact]
+    public async Task MixedGroupCommandsPreserveTimerTargetsAndSatelliteMembership()
+    {
+        using var App = new TestApplication(UseFake: false);
+        using var Http = App.CreateClient(); Http.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+        using var TabletHttp = App.CreateClient(); TabletHttp.DefaultRequestHeaders.Authorization = new("Bearer", "tablet-client-test-credential-123456789");
+        var Client = new Assister.Client.AssisterClient(Http);
+        await Client.RegisterAsync(new("windows", "Desktop", []));
+        await new Assister.Client.AssisterClient(TabletHttp).RegisterAsync(new("android", "Phone", []));
+        foreach (var Id in new[] { "local", "tablet" })
+            (await Http.PutAsJsonAsync($"/api/devices/clients/{Id}/groups", new DeviceGroups(["Upstairs"]))).EnsureSuccessStatusCode();
+        (await Http.PostAsJsonAsync("/api/satellites", new Assister.Satellites.SatelliteRegistration("group-speaker", "Speaker", null, ""))).EnsureSuccessStatusCode();
+        (await Http.PutAsJsonAsync("/api/devices/satellites/group-speaker/groups", new Assister.Interactions.SatelliteGroupsInput("local", [" Upstairs ", "upstairs"]))).EnsureSuccessStatusCode();
+        var Memberships = App.Services.GetRequiredService<Assister.Interactions.NotificationStore>();
+        Assert.Equal("Upstairs", Assert.Single(Assert.Single(Memberships.SatelliteGroups()).Groups));
+        var Invalid = await Http.PutAsJsonAsync("/api/devices/satellites/group-speaker/groups", new Assister.Interactions.SatelliteGroupsInput("unknown-owner", ["Upstairs"]));
+        Assert.Equal(HttpStatusCode.BadRequest, Invalid.StatusCode);
+        var Missing = await Http.PutAsJsonAsync("/api/devices/satellites/missing/groups", new Assister.Interactions.SatelliteGroupsInput("local", ["Upstairs"]));
+        Assert.Equal(HttpStatusCode.NotFound, Missing.StatusCode);
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var Conversation = await Client.CreateConversationAsync();
+        async Task<string> Send(string Text)
+        {
+            var Request = await Client.SubmitAsync(Conversation.Id, Text, Guid.NewGuid().ToString(), Deadline.Token);
+            var Final = await WaitTerminal(Http, Request.Id, Deadline.Token);
+            Assert.Equal("completed", Final.Status); return Final.Response;
+        }
+        Assert.Contains("Queued announcement for device group Upstairs", await Send("announce alarm to group Upstairs: Dinner is ready"));
+        Assert.Contains("on device group Upstairs", await Send("set a tea timer for 1 hour on group Upstairs"));
+        Assert.Contains("on device group Upstairs", await Send("set a toast timer for 30 minutes on group Upstairs"));
+        Assert.Contains("Cancelled", await Send("cancel the toast timer"));
+        Assert.Contains("unavailable", await Send("set a timer for 1 hour on group Unknown"));
+        await using (var Scope = App.Services.CreateAsyncScope())
+        {
+            var Store = Scope.ServiceProvider.GetRequiredService<Assister.Persistence.LocalStore>();
+            await Store.ExecuteAsync("UPDATE Timers SET DueAt=0", default);
+            var Expiry = ActivatorUtilities.CreateInstance<Assister.Modules.Timers.TimerExpiryService>(Scope.ServiceProvider);
+            await Expiry.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), default);
+            // Retry after durable notification acceptance must deduplicate rather than broadcast to the owner.
+            await Store.ExecuteAsync("UPDATE Timers SET Status='notification-pending' WHERE Name='tea'", default);
+            await Expiry.TickAsync(Store, Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>(), default);
+        }
+        var Notices = (await Client.GetNotificationsAsync(true))!;
+        Assert.Equal(2, Notices.Length);
+        Assert.All(Notices, Notice => Assert.Equal("Upstairs", Notice.TargetGroup));
+        Assert.All(Notices, Notice => Assert.Equal("alarm", Notice.Importance));
+        Assert.Single(Notices, Notice => Notice.Kind == "timer");
+        Assert.Equal(2, (await TabletHttp.GetFromJsonAsync<ClientNotification[]>("/api/client/notifications?dueOnly=true"))!.Length);
+        Assert.Equal(2, Memberships.PendingForSatellite("group-speaker").Length);
+        (await Http.DeleteAsync("/api/satellites/group-speaker")).EnsureSuccessStatusCode();
+        Assert.Empty(Memberships.SatelliteGroups());
+        Assert.Empty(Memberships.PendingForSatellite("group-speaker"));
+    }
+
+    [Fact]
     public async Task DevicesPageShowsPersistentClientsAndGroupNotificationsReachOnlyMembers()
     {
         using var App = new TestApplication();

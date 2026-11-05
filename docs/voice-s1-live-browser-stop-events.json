@@ -1,0 +1,37 @@
+{
+  "revision": "205a490006f816edc9a2a40de6bff24ae9b68917",
+  "interactionId": "af6c566d-afd9-4249-8c08-a0fc8ba64310",
+  "status": "completed",
+  "events": [
+    {
+      "sequence": 5,
+      "type": "tts.started",
+      "timestamp": "2026-10-23T23:13:22.2726523-04:00"
+    },
+    {
+      "sequence": 33,
+      "type": "response.completed",
+      "timestamp": "2026-10-23T23:13:27.338242-04:00"
+    },
+    {
+      "sequence": 52,
+      "type": "playback.started",
+      "timestamp": "2026-10-23T23:13:28.080196-04:00"
+    },
+    {
+      "sequence": 98,
+      "type": "tts.audio",
+      "timestamp": "2026-10-23T23:13:29.4636683-04:00"
+    },
+    {
+      "sequence": 99,
+      "type": "tts.completed",
+      "timestamp": "2026-10-23T23:13:29.4838529-04:00"
+    },
+    {
+      "sequence": 102,
+      "type": "playback.stopped",
+      "timestamp": "2026-10-23T23:13:49.5955952-04:00"
+    }
+  ]
+}

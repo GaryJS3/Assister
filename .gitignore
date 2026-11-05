@@ -11,3 +11,6 @@ data/
 /dev.md
 **/__pycache__/
 /bridge/esphome/.test-runtime/
+
+/.codex-local/
+/.codex-remote-attachments/

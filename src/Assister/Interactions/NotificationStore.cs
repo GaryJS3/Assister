@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 namespace Assister.Interactions;
 
 // Independent of interaction lifetime: scheduled notices survive completed requests and restarts.
-public sealed class NotificationStore : IDisposable
+public sealed partial class NotificationStore : IDisposable
 {
     private readonly object Gate = new();
     private readonly SqliteConnection Database;
@@ -33,6 +33,7 @@ public sealed class NotificationStore : IDisposable
                 PRIMARY KEY(NotificationId,ClientId));
             """);
         Schema.ExecuteNonQuery();
+        InitializeSatelliteGroups();
     }
 
     public void RegisterRoute(string Route, string Owner)
@@ -116,6 +117,12 @@ public sealed class NotificationStore : IDisposable
         lock (Gate)
         {
             var Item = List(Owner, ClientId).FirstOrDefault(Item => Item.Id == Id);
+            if (Item is null)
+            {
+                // A group sender may be outside the recipient group but still owns the scheduled notice.
+                using var Query = Command("SELECT Payload FROM Notifications WHERE Owner=$p0 AND Id=$p1", Owner, Id.ToString());
+                if (Query.ExecuteScalar() is string Payload && Read(Payload) is { TargetGroup: not null } GroupItem) Item = GroupItem;
+            }
             if (Item is null) return false;
             using var Update = Command("UPDATE Notifications SET Payload=$p0 WHERE Id=$p1", JsonSerializer.Serialize(Item with { Status = "cancelled" }, Json), Id.ToString());
             Update.ExecuteNonQuery();
@@ -147,6 +154,8 @@ public sealed class NotificationStore : IDisposable
         Delete.ExecuteNonQuery();
         using var Receipts = Command("DELETE FROM NotificationReceipts WHERE NotificationId NOT IN (SELECT Id FROM Notifications)");
         Receipts.ExecuteNonQuery();
+        using var Deliveries = Command("DELETE FROM SatelliteNotificationDeliveries WHERE NotificationId NOT IN (SELECT Id FROM Notifications)");
+        Deliveries.ExecuteNonQuery();
     }
     private static ClientNotification Read(string Payload) => JsonSerializer.Deserialize<ClientNotification>(Payload, Json)!;
     private SqliteCommand Command(string Sql, params object[] Values)

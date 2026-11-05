@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-10-24T03:06:31.0052246+00:00",
+  "scope": "Second post-deployment observer run; first eleven sample completions printed, twelfth observer disconnected while draining audio. Aggregate JSON was not emitted.",
+  "error": "WebSocketException: The remote party closed the WebSocket connection without completing the close handshake.",
+  "serverRunId": "442044fb-4e77-48b9-a122-d7ef97bbe885",
+  "serverOutcome": "succeeded",
+  "serverDurationMs": 7057.7937,
+  "containerRestarts": 0,
+  "oomKilled": false,
+  "probeChange": "Use followPlayback=true to keep the subscription open while serial audio downloads are drained. No runtime application change."
+}

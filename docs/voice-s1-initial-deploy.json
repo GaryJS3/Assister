@@ -1,0 +1,53 @@
+{
+  "checkedAt": "2026-10-24T03:01:58.7279307+00:00",
+  "containerId": "f2b6bf0f07071f28ed0931af7d40a2de4da3195bd38cf0332e64de48ca11ffaf",
+  "image": "sha256:cbaae7a5f9760b289929d91166a845efbc7b3e20e940c1514294730edcb85751",
+  "revision": "f992e38b9f3daa3106d0df5ce5b1d25f57e4bac5",
+  "created": "2026-10-24T03:01:33.158058784Z",
+  "state": "running",
+  "restarts": 0,
+  "environmentUnchanged": true,
+  "applicationEnvironmentUnchanged": true,
+  "mounts": [
+    {
+      "Name": "assister_assister-data",
+      "Source": "/var/lib/docker/volumes/assister_assister-data/_data",
+      "Destination": "/data"
+    }
+  ],
+  "health": {
+    "status": "Healthy"
+  },
+  "status": {
+    "status": "Healthy",
+    "database": "Healthy",
+    "homeAssistant": "Connected",
+    "homeAssistantCache": {
+      "isStale": false,
+      "entityCount": 1813,
+      "stateEventCount": 1332,
+      "lastStateEventAt": "2026-10-23T23:01:59.4393126-04:00"
+    },
+    "components": [
+      {
+        "name": "Language model",
+        "status": "Healthy",
+        "detail": "Models endpoint HTTP 200; inference not tested by this probe."
+      },
+      {
+        "name": "Speech to text",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      },
+      {
+        "name": "Text to speech",
+        "status": "Healthy",
+        "detail": "Live Wyoming capability check; audio inference not tested by this probe"
+      }
+    ],
+    "satelliteCount": 3,
+    "activeVoiceSessions": 0,
+    "activeConversations": 12,
+    "implementationMilestone": 6
+  }
+}

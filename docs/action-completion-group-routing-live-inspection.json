@@ -1,0 +1,65 @@
+[
+  {
+    "text": "turn off all kitchen lights",
+    "passed": true,
+    "outcome": "ready",
+    "targets": [
+      "light.kitchen_main_lights",
+      "light.kitchen_sink_light"
+    ]
+  },
+  {
+    "text": "turn off all the kitchen lights",
+    "passed": true,
+    "outcome": "ready",
+    "targets": [
+      "light.kitchen_main_lights",
+      "light.kitchen_sink_light"
+    ]
+  },
+  {
+    "text": "turn off all of the kitchen lights",
+    "passed": true,
+    "outcome": "ready",
+    "targets": [
+      "light.kitchen_main_lights",
+      "light.kitchen_sink_light"
+    ]
+  },
+  {
+    "text": "turn off all lights in the kitchen",
+    "passed": true,
+    "outcome": "ready",
+    "targets": [
+      "light.kitchen_main_lights",
+      "light.kitchen_sink_light"
+    ]
+  },
+  {
+    "text": "set all kitchen lights to 10 percent",
+    "passed": true,
+    "outcome": "ready",
+    "targets": [
+      "light.kitchen_main_lights",
+      "light.kitchen_sink_light"
+    ]
+  },
+  {
+    "text": "turn off kitchen light",
+    "passed": true,
+    "outcome": "ambiguous",
+    "targets": []
+  },
+  {
+    "text": "turn off all conservatory lights",
+    "passed": true,
+    "outcome": "not-found",
+    "targets": []
+  },
+  {
+    "text": "turn off all lights",
+    "passed": true,
+    "outcome": "ambiguous",
+    "targets": []
+  }
+]

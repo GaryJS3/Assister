@@ -30,6 +30,11 @@ public interface IStreamingAudioPlayback
 
 public sealed class SatelliteManager
 {
+    public sealed class AnnouncementBroadcast
+    {
+        internal readonly object Gate = new();
+        internal bool Acknowledged;
+    }
     private readonly DiagnosticSanitizer Sanitizer;
     private readonly ToneCatalog? Tones;
     private readonly TimeProvider Clock;
@@ -41,23 +46,54 @@ public sealed class SatelliteManager
     }
     private readonly ConcurrentDictionary<string, ISatelliteConnection> Connections = new();
     private readonly ConcurrentDictionary<string, Guid> Sessions = new();
-    private sealed class RepeatingAnnouncement(string Text, AnnouncementImportance Importance)
+    private sealed class RepeatingAnnouncement(string Text, AnnouncementImportance Importance, Guid? NotificationId = null, AnnouncementBroadcast? Broadcast = null)
     {
         public string Text { get; } = Text;
         public AnnouncementImportance Importance { get; } = Importance;
+        public Guid? NotificationId { get; } = NotificationId;
+        public AnnouncementBroadcast? Broadcast { get; } = Broadcast;
         public long NextTicks = DateTimeOffset.MaxValue.UtcTicks;
         public long ListenUntilTicks;
     }
     private readonly ConcurrentDictionary<string, RepeatingAnnouncement> Announcements = new();
     public string[] PendingAnnouncementIds => Announcements.Keys.ToArray();
     private readonly ConcurrentDictionary<string, Guid> AnnouncementSessions = new();
+    private readonly ConcurrentDictionary<Guid, Guid> NotificationSessions = new();
+    public async Task StopNotificationAsync(string Id, Guid NotificationId, CancellationToken Token)
+    {
+        if (Announcements.TryGetValue(Id, out var Item) && Item.NotificationId == NotificationId)
+            ((ICollection<KeyValuePair<string, RepeatingAnnouncement>>)Announcements).Remove(new(Id, Item));
+        // A cancelled group notice must never stop an unrelated response, alarm or microphone session.
+        if (AnnouncementSessions.TryGetValue(Id, out var Session) && Sessions.GetValueOrDefault(Id) == Session
+            && NotificationSessions.GetValueOrDefault(Session) == NotificationId) await StopAsync(Id, Token);
+    }
     public bool IsAcknowledgementListening(string Id) => Announcements.TryGetValue(Id, out var Item) && Interlocked.Read(ref Item.ListenUntilTicks) > Clock.GetUtcNow().UtcTicks;
     public async Task<bool> AcknowledgeAsync(string Id, string Text, CancellationToken Token)
     {
-        if (!AnnouncementLevels.IsAcknowledgement(Text) || !Announcements.TryRemove(Id, out _)) return false;
+        if (!AnnouncementLevels.IsAcknowledgement(Text) || !Announcements.TryRemove(Id, out var Acknowledged)) return false;
+        var Recipients = new List<string>();
+        if (Acknowledged.Broadcast is { } Broadcast)
+        {
+            lock (Broadcast.Gate)
+            {
+                Broadcast.Acknowledged = true;
+                foreach (var Pair in Announcements)
+                    if (ReferenceEquals(Pair.Value.Broadcast, Broadcast)
+                        && ((ICollection<KeyValuePair<string, RepeatingAnnouncement>>)Announcements).Remove(Pair))
+                        Recipients.Add(Pair.Key);
+            }
+        }
         Record(Id, "Announcement acknowledged");
         // Stop announcement playback, but never cancel the voice session carrying the acknowledgement.
         if (AnnouncementSessions.TryGetValue(Id, out var Session) && Sessions.GetValueOrDefault(Id) == Session) await StopAsync(Id, Token);
+        foreach (var Recipient in Recipients)
+        {
+            Record(Recipient, "Broadcast announcement acknowledged", Id);
+            if (AnnouncementSessions.TryGetValue(Recipient, out var Playback) && Sessions.GetValueOrDefault(Recipient) == Playback)
+                await StopAsync(Recipient, Token);
+            else if (TryGet(Recipient, out var Peer) && Peer is IAcknowledgementListener Listener)
+                await Listener.StopAcknowledgementListeningAsync(Token);
+        }
         return true;
     }
     public async Task RepeatAnnouncementAsync(string Id, ITextToSpeechProvider Tts, CancellationToken Token)
@@ -65,7 +101,7 @@ public sealed class SatelliteManager
         if (!Announcements.TryGetValue(Id, out var Item) || IsBusy(Id)) return;
         var Next = Interlocked.Read(ref Item.NextTicks);
         if (Next > Clock.GetUtcNow().UtcTicks || Interlocked.CompareExchange(ref Item.NextTicks, Clock.GetUtcNow().AddSeconds(10).UtcTicks, Next) != Next) return;
-        if (!await AnnounceAsync(Id, Item.Text, Tts, Token, Importance: Item.Importance, Repeat: true))
+        if (!await AnnounceAsync(Id, Item.Text, Tts, Token, Importance: Item.Importance, Repeat: true, NotificationId: Item.NotificationId, Broadcast: Item.Broadcast))
             Interlocked.Exchange(ref Item.NextTicks, Clock.GetUtcNow().AddMilliseconds(250).UtcTicks);
     }
     private sealed class SessionCancellation(CancellationTokenSource Source)
@@ -149,8 +185,9 @@ public sealed class SatelliteManager
         Record(Id, Stage.ToString(), SessionId: Session);
     }
     public async Task<bool> AnnounceAsync(string Id, string Text, ITextToSpeechProvider Tts, CancellationToken Token, bool RequireVolume = false,
-        AnnouncementImportance Importance = AnnouncementImportance.Notify, bool Repeat = false)
+        AnnouncementImportance Importance = AnnouncementImportance.Notify, bool Repeat = false, Guid? NotificationId = null, AnnouncementBroadcast? Broadcast = null)
     {
+        if (Broadcast is not null) lock (Broadcast.Gate) { if (Broadcast.Acknowledged) return true; }
         if (!Enum.IsDefined(Importance)) throw new ArgumentOutOfRangeException(nameof(Importance));
         if (!State(Id).Capabilities.AnnouncementPlayback || !TryGet(Id, out var Connection)) { return false; }
         if (RequireVolume && (!State(Id).Capabilities.VolumeControl || State(Id).CurrentVolume is null)) { return false; }
@@ -161,16 +198,24 @@ public sealed class SatelliteManager
         using var Timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
         if (!BeginSession(Id, Session, Timeout)) { return false; }
         AnnouncementSessions[Id] = Session;
+        if (NotificationId is { } NoticeId) NotificationSessions[Session] = NoticeId;
         RepeatingAnnouncement? Pending = null;
         if (Importance is AnnouncementImportance.Acknowledge or AnnouncementImportance.Alarm)
         {
             if (Repeat) Announcements.TryGetValue(Id, out Pending);
             else
             {
-                Pending = new(Text, Importance);
-                if (!Announcements.TryAdd(Id, Pending)) Pending = null;
+                Pending = new(Text, Importance, NotificationId, Broadcast);
+                if (Broadcast is null)
+                {
+                    if (!Announcements.TryAdd(Id, Pending)) Pending = null;
+                }
+                else lock (Broadcast.Gate)
+                {
+                    if (Broadcast.Acknowledged || !Announcements.TryAdd(Id, Pending)) Pending = null;
+                }
             }
-            if (Pending is null) { AnnouncementSessions.TryRemove(Id, out _); EndSession(Id, Session); return false; }
+            if (Pending is null) { NotificationSessions.TryRemove(Session, out _); AnnouncementSessions.TryRemove(Id, out _); EndSession(Id, Session); return false; }
         }
         var PreviousVolume = State(Id).Capabilities.VolumeControl ? State(Id).CurrentVolume : null;
         try
@@ -219,6 +264,7 @@ public sealed class SatelliteManager
             }
             finally
             {
+                NotificationSessions.TryRemove(Session, out _);
                 AnnouncementSessions.TryRemove(Id, out _);
                 EndSession(Id, Session);
                 if (Pending is not null && IsAcknowledgementListening(Id))

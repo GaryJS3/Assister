@@ -5,7 +5,7 @@ using Assister.Satellites;
 namespace Assister.Modules.Timers;
 
 public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteManager Satellites, ILogger<TimerExpiryService> Logger,
-    Assister.Interactions.RichNotificationBridge? Rich = null) : BackgroundService
+    Assister.Interactions.RichNotificationBridge? Rich = null, Assister.Interactions.NotificationStore? Notifications = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken StoppingToken)
     {
@@ -28,9 +28,26 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
     public async Task TickAsync(LocalStore Store, ITextToSpeechProvider Tts, CancellationToken Token)
     {
         await Store.ExecuteAsync("UPDATE Timers SET Status='notification-pending' WHERE Status='active' AND DueAt <= $p0", Token, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        if (Notifications is not null)
+        {
+            var GroupTimers = await Store.QueryAsync("""
+                SELECT t.Id,t.Name,g.Owner,g.GroupName FROM Timers t JOIN TimerDeviceGroups g ON g.TimerId=t.Id
+                WHERE t.Status='notification-pending' ORDER BY t.DueAt,t.Id LIMIT 100
+                """, Token);
+            foreach (var Row in GroupTimers)
+            {
+                Token.ThrowIfCancellationRequested();
+                try
+                {
+                    Notifications.Create(Row[2], new("timer", $"Your {Row[1]} has finished.", "timer:" + Row[0], Importance: "alarm", TargetGroup: Row[3]));
+                    await Store.ExecuteAsync("UPDATE Timers SET Status='completed' WHERE Id=$p0 AND Status='notification-pending'", Token, Row[0]);
+                }
+                catch (InvalidOperationException Error) { Logger.LogWarning(Error, "Group timer delivery deferred for {TimerId}.", Row[0]); }
+            }
+        }
         if (Rich is not null)
         {
-            var RichTimers = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' AND SatelliteId LIKE 'client-conversation-%' ORDER BY DueAt,Id LIMIT 100", Token);
+            var RichTimers = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' AND SatelliteId LIKE 'client-conversation-%' AND Id NOT IN (SELECT TimerId FROM TimerDeviceGroups) ORDER BY DueAt,Id LIMIT 100", Token);
             foreach (var Row in RichTimers)
             {
                 Token.ThrowIfCancellationRequested();
@@ -47,7 +64,7 @@ public sealed class TimerExpiryService(IServiceScopeFactory Scopes, SatelliteMan
         foreach (var Id in Satellites.ConnectedIds)
         {
             if (Satellites.IsBusy(Id) || !Satellites.State(Id).Capabilities.AnnouncementPlayback) { continue; }
-            var Pending = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' AND SatelliteId=$p0 ORDER BY DueAt,Id LIMIT 1", Token, Id);
+            var Pending = await Store.QueryAsync("SELECT Id,Name,SatelliteId FROM Timers WHERE Status='notification-pending' AND SatelliteId=$p0 AND Id NOT IN (SELECT TimerId FROM TimerDeviceGroups) ORDER BY DueAt,Id LIMIT 1", Token, Id);
             Candidates.AddRange(Pending);
         }
         // Bound concurrent synthesis; no SQLite operations run concurrently on the scoped connection.

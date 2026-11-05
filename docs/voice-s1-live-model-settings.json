@@ -1,0 +1,7 @@
+{
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_XL",
+  "temperature": 0.2,
+  "maxTokens": 1024,
+  "enableThinking": false,
+  "timeoutSeconds": 30
+}

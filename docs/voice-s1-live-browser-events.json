@@ -1,0 +1,289 @@
+{
+  "revision": "49e259ffc48478bf26dffe994d33e0be955d1477",
+  "interactionId": "c78b6e77-040c-4586-93da-007d6ac773cf",
+  "scope": "Actual in-app browser using deployed production providers; scheduling acknowledgement and buffer completion, not independent microphone/acoustic measurement.",
+  "events": [
+    {
+      "sequence": 5,
+      "type": "tts.started",
+      "timestamp": "2026-10-23T23:09:22.138016-04:00",
+      "segmentIndex": null
+    },
+    {
+      "sequence": 33,
+      "type": "response.completed",
+      "timestamp": "2026-10-23T23:09:27.3247442-04:00",
+      "segmentIndex": null
+    },
+    {
+      "sequence": 34,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0262393-04:00",
+      "segmentIndex": 0
+    },
+    {
+      "sequence": 35,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0353744-04:00",
+      "segmentIndex": 1
+    },
+    {
+      "sequence": 36,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0423257-04:00",
+      "segmentIndex": 2
+    },
+    {
+      "sequence": 37,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0489006-04:00",
+      "segmentIndex": 3
+    },
+    {
+      "sequence": 38,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0555329-04:00",
+      "segmentIndex": 4
+    },
+    {
+      "sequence": 39,
+      "type": "playback.started",
+      "timestamp": "2026-10-23T23:09:28.059742-04:00",
+      "segmentIndex": null
+    },
+    {
+      "sequence": 40,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0638962-04:00",
+      "segmentIndex": 5
+    },
+    {
+      "sequence": 41,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0716567-04:00",
+      "segmentIndex": 6
+    },
+    {
+      "sequence": 42,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0785592-04:00",
+      "segmentIndex": 7
+    },
+    {
+      "sequence": 43,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0857592-04:00",
+      "segmentIndex": 8
+    },
+    {
+      "sequence": 44,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.0935808-04:00",
+      "segmentIndex": 9
+    },
+    {
+      "sequence": 45,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.1006601-04:00",
+      "segmentIndex": 10
+    },
+    {
+      "sequence": 46,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.1078394-04:00",
+      "segmentIndex": 11
+    },
+    {
+      "sequence": 49,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.1224171-04:00",
+      "segmentIndex": 12
+    },
+    {
+      "sequence": 52,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.5532091-04:00",
+      "segmentIndex": 13
+    },
+    {
+      "sequence": 53,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.561189-04:00",
+      "segmentIndex": 14
+    },
+    {
+      "sequence": 54,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.5719157-04:00",
+      "segmentIndex": 15
+    },
+    {
+      "sequence": 55,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.5815181-04:00",
+      "segmentIndex": 16
+    },
+    {
+      "sequence": 56,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.5901582-04:00",
+      "segmentIndex": 17
+    },
+    {
+      "sequence": 57,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.5998944-04:00",
+      "segmentIndex": 18
+    },
+    {
+      "sequence": 58,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6097967-04:00",
+      "segmentIndex": 19
+    },
+    {
+      "sequence": 59,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.618651-04:00",
+      "segmentIndex": 20
+    },
+    {
+      "sequence": 60,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6256535-04:00",
+      "segmentIndex": 21
+    },
+    {
+      "sequence": 61,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6343464-04:00",
+      "segmentIndex": 22
+    },
+    {
+      "sequence": 62,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6440279-04:00",
+      "segmentIndex": 23
+    },
+    {
+      "sequence": 63,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6521797-04:00",
+      "segmentIndex": 24
+    },
+    {
+      "sequence": 66,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.6624763-04:00",
+      "segmentIndex": 25
+    },
+    {
+      "sequence": 69,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9505398-04:00",
+      "segmentIndex": 26
+    },
+    {
+      "sequence": 70,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9627634-04:00",
+      "segmentIndex": 27
+    },
+    {
+      "sequence": 71,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9693269-04:00",
+      "segmentIndex": 28
+    },
+    {
+      "sequence": 72,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9754278-04:00",
+      "segmentIndex": 29
+    },
+    {
+      "sequence": 73,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9812056-04:00",
+      "segmentIndex": 30
+    },
+    {
+      "sequence": 74,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9873654-04:00",
+      "segmentIndex": 31
+    },
+    {
+      "sequence": 75,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:28.9939815-04:00",
+      "segmentIndex": 32
+    },
+    {
+      "sequence": 78,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.0070393-04:00",
+      "segmentIndex": 33
+    },
+    {
+      "sequence": 81,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.3645916-04:00",
+      "segmentIndex": 34
+    },
+    {
+      "sequence": 82,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.3738286-04:00",
+      "segmentIndex": 35
+    },
+    {
+      "sequence": 83,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.380284-04:00",
+      "segmentIndex": 36
+    },
+    {
+      "sequence": 84,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.3866707-04:00",
+      "segmentIndex": 37
+    },
+    {
+      "sequence": 85,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.3932372-04:00",
+      "segmentIndex": 38
+    },
+    {
+      "sequence": 86,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.3994037-04:00",
+      "segmentIndex": 39
+    },
+    {
+      "sequence": 89,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:09:29.4103951-04:00",
+      "segmentIndex": 40
+    },
+    {
+      "sequence": 90,
+      "type": "tts.audio",
+      "timestamp": "2026-10-23T23:09:29.4196366-04:00",
+      "segmentIndex": null
+    },
+    {
+      "sequence": 91,
+      "type": "tts.completed",
+      "timestamp": "2026-10-23T23:09:29.4291201-04:00",
+      "segmentIndex": null
+    },
+    {
+      "sequence": 94,
+      "type": "playback.completed",
+      "timestamp": "2026-10-23T23:09:48.104168-04:00",
+      "segmentIndex": null
+    }
+  ]
+}

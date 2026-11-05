@@ -3,6 +3,7 @@ const element = (tag, text) => { const e = document.createElement(tag); if (text
 const ownership = ['Unknown', 'Available', 'Owned by Assister', 'Conflict', 'Unsupported'];
 const activities = ['Idle', 'Wake detected', 'Capturing audio', 'Speech complete', 'Transcribing', 'Routing', 'Generating response', 'Synthesizing', 'Waiting for playback', 'Playing response', 'Complete', 'Cancelled', 'Disconnected', 'STT failed', 'Routing failed', 'TTS failed', 'Playback failed'];
 let selectedId = new URLSearchParams(location.search).get('id'), selectedTab = 'Status', devices = [], updating = false;
+let groupInventory = {owners:[], satellites:[]};
 async function api(path, options) {
     const response = await fetch(path, options);
     if (!response.ok) { const body = await response.json().catch(() => ({})); throw Error(body.error || `Request failed (${response.status})`); }
@@ -15,14 +16,14 @@ function facts(values) {
 }
 function action(label, handler, supported) {
     const button = element('button', label); button.disabled = !supported;
-    button.onclick = async () => { updating = true; button.disabled = true; try { await handler(); byId('notice').textContent = 'Command submitted; device state will refresh.'; } catch (error) { byId('notice').textContent = error.message; } finally { updating = false; await refresh(); } };
+    button.onclick = async () => { updating = true; button.disabled = true; try { await handler(); byId('notice').textContent = 'Command submitted; device state will refresh.'; } catch (error) { byId('notice').textContent = error.message; } finally { updating = false; button.disabled = !supported; await refresh(); } };
     return button;
 }
 async function renderDetail() {
     const entry = devices.find(d => d.device.id === selectedId); byId('satellite-detail').hidden = !entry; if (!entry) return;
     const { device: d, runtime: r } = entry, panel = byId('device-panel'), path = `/api/satellites/${encodeURIComponent(d.id)}`;
     byId('device-title').textContent = d.name; panel.replaceChildren(); byId('device-tabs').replaceChildren();
-    for (const title of ['Status', 'Voice', 'Playback', 'Diagnostics', 'Configuration']) {
+    for (const title of ['Status', 'Voice', 'Playback', 'Groups', 'Diagnostics', 'Configuration']) {
         const tab = element('button', title); tab.setAttribute('aria-pressed', String(selectedTab === title));
         tab.onclick = () => { selectedTab = title; renderDetail().catch(error => byId('notice').textContent = error.message); }; byId('device-tabs').append(tab);
     }
@@ -48,6 +49,18 @@ async function renderDetail() {
         panel.append(action('Stop / cancel', () => api(path + '/stop', {method:'POST'}), r.connectionState === 'Online'));
         const volume = element('input'); volume.type = 'range'; volume.min = '0'; volume.max = '100'; volume.value = Math.round((r.currentVolume ?? 0.6) * 100); volume.setAttribute('aria-label', 'Volume percent'); volume.disabled = !supported || !r.capabilities.volumeControl; panel.append(volume);
         panel.append(action('Set volume', () => api(path + '/volume', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({volume:Number(volume.value)/100})}), supported && r.capabilities.volumeControl));
+    } else if (selectedTab === 'Groups') {
+        panel.append(element('h3', 'Shared device groups'), element('p', 'Use the same group name on satellites, Windows clients and Android clients. Choose the client owner whose notifications this satellite may receive. Group membership stays saved while the satellite is offline.'));
+        if (!groupInventory.owners.length) { panel.append(element('p', 'Configure a rich client owner before assigning this satellite to a shared group.')); return; }
+        for (const owner of groupInventory.owners) {
+            const label = element('label', `Groups for ${owner} (comma-separated)`), input = element('input');
+            const membership = groupInventory.satellites.find(item => item.satelliteId === d.id && item.owner === owner);
+            input.value = (membership?.groups || []).join(', '); input.maxLength = 2100;
+            label.append(input); panel.append(label);
+            panel.append(action(`Save groups for ${owner}`, () => api(`/api/devices/satellites/${encodeURIComponent(d.id)}/groups`, {
+                method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({owner, groups:input.value.split(',').map(value => value.trim()).filter(Boolean)})
+            }), true));
+        }
     } else if (selectedTab === 'Configuration') {
         panel.append(element('h3', 'Runtime · active wake words'), element('p', `Maximum active models: ${config.maxActiveWakeWords}. Only models reported by the device can be selected.`));
         if (!r.capabilities.wakeWordConfiguration) panel.append(element('p', 'Runtime wake-word changes are unavailable through this device/provider. Physical wake detection may still work. Firmware changes are outside this page.'));
@@ -73,9 +86,11 @@ async function renderDetail() {
 async function refresh() {
     if (updating) return;
     try {
-        const [satellites, clients] = await Promise.all([api('/api/satellites'), api('/api/devices/clients')]);
+        const [satellites, clients, groups] = await Promise.all([api('/api/satellites'), api('/api/devices/clients'), api('/api/devices/groups')]);
+        groupInventory = groups;
         devices = satellites; byId('satellites').replaceChildren();
         renderClients(clients);
+        renderGroups(clients);
         for (const {device:d, runtime:r} of devices) {
             const row = element('tr'), cell = element('td'), button = element('button', d.name);
             button.onclick = () => { selectedId = d.id; history.replaceState(null, '', `?id=${encodeURIComponent(d.id)}`); renderDetail().catch(error => byId('notice').textContent = error.message); };
@@ -85,8 +100,28 @@ async function refresh() {
         }
         if (!devices.length) { const row = element('tr'), cell = element('td', 'No satellites configured.'); cell.colSpan = 8; row.append(cell); byId('satellites').append(row); }
         // Do not overwrite edits while a user is selecting runtime configuration or composing audio.
-        if (!['Configuration','Playback'].includes(selectedTab) || !byId('device-panel').hasChildNodes()) await renderDetail();
+        if (!['Configuration','Playback','Groups'].includes(selectedTab) || !byId('device-panel').hasChildNodes()) await renderDetail();
     } catch (error) { byId('notice').textContent = error.message; }
+}
+function renderGroups(clients) {
+    const root = byId('shared-groups'); root.replaceChildren();
+    root.append(element('h2', 'Shared device groups'), element('p', 'Assign satellites from their Groups tab and clients from their device details. A group can mix audio-only speakers, desktops and phones.'));
+    const groups = new Map();
+    function add(owner, name, device) {
+        const key = JSON.stringify([owner, name.toLowerCase()]);
+        if (!groups.has(key)) groups.set(key, {owner, name, devices:[]});
+        groups.get(key).devices.push(device);
+    }
+    for (const client of clients) for (const group of client.groups || []) add(client.owner, group, `${client.deviceName} (${client.clientType})`);
+    for (const membership of groupInventory.satellites) {
+        const device = devices.find(entry => entry.device.id === membership.satelliteId)?.device;
+        if (device) for (const group of membership.groups) add(membership.owner, group, `${device.name} (satellite)`);
+    }
+    if (!groups.size) root.append(element('p', 'No device groups assigned yet.'));
+    for (const group of [...groups.values()].sort((a,b) => a.name.localeCompare(b.name))) {
+        const card = element('div'); card.className = 'client-device';
+        card.append(element('h3', group.name), element('p', `Owner: ${group.owner}`), element('p', group.devices.join(' · '))); root.append(card);
+    }
 }
 function renderClients(clients) {
     // Preserve open details and in-progress group edits during polling.

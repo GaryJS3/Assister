@@ -129,6 +129,7 @@ public static class ServiceRegistration
         Services.AddSingleton<ClientSignals>();
         Services.AddSingleton<InteractionStore>();
         Services.AddSingleton<NotificationStore>();
+        Services.AddHostedService<SatelliteNotificationService>();
         Services.AddSingleton<RichNotificationBridge>();
         Services.AddHostedService<InteractionRetentionService>();
         Services.AddSingleton<InteractionRunner>();

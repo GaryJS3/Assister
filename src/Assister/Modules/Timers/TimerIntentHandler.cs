@@ -5,9 +5,11 @@ using Assister.Persistence;
 
 namespace Assister.Modules.Timers;
 
-public sealed partial class TimerIntentHandler(LocalStore Store)
+public sealed partial class TimerIntentHandler(LocalStore Store, Assister.Interactions.RichNotificationBridge? Rich = null)
 {
-    public static bool Recognizes(string Text) => StartPattern().IsMatch(Text.Trim()) || CancelPattern().IsMatch(Text.Trim()) || RemainingPattern().IsMatch(Text.Trim());
+    public static bool Recognizes(string Text) => StartPattern().IsMatch(GroupTarget().Replace(Text.Trim(), "")) || CancelPattern().IsMatch(Text.Trim()) || RemainingPattern().IsMatch(Text.Trim());
+    [GeneratedRegex(@"\s+(?:on|to) group (?<group>[^.!?]{1,64})[.!?]?$", RegexOptions.IgnoreCase)]
+    private static partial Regex GroupTarget();
     [GeneratedRegex(@"^(?:(?:how (?:much|long)(?: time)?|what(?:'s| is) the time) (?:is )?(?:left|remaining) (?:on|for)|how long (?:does|has)) (?:the |my |a )?(?:(?<name>[a-z ]{1,40}) )?timer(?: have(?: left)?)?[.!?]?$", RegexOptions.IgnoreCase)]
     private static partial Regex RemainingPattern();
 
@@ -40,19 +42,27 @@ public sealed partial class TimerIntentHandler(LocalStore Store)
             // List bounded matches, including duplicate unnamed timers, instead of guessing one.
             return string.Join(" ", Timers.Select((Timer, Index) => $"Your {Timer[0]}{(Timers.Count > 1 ? " (" + (Index + 1) + ")" : "")} {Remaining(long.Parse(Timer[1], CultureInfo.InvariantCulture) - Now)}."));
         }
-        var Match = StartPattern().Match(Request.Message.Trim());
+        var GroupMatch = GroupTarget().Match(Request.Message.Trim());
+        var Group = GroupMatch.Success ? GroupMatch.Groups["group"].Value.Trim() : null;
+        var Match = StartPattern().Match(GroupTarget().Replace(Request.Message.Trim(), ""));
         if (Match.Success)
         {
             var Amount = int.Parse(Match.Groups["amount"].Value, CultureInfo.InvariantCulture);
             var Seconds = Amount * (Match.Groups["unit"].Value.ToLowerInvariant()[0] switch { 'h' => 3600L, 'm' => 60L, _ => 1L });
             if (Seconds is < 1 or > 86400) { return "Timers must be between one second and 24 hours."; }
+            var GroupOwner = Group is null ? null : Rich?.GroupOwner(Request.SatelliteId, Group);
+            if (Group is not null && GroupOwner is null) return "That device group is unavailable from this device or conversation.";
             var Name = Match.Groups["name"].Success ? Match.Groups["name"].Value.Trim().ToLowerInvariant() : "timer";
             var Existing = await Store.QueryAsync("SELECT Id FROM Timers WHERE SatelliteId=$p0 AND Status IN ('active','notification-pending') LIMIT 20", Token, Request.SatelliteId);
             if (Existing.Count >= 20) { return "This satellite already has 20 timers. Please cancel one first."; }
             var Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await Store.ExecuteAsync("INSERT INTO Timers VALUES($p0,$p1,$p2,$p3,$p4,$p5,$p6,'active')", Token,
-                Guid.NewGuid().ToString(), Name, Request.SatelliteId, Request.Area, Request.ConversationId?.ToString(), Now, Now + Seconds);
-            return $"Started your {Name} for {Amount} {Match.Groups["unit"].Value.ToLowerInvariant()}.";
+            var Id = Guid.NewGuid().ToString();
+            const string Insert = "INSERT INTO Timers VALUES($p0,$p1,$p2,$p3,$p4,$p5,$p6,'active')";
+            if (Group is not null)
+                await Store.ExecuteTransactionAsync("INSERT INTO TimerDeviceGroups VALUES($p0,$p7,$p8);" + Insert, Token,
+                    Id, Name, Request.SatelliteId, Request.Area, Request.ConversationId?.ToString(), Now, Now + Seconds, GroupOwner, Group);
+            else await Store.ExecuteAsync(Insert, Token, Id, Name, Request.SatelliteId, Request.Area, Request.ConversationId?.ToString(), Now, Now + Seconds);
+            return $"Started your {Name} for {Amount} {Match.Groups["unit"].Value.ToLowerInvariant()}" + (Group is null ? "." : " on device group " + Group + ".");
         }
         Match = CancelPattern().Match(Request.Message.Trim());
         if (!Match.Success) { return null; }

@@ -11,8 +11,9 @@ Local voice orchestration in C# and .NET 10. Deterministic intents precede LLM r
 
 ## Current implementation
 
-Latest recorded deployed runtime: 6918741 (October 12, 2026). The local suite now has
-449 passing .NET tests (391 unit/component, 58 integration), plus 17 browser-script tests;
+Latest verified deployed runtime: 205a490 (October 23, 2026), including rich-client
+streaming speech. See [live deployment results](docs/voice-s1-deployment.md).
+The local suite now has 449 passing .NET tests (391 unit/component, 58 integration), plus 18 browser-script tests;
 these local results do not establish the deployed revision. Daily/weekly reminders support native voice/text
 creation, dashboard CRUD, and gated AI create/get/edit/cancel tools. Live model operations
 and persisted state were verified; physical reminder announcements remain unverified.

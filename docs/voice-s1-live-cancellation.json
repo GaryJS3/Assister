@@ -1,0 +1,34 @@
+{
+  "revision": "205a490006f816edc9a2a40de6bff24ae9b68917",
+  "interactionId": "3a95f3cd-c6a6-4429-94e5-94e2122dd736",
+  "status": "cancelled",
+  "cancellationElapsedMs": 44.7931,
+  "segmentsAfterCancelRequest": 0,
+  "events": [
+    {
+      "sequence": 5,
+      "type": "tts.started",
+      "timestamp": "2026-10-23T23:14:14.7943287-04:00"
+    },
+    {
+      "sequence": 34,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:14:21.2042254-04:00"
+    },
+    {
+      "sequence": 35,
+      "type": "tts.segment",
+      "timestamp": "2026-10-23T23:14:21.2201189-04:00"
+    },
+    {
+      "sequence": 36,
+      "type": "interaction.cancel_requested",
+      "timestamp": "2026-10-23T23:14:21.2238127-04:00"
+    },
+    {
+      "sequence": 38,
+      "type": "interaction.cancelled",
+      "timestamp": "2026-10-23T23:14:21.2311542-04:00"
+    }
+  ]
+}

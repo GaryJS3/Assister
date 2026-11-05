@@ -409,3 +409,12 @@ Remaining-time questions, including How much left on the timer, use persisted As
 ### Client-management administrator separation
 
 - Live verification found the existing configured web token equals the upload token. Management therefore now requires a dedicated `ClientManagement:AdminToken` or private `/data/client-management-admin-token.txt`; there is no upload-token fallback. Web/phone and APK upload credentials remain unchanged. The private admin file is not served by an HTTP endpoint.
+
+### October 26 production rollout
+
+- Final implementation commit `8e2e7457be9c1e26519b3cdaab3a477bc683a167` pushed to origin/main, built from an exact Git archive, synced and deployed through Dockhand stack 10 / environment 8. Running revision matches; image `sha256:a8cde014df6d86ff2aaac91397b3b8fd11ad262b0e4987b31dff35f6398c683e`; Healthy with zero restarts.
+- Final isolated committed-source suite: 518 unit/component and 69 integration tests passed. Earlier isolated run had a pre-existing Home Assistant reconnect timing failure; the individual test and subsequent full final suite passed. Unrelated working-tree changes were neither committed nor deployed.
+- Environment/mount fingerprints and bridge/controller container IDs match the pre-deploy snapshot. Existing web authentication remains valid. Live page HTTP 200; dedicated administrator can list/manage credentials; anonymous, existing web/upload and newly issued phone credentials receive HTTP 401 from management endpoints.
+- Created the separately authenticated `pixel-8-pro` client under owner `gary`; its protocol request succeeds. Its token and the administrator token were saved outside the repositories in the user's private Codex directory and were not logged or placed in source. Server administrator file permissions verified as mode 0600, UID 1654. Existing web and upload tokens were preserved.
+- Phone still needs its new bearer token entered in Android Settings and Save and connect. Physical phone registration as `pixel-8-pro` is not claimed yet. No Android rebuild or publication required.
+- Local non-secret rollout snapshots and live screenshot: `.codex-local/client-token-deploy/`.

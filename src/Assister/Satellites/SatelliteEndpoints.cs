@@ -33,13 +33,15 @@ public static class SatelliteEndpoints
             await Database.SaveChangesAsync(Token);
             return Results.Ok(Device);
         });
-        App.MapDelete("/api/satellites/{id}", async (string Id, AssisterDbContext Database, SatelliteManager Manager, CancellationToken Token) =>
+        App.MapDelete("/api/satellites/{id}", async (string Id, AssisterDbContext Database, SatelliteManager Manager,
+            Assister.Interactions.NotificationStore Notifications, CancellationToken Token) =>
         {
             if (Manager.TryGet(Id, out _)) { return Results.Conflict(new { Error = "Disconnect the provider before deleting its registration." }); }
             var Device = await Database.Satellites.FindAsync([Id], Token);
             if (Device is null) { return Results.NotFound(); }
             Database.Satellites.Remove(Device);
             await Database.SaveChangesAsync(Token);
+            Notifications.RemoveSatelliteGroups(Id);
             return Results.NoContent();
         });
         App.MapGet("/api/satellites", async (AssisterDbContext Database, SatelliteManager Manager, CancellationToken Token) =>

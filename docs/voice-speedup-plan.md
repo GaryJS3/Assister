@@ -11,7 +11,7 @@ Implement one feature at a time in the order below. Each feature gets its own me
 | ID | Feature | Status | Depends on |
 | --- | --- | --- | --- |
 | S0 | Establish comparable latency measurements | In progress — offline harness, server milestones and read-only live text baseline; physical timing pending | None |
-| S1 | Stream rich-client speech during response generation | Implemented and tested locally; browser scheduling verified; deployment and spoken-device measurement pending | S0 |
+| S1 | Stream rich-client speech during response generation | Deployed 205a490; live providers, browser playback/stop and server cancellation verified; acoustic timing pending | S0 |
 | S2 | Stream satellite audio through to physical playback | Deployed 37ab58b for EchoMuse; real TTS/HTTP delivery measured; physical playback acceptance pending; ESPHome offline | S0; reuse S1 concepts where useful |
 | S3 | Add adaptive, semantic turn completion | C# implementation deployed in shadow; active blocked by quality, CPU budget and cross-host validation | S0; device capture support |
 | S4 | Prepare speculative replies during the end-of-turn pause | Planned | S3; provisional input and cancellable output |
@@ -37,8 +37,9 @@ Acceptance:
 
 ## S1 — Stream rich-client speech during response generation
 
-Local implementation, tests and controlled before/after measurements:
-[voice-s1-rich-streaming.md](voice-s1-rich-streaming.md). Physical acceptance remains open.
+Implementation and controlled measurements: [voice-s1-rich-streaming.md](voice-s1-rich-streaming.md).
+Deployed revision and live results: [voice-s1-deployment.md](voice-s1-deployment.md).
+Independent acoustic/physical-device acceptance remains open.
 
 The buffered fallback streams response text but starts rich-client TTS after the complete response. `RichSpeech` collects all PCM into a WAV before publishing audio. Opted-in clients now use `RichSpeechOutput` while generation is in progress.
 
