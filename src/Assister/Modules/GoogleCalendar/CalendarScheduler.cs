@@ -6,6 +6,7 @@ using Assister.Satellites;
 using Assister.Interactions;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 
 namespace Assister.Modules.GoogleCalendar;
 
@@ -47,11 +48,13 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
     }
     public async Task Tick(string Account, CalendarSubscription Calendar, DateTimeOffset Now, CancellationToken Ct)
     {
-        var SatelliteTargets = Calendar.SatelliteTargets.Distinct(StringComparer.Ordinal).ToArray();
-        var RichTargets = (Calendar.RichClients ?? []).Distinct().Where(C => Recipients?.Available(C) == true).ToArray();
+        await using var Scope = Scopes.CreateAsyncScope();
+        var SatelliteTargets = Calendar.AllSatellites
+            ? await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Satellites.AsNoTracking().Where(S => S.Enabled).Select(S => S.Id).ToArrayAsync(Ct)
+            : Calendar.SatelliteTargets.Distinct(StringComparer.Ordinal).ToArray();
+        var RichTargets = Recipients?.ResolveClients(Calendar) ?? [];
         if (!SatelliteTargets.Any(Id => Satellites.ConnectedIds.Contains(Id) && !Satellites.IsBusy(Id)) && RichTargets.Length == 0) return;
         var Metadata = await Client.Send(Account, HttpMethod.Get, "users/me/calendarList/" + GoogleCalendarClient.Escape(Calendar.Id), null, Ct);
-        await using var Scope = Scopes.CreateAsyncScope();
         var Store = Scope.ServiceProvider.GetRequiredService<LocalStore>();
         var Speech = Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>();
         string? Next = null;

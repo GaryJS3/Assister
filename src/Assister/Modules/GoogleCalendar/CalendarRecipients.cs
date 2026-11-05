@@ -6,6 +6,9 @@ public sealed record CalendarClientOption(string ClientId, string Owner, string 
 
 public sealed class CalendarRecipients(IConfiguration Configuration, ClientSignals? Signals = null)
 {
+    public CalendarRichRecipient[] ResolveClients(CalendarSubscription Calendar) => Calendar.AllRichClients
+        ? Clients().Select(C => new CalendarRichRecipient(C.ClientId, C.Owner)).ToArray()
+        : (Calendar.RichClients ?? []).Distinct().Where(Available).ToArray();
     public bool Available(CalendarRichRecipient Target) => !string.IsNullOrWhiteSpace(Target.ClientId)
         && !string.IsNullOrWhiteSpace(Configuration[$"RichClients:Clients:{Target.ClientId}:Token"])
         && (Configuration[$"RichClients:Clients:{Target.ClientId}:Owner"] ?? Target.ClientId) == Target.Owner;
