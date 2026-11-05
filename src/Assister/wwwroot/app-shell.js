@@ -25,6 +25,11 @@
     if (current === href) link.setAttribute('aria-current', 'page');
     nav.append(link);
   }
+  const calendarLink = document.createElement('a');
+  calendarLink.href = '/calendars.html';
+  calendarLink.textContent = 'Calendars';
+  if (current === calendarLink.pathname) calendarLink.setAttribute('aria-current', 'page');
+  nav.append(calendarLink);
   const tools = document.createElement('div');
   const settings = document.createElement('a');
   settings.href = '/ai-server.html';

@@ -1,5 +1,9 @@
 # Assister
 
+Google Calendar service accounts, calendar subscriptions, event management with confirmed deletion,
+and satellite announcements for configured event notifications are available from **Calendars**
+in the dashboard. See [Google Calendar setup and behavior](docs/google-calendars.md).
+
 Client APK/EXE releases are hosted at `/releases.html`, with authenticated uploads,
 public downloads and C# update helpers. See [client update host](docs/client-updates.md).
 
