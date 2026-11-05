@@ -40,3 +40,11 @@ table{width:100%;border-collapse:collapse;text-align:left}th{background:#1a2d44;
 .run-facts{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;margin:1rem 0}.run-facts .panel{padding:.6rem;margin:0;font-size:.8rem}.run-facts .mono{font-size:.75rem}
 @media(max-width:900px){.run-detail{max-height:85vh}}
 .run-workspace .form-grid{grid-template-columns:1fr 1fr;gap:.6rem}.run-workspace>.card:first-child>.stack{gap:.55rem}.run-workspace .tabs{margin:.4rem 0}.run-workspace .tabs button{padding:.4rem .55rem;font-size:.82rem}
+
+.timeline-stage > summary{list-style:none;cursor:pointer}
+.timeline-stage > summary::-webkit-details-marker{display:none}
+.timeline-stage > summary:hover,.timeline-stage[open] > summary{background:#203349}
+.timeline-stage > summary:focus-visible{outline:2px solid #7dbfff;outline-offset:-2px}
+.timeline-stage > summary .timeline-label::before{content:"▸";color:#91c3ff;margin-right:.35rem}
+.timeline-stage[open] > summary .timeline-label::before{content:"▾"}
+.timeline-stage-details{padding:.65rem .8rem;background:#101d2e;border-left:2px solid #42637f;overflow-wrap:anywhere}

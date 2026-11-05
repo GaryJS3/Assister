@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 namespace Assister.Components.Services;
 
-public sealed record TimelineLane(string Name, string Kind, double Offset, double Duration, bool Estimated = false, bool Nested = false);
+public sealed record TimelineLane(string Name, string Kind, double Offset, double Duration, bool Estimated = false, bool Nested = false, JsonElement Step = default);
 public static class RunTimings
 {
     public static double? Stamp(JsonElement value, string property) => DateTimeOffset.TryParse(value.Text(property), CultureInfo.InvariantCulture, DateTimeStyles.None, out var time) ? time.ToUnixTimeMilliseconds() : null;
@@ -24,14 +24,14 @@ public static class RunTimings
             var formattedAt=Stamp(formatted,"startedAt");
             if(formattedAt is not null)lanes.Add(new("Request → text ready","latency",0,Math.Max(0,formattedAt.Value-start.Value+formatted.Number("durationMilliseconds"))));
         }
-        if(audio.ValueKind==JsonValueKind.Object)lanes.Add(new("Audio capture","Input",0,Math.Max(0,audio.Prop("output").Number("audioDurationMilliseconds"))));
+        if(audio.ValueKind==JsonValueKind.Object)lanes.Add(new("Audio capture","Input",0,Math.Max(0,audio.Prop("output").Number("audioDurationMilliseconds")),Step:audio));
         if(ended is not null && stt.Prop("metadata").Prop("postAudioLatencyMilliseconds").ValueKind==JsonValueKind.Number)
-            lanes.Add(new("STT finalization","SpeechToText",Math.Max(0,ended.Value-start.Value),Math.Max(0,stt.Prop("metadata").Number("postAudioLatencyMilliseconds"))));
+            lanes.Add(new("STT finalization","SpeechToText",Math.Max(0,ended.Value-start.Value),Math.Max(0,stt.Prop("metadata").Number("postAudioLatencyMilliseconds")),Step:stt));
         foreach(var step in steps)
         {
             if(step.Text("name") is "Microphone audio" or "Streaming delivery" or "Streaming speech synthesis")continue;
             var offset=Stamp(step,"startedAt");if(offset is null)continue;
-            lanes.Add(new(step.Text("name"),step.Text("kind"),Math.Max(0,offset.Value-start.Value),Math.Max(0,step.Number("durationMilliseconds")),Nested:!string.IsNullOrEmpty(step.Text("parentId"))));
+            lanes.Add(new(step.Text("name"),step.Text("kind"),Math.Max(0,offset.Value-start.Value),Math.Max(0,step.Number("durationMilliseconds")),Nested:!string.IsNullOrEmpty(step.Text("parentId")),Step:step));
         }
         return lanes;
     }

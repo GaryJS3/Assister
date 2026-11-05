@@ -3,12 +3,30 @@
     @if(Lanes.Count>0){
         <div class="timeline-axis" aria-hidden="true"><span>Stage</span><span>Start</span><span class="timeline-scale"><span>0</span><span>@RunTimings.Duration(Total)</span></span><span>Elapsed</span></div>
         @foreach(var lane in Lanes){
-            <div class="timeline-row @(lane.Kind=="latency"?"latency":"") @(lane.Nested?"nested":"")">
+            var rowClass = $"timeline-row {(lane.Kind == "latency" ? "latency" : "")} {(lane.Nested ? "nested" : "")}";
+            RenderFragment cells = @<text>
                 <strong class="timeline-label" title="@lane.Name">@lane.Name</strong>
                 <span class="timeline-offset" title="Offset from request start">+@RunTimings.Duration(lane.Offset)</span>
-                <div class="timeline-track" aria-hidden="true"><span class="timeline-bar kind-@lane.Kind" style="left:@RunTimings.Percent(lane.Offset,Total);width:@RunTimings.Percent(lane.Duration,Total)"></span></div>
+                <span class="timeline-track" aria-hidden="true"><span class="timeline-bar kind-@lane.Kind" style="left:@RunTimings.Percent(lane.Offset,Total);width:@RunTimings.Percent(lane.Duration,Total)"></span></span>
                 <span class="timeline-duration" title="@(lane.Estimated?"Estimated time to audio delivery":"Stage duration")">@(lane.Estimated?"≈ ":"")@RunTimings.Duration(lane.Duration)</span>
-            </div>
+            </text>;
+            if (lane.Step.ValueKind == JsonValueKind.Object)
+            {
+                <details class="timeline-stage" @key="@((lane.Name, lane.Step.Text("id")))">
+                    <summary class="@rowClass">@cells</summary>
+                    <div class="timeline-stage-details">
+                        <span class="status-pill @(lane.Step.Text("status")=="failed"?"bad":"")">@lane.Step.Text("status")</span>
+                        <p>@lane.Step.Text("summary")</p>
+                        <JsonDetails Title="Input" Data="@lane.Step.Prop("input")" />
+                        <JsonDetails Title="Output" Data="@lane.Step.Prop("output")" />
+                        <JsonDetails Title="Stage metadata" Data="@lane.Step.Prop("metadata")" />
+                    </div>
+                </details>
+            }
+            else
+            {
+                <div class="@rowClass">@cells</div>
+            }
         }
         @if(Lanes.Any(l=>l.Estimated)){<p class="timeline-note">≈ Estimated from audio delivery; playback start wasn’t recorded.</p>}
         @if(!Lanes.Any(l=>l.Kind=="latency")){<p class="timeline-note">Response latency was not recorded for this run.</p>}
