@@ -9,12 +9,19 @@ public sealed class BrowserApi(IJSRuntime Javascript)
     public ValueTask<JsonElement> Get(string path) => Request("GET", path);
     public ValueTask<JsonElement> Post(string path, object? body = null, string? token = null) => Request("POST", path, body, token);
     public ValueTask<JsonElement> Put(string path, object? body = null, string? token = null) => Request("PUT", path, body, token);
-    public ValueTask<JsonElement> Patch(string path, object? body = null, string? ifMatch = null) => Javascript.InvokeAsync<JsonElement>("assisterApi.request", "PATCH", path, body, null, ifMatch);
+    public ValueTask<JsonElement> Patch(string path, object? body = null, string? ifMatch = null) => Read("assisterApi.requestStream", "PATCH", path, body, null, ifMatch);
     public ValueTask<JsonElement> Delete(string path, string? token = null) => Request("DELETE", path, null, token);
     public ValueTask<JsonElement> Request(string method, string path, object? body = null, string? token = null) =>
-        Javascript.InvokeAsync<JsonElement>("assisterApi.request", method, path, body, token);
+        Read("assisterApi.requestStream", method, path, body, token);
     public ValueTask<JsonElement> Upload(string path, string inputId, string token) =>
-        Javascript.InvokeAsync<JsonElement>("assisterApi.upload", path, inputId, token);
+        Read("assisterApi.uploadStream", path, inputId, token);
+    private async ValueTask<JsonElement> Read(string identifier, params object?[] arguments)
+    {
+        await using var reference = await Javascript.InvokeAsync<IJSStreamReference>(identifier, arguments);
+        await using var stream = await reference.OpenReadStreamAsync(16 * 1024 * 1024);
+        using var document = await JsonDocument.ParseAsync(stream);
+        return document.RootElement.Clone();
+    }
     public ValueTask<string?> Storage(string key) => Javascript.InvokeAsync<string?>("assisterApi.storage", key);
     public ValueTask SetStorage(string key, string? value) => Javascript.InvokeVoidAsync("assisterApi.setStorage", key, value);
     public ValueTask Copy(string value) => Javascript.InvokeVoidAsync("assisterApi.copy", value);

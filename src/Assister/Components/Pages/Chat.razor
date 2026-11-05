@@ -34,7 +34,7 @@
                         <p style="white-space:pre-wrap">@ResponseFor(item)</p>
                         <span class="status-pill @(item.Text("status")=="completed"?"good":item.Text("status")=="failed"?"bad":"")">@item.Text("status")</span>
                         @if(audioReady.Contains(id) || (speak && item.Text("status")=="completed")){
-                            <div><audio controls preload="none" src="@("/api/client/interactions/"+id+"/audio")"></audio></div>
+                            <div><audio data-interaction="@id" controls preload="none" src="@("/api/client/interactions/"+id+"/audio")"></audio></div>
                         }
                         <details><summary>Execution activity</summary>
                             @foreach(var ev in EventsFor(id).Where(x=>x.Text("type").StartsWith("step.")||x.Text("type").StartsWith("interaction.")||x.Text("type").StartsWith("tts."))){
@@ -62,8 +62,9 @@
                 <label class="check"><input type="checkbox" @bind="speak" /> Request spoken answers</label>
                 <div class="actions">
                     <button disabled="@busy" @onclick="ToggleMic">@(recording?"Stop and send recording":"Record voice")</button>
+                    <button @onclick="StopSpeech">Stop speech</button>
                     <button disabled="@(busy||string.IsNullOrEmpty(activeId))" @onclick="Cancel">Cancel current run</button>
-                    <button class="primary" disabled="@busy" @onclick="() => Send()">@(busy?"Processing…":"Send")</button>
+                    <button id="chat-send" class="primary" disabled="@busy" @onclick="() => Send()">@(busy?"Processing…":"Send")</button>
                 </div>
                 <small class="muted">Requests can execute real device commands. Microphone access requires HTTPS or localhost.</small>
             </div>
@@ -83,8 +84,8 @@
     JsonElement[] conversations=[],interactions=[];List<JsonElement> attachments=new();
     Dictionary<string,List<JsonElement>> eventMap=new();Dictionary<string,long> cursors=new();
     Dictionary<string,JsonElement> context=new(),traces=new(),attachmentsFor=new();HashSet<string> audioReady=new();
-    string conversationId="",credential="",message="",connection="Disconnected",notice="";string? activeId;bool connected,busy,error,speak,recording;
-    CancellationTokenSource polling=new();
+    string conversationId="",credential="",message="",connection="Disconnected",notice="";string? activeId;bool connected,busy,error,speak,recording,rendered;
+    CancellationTokenSource polling=new(); DateTimeOffset lastRegistration;
     string ResponseFor(JsonElement item){var value=item.Text("response");if(!string.IsNullOrEmpty(value))return value;
         if(eventMap.TryGetValue(item.Text("id"),out var events)){
             var done=events.LastOrDefault(x=>x.Text("type")=="response.completed");
@@ -94,17 +95,17 @@
         return "Working…";
     }
     IEnumerable<JsonElement> EventsFor(string id)=>eventMap.TryGetValue(id,out var events)?events:Enumerable.Empty<JsonElement>();
-    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){
+    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){rendered=true;
         try{await Load();}catch{connected=false;connection="Authentication required";}
         StateHasChanged();_ = Poll(polling.Token);
     }}
     async Task Login(){busy=true;try{
         await Api.Post("/api/client/session",new{token=credential});credential="";await Load();notice="";error=false;
     }catch(Exception ex){notice=ex.Message;error=true;connected=false;}finally{busy=false;}}
+    async Task Register(){ await Api.Post("/api/client/clients/register",new{clientType="web",deviceName="Blazor web client",capabilities=new[]{"text.input","text.output","attachments.file","attachments.image","audio.input","audio.output","audio.output.segments","execution.steps","context.inspect","events.replay"}}); lastRegistration=DateTimeOffset.UtcNow; }
     async Task Load(){
         await Api.Get("/api/client/protocol");
-        await Api.Post("/api/client/clients/register",new{clientType="web",deviceName="Blazor web client",
-            capabilities=new[]{"text.input","text.output","attachments.file","attachments.image","audio.input","audio.output","execution.steps","context.inspect","events.replay"}});
+        await Register();
         connected=true;connection="Connected";
         conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();
         if(conversations.Length==0){await Api.Post("/api/client/conversations");conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();}
@@ -112,7 +113,7 @@
         await Open();
     }
     async Task Open(){if(string.IsNullOrEmpty(conversationId))return;
-        eventMap.Clear();cursors.Clear();audioReady.Clear();context.Clear();traces.Clear();attachmentsFor.Clear();attachments.Clear();activeId=null;
+        await JS.InvokeVoidAsync("assisterSpeech.stop"); eventMap.Clear();cursors.Clear();audioReady.Clear();context.Clear();traces.Clear();attachmentsFor.Clear();attachments.Clear();activeId=null;
         interactions=(await Api.Get("/api/client/conversations/"+Uri.EscapeDataString(conversationId))).Items().ToArray();
         foreach(var item in interactions)await LoadEvents(item.Text("id"));
         activeId=interactions.LastOrDefault(x=>!new[]{"completed","failed","cancelled"}.Contains(x.Text("status"))).Text("id");
@@ -122,7 +123,7 @@
         var c=await Api.Post("/api/client/conversations");conversationId=c.Text("id");
         conversations=(await Api.Get("/api/client/conversations")).Items().ToArray();await Open();
     }catch(Exception ex){notice=ex.Message;error=true;}}
-    async Task Logout(){try{await Api.Delete("/api/client/clients/current");await Api.Delete("/api/client/session");}catch{}
+    async Task Logout(){await JS.InvokeVoidAsync("assisterSpeech.stop");try{await Api.Delete("/api/client/clients/current");await Api.Delete("/api/client/session");}catch{}
         connected=false;connection="Disconnected";conversationId="";interactions=[];attachments.Clear();eventMap.Clear();
         try{await JS.InvokeVoidAsync("assisterApi.voiceCancel");}catch{}recording=false;
     }
@@ -137,15 +138,16 @@
     }catch(Exception ex){recording=false;connection="Connected";notice=ex.Message;error=true;}}
     async Task Send(string? audioId=null){if(busy||string.IsNullOrWhiteSpace(message)||string.IsNullOrEmpty(conversationId))return;busy=true;
         var sent=message;try{
+            var streamSpeech=speak && await JS.InvokeAsync<bool>("assisterSpeech.prepare");
             var item=await Api.Post("/api/client/conversations/"+Uri.EscapeDataString(conversationId)+"/interactions",
-                new{message=sent.Trim(),idempotencyKey=Guid.NewGuid().ToString(),attachmentIds=attachments.Select(x=>x.Text("id")).ToArray(),audioAttachmentId=audioId,speak,streamSpeech=false});
-            message="";attachments.Clear();activeId=item.Text("id");await RefreshConversation();notice="";error=false;
+                new{message=sent.Trim(),idempotencyKey=Guid.NewGuid().ToString(),attachmentIds=attachments.Select(x=>x.Text("id")).ToArray(),audioAttachmentId=audioId,speak,streamSpeech});
+            message="";attachments.Clear();activeId=item.Text("id");if(speak)await JS.InvokeVoidAsync("assisterSpeech.start",activeId);await RefreshConversation();notice="";error=false;
         }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}
     }
     async Task RefreshConversation(){if(!connected||string.IsNullOrEmpty(conversationId))return;
         interactions=(await Api.Get("/api/client/conversations/"+Uri.EscapeDataString(conversationId))).Items().ToArray();
         foreach(var item in interactions){var id=item.Text("id");
-            if(!new[]{"completed","failed","cancelled"}.Contains(item.Text("status"))||!cursors.ContainsKey(id))await LoadEvents(id);
+            await LoadEvents(id);
         }
         if(interactions.All(x=>new[]{"completed","failed","cancelled"}.Contains(x.Text("status"))))activeId=null;
     }
@@ -162,9 +164,10 @@
     }
     async Task LoadContext(string id){try{context[id]=await Api.Get("/api/client/interactions/"+id+"/context");traces[id]=await Api.Get("/api/client/interactions/"+id+"/trace");
         attachmentsFor[id]=await Api.Get("/api/client/interactions/"+id+"/attachments");}catch(Exception ex){notice=ex.Message;error=true;}}
-    async Task Cancel(){if(activeId is null)return;try{await Api.Post("/api/client/interactions/"+activeId+"/cancel");notice="Cancellation requested.";}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task StopSpeech()=>await JS.InvokeVoidAsync("assisterSpeech.stop");
+    async Task Cancel(){if(activeId is null)return;try{await JS.InvokeVoidAsync("assisterSpeech.stop");await Api.Post("/api/client/interactions/"+activeId+"/cancel");notice="Cancellation requested.";}catch(Exception ex){notice=ex.Message;error=true;}}
     async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));while(await timer.WaitForNextTickAsync(token)){
-        await InvokeAsync(async()=>{if(connected){try{await RefreshConversation();connection="Connected";StateHasChanged();}catch(Exception ex){connection="Disconnected";notice=ex.Message;error=true;connected=false;StateHasChanged();}}});
+        await InvokeAsync(async()=>{if(connected){try{if(DateTimeOffset.UtcNow-lastRegistration>=TimeSpan.FromSeconds(30))await Register();await RefreshConversation();connection="Connected";StateHasChanged();}catch(Exception ex){connection="Disconnected";notice=ex.Message;error=true;connected=false;StateHasChanged();}}});
     }}catch(OperationCanceledException){}}
-    public async ValueTask DisposeAsync(){polling.Cancel();polling.Dispose();if(recording){try{await JS.InvokeVoidAsync("assisterApi.voiceCancel");}catch{}}}
+    public async ValueTask DisposeAsync(){polling.Cancel();polling.Dispose();if(rendered)try{await JS.InvokeVoidAsync("assisterSpeech.stop");}catch(JSDisconnectedException){}if(recording){try{await JS.InvokeVoidAsync("assisterApi.voiceCancel");}catch{}}}
 }

@@ -37,7 +37,7 @@ as well as the pre-existing audio and rich-client protocols.
 
 The conversation page polls durable interaction events, rather than opening
 a second WebSocket for every interaction. Rich-client audio responses use
-standard browser audio playback controls. File package uploads are sent
+the existing ordered segment player with automatic playback and completion acknowledgements. Retained recordings remain available through standard browser audio controls. File package uploads are sent
 directly from the browser to the existing API, avoiding large files over
 Blazor's circuit. Reminders, calendars, intents and device management
 continue using the established API contracts.
@@ -45,3 +45,8 @@ continue using the established API contracts.
 The frontend API permits actions that change device state; exercise care on
 the diagnostic chat, intent execution, satellite test, and administrator
 credential pages.
+
+API JSON responses are transferred with bounded JS interop streams (16 MiB maximum),
+so diagnostic histories larger than SignalR's 32 KiB per-message limit do not disconnect the circuit.
+The conversation page renews its capability registration every 30 seconds.
+

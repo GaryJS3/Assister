@@ -6,7 +6,7 @@ window.assisterApi = {
     if(token)headers.Authorization='Bearer '+token;
     if(ifMatch)headers['If-Match']=ifMatch;
     const r=await fetch(path,{method,headers,credentials:'same-origin',cache:'no-store',body:body===null||body===undefined?undefined:JSON.stringify(body)});
-    if(!r.ok){const d=await r.json().catch(()=>null);throw new Error(d?.error||d?.message||d?.detail||'Request failed (HTTP '+r.status+').');}
+    if(!r.ok){const d=await r.json().catch(()=>null);throw new Error(d?.error||d?.message||d?.detail||'Request failed: '+path+' (HTTP '+r.status+').' );}
     if(r.status===204)return null;
     const s=await r.text();return s?JSON.parse(s):null;
   },
@@ -77,3 +77,7 @@ window.assisterApi.voiceCancel=async function() {
 };
 
 window.assisterApi.toIso = value => new Date(value).toISOString();
+
+// Chunk large JSON responses over interop while retaining browser-origin cookie authorization.
+assisterApi.requestStream = async (...args) => new Blob([JSON.stringify(await assisterApi.request(...args))], {type:'application/json'});
+assisterApi.uploadStream = async (...args) => new Blob([JSON.stringify(await assisterApi.upload(...args))], {type:'application/json'});
