@@ -45,6 +45,7 @@ App.MapGet("/api/voice/stream/{id:guid}.wav", async (Guid Id, VoiceAudioStore Au
     { Context.Abort(); }
 });
 App.UseStaticFiles();
+App.MapStaticAssets();
 App.UseWebSockets();
 App.MapRichClients();
 App.MapDashboard();
