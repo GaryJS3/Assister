@@ -1,19 +1,25 @@
 <section class="run-timeline" aria-label="Run timeline">
     <div class="row timeline-heading"><h3>Where the time went</h3><strong>@RunTimings.Duration(Total) total</strong></div>
-    <p class="hint">Bars share the same time axis. Nested stages can overlap. Request → response uses the playback-start signal when available; estimates are labeled.</p>
-    <div class="timeline-axis"><span>Request start</span><span>@RunTimings.Duration(Total)</span></div>
-    @foreach(var lane in Lanes){
-        <div class="timeline-row @(lane.Kind=="latency"?"latency":"") @(lane.Nested?"nested":"")">
-            <div class="timeline-label"><strong>@lane.Name</strong><small>+@RunTimings.Duration(lane.Offset) @(lane.Estimated?"· estimated":"")</small></div>
-            <div class="timeline-track" aria-label="@(lane.Name+": starts at "+RunTimings.Duration(lane.Offset)+", duration "+RunTimings.Duration(lane.Duration))"><span class="timeline-bar kind-@lane.Kind" style="left:@RunTimings.Percent(lane.Offset,Total);width:@RunTimings.Percent(lane.Duration,Total)"></span></div>
-            <span class="timeline-duration">@RunTimings.Duration(lane.Duration)</span>
-        </div>
-    }
-    @if(Lanes.Count>0&&!Lanes.Any(l=>l.Kind=="latency")){<p class="hint">Response latency was not recorded for this run.</p>}
-    @if(Lanes.Count==0){<p class="empty">Stage timings are not available for this run yet.</p>}
+    @if(Lanes.Count>0){
+        <div class="timeline-axis" aria-hidden="true"><span>Stage</span><span>Start</span><span class="timeline-scale"><span>0</span><span>@RunTimings.Duration(Total)</span></span><span>Elapsed</span></div>
+        @foreach(var lane in Lanes){
+            <div class="timeline-row @(lane.Kind=="latency"?"latency":"") @(lane.Nested?"nested":"")">
+                <strong class="timeline-label" title="@lane.Name">@lane.Name</strong>
+                <span class="timeline-offset" title="Offset from request start">+@RunTimings.Duration(lane.Offset)</span>
+                <div class="timeline-track" aria-hidden="true"><span class="timeline-bar kind-@lane.Kind" style="left:@RunTimings.Percent(lane.Offset,Total);width:@RunTimings.Percent(lane.Duration,Total)"></span></div>
+                <span class="timeline-duration" title="@(lane.Estimated?"Estimated time to audio delivery":"Stage duration")">@(lane.Estimated?"≈ ":"")@RunTimings.Duration(lane.Duration)</span>
+            </div>
+        }
+        @if(Lanes.Any(l=>l.Estimated)){<p class="timeline-note">≈ Estimated from audio delivery; playback start wasn’t recorded.</p>}
+        @if(!Lanes.Any(l=>l.Kind=="latency")){<p class="timeline-note">Response latency was not recorded for this run.</p>}
+    }else{<p class="timeline-note">Stage timings are not available for this run yet.</p>}
 </section>
 @code {
     [Parameter] public JsonElement Run {get;set;}
-    IReadOnlyList<TimelineLane> Lanes=>RunTimings.Lanes(Run);
-    double Total=>Math.Max(Run.Number("durationMilliseconds"),Lanes.Select(l=>l.Offset+l.Duration).DefaultIfEmpty(1).Max());
+    IReadOnlyList<TimelineLane> Lanes=[];
+    double Total;
+    protected override void OnParametersSet(){
+        Lanes=RunTimings.Lanes(Run);
+        Total=Math.Max(Run.Number("durationMilliseconds"),Lanes.Select(l=>l.Offset+l.Duration).DefaultIfEmpty(1).Max());
+    }
 }
