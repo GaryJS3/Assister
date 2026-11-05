@@ -22,9 +22,9 @@ public static class BermudaTracker
         ?? Regex.Replace(Entity.Name, @"\s+Area$", "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     public static HomeAssistantEntity[] Find(HomeAssistantSnapshot Snapshot, string Query)
     {
-        var Target = Normalize(Assister.Intents.LanguageParser.Noun(Query));
+        var Target = Normalize(Assister.Intents.LanguageParser.Noun(Query)).Replace(" ", "");
         return Snapshot.Entities.Where(IsArea).Where(Entity => new[] { Entity.EntityId, Entity.Name, Label(Entity) }
-            .Concat(Entity.Aliases).Any(Name => Normalize(Name) == Target)).ToArray();
+            .Concat(Entity.Aliases).Any(Name => Normalize(Name).Replace(" ", "") == Target || Normalize(Regex.Replace(Name, @"[ -]+Tracking$", "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).Replace(" ", "") == Target)).ToArray();
     }
     private static string? Area(HomeAssistantEntity? Entity)
     {

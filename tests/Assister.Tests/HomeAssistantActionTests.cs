@@ -39,6 +39,9 @@ public sealed class HomeAssistantActionTests
                 using var WrongSpeed = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["fan.office"], SpeedPercent: Speed), WrongSpeed.Token));
                 Assert.Equal(2, Handler.Calls);
+                Configuration["HomeAssistant:ConfirmationTimeoutSeconds"] = "0.1";
+                await Assert.ThrowsAsync<HomeAssistantConfirmationException>(() => Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["fan.office"], SpeedPercent: Speed), Deadline.Token));
+                Assert.Equal(3, Handler.Calls); // Accepted once per call, never automatically resent.
             }
             await Assert.ThrowsAsync<InvalidOperationException>(() => Client.ControlAsync(new(HomeAssistantAction.SetFanSpeed, ["light.desk"], SpeedPercent: 50), Deadline.Token));
         }

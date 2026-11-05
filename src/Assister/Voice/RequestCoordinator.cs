@@ -46,6 +46,11 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             return Result("Please send a message of 1 to 1000 characters and a valid satellite identifier.", "invalid-request", "validation");
         }
 
+        if (System.Text.RegularExpressions.Regex.IsMatch(LanguageParser.Normalize(Request.Message),
+            @"^(?:what (?:types|kinds|levels) of notifications (?:can we send|are (?:there|available))|what notification (?:types|levels) (?:are available|do you support))$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
+            return Result(Assister.Satellites.AnnouncementLevels.Capabilities, "succeeded", "capabilities");
+
         if (Satellites is not null && await Satellites.AcknowledgeAsync(Request.SatelliteId, Request.Message, CancellationToken))
             return Result("Acknowledged.", "succeeded", "satellite-acknowledgement");
         if (Announcements is not null && await Announcements.TryHandleAsync(Request, DeviceContext, CancellationToken) is { } AnnouncementResponse)
@@ -60,7 +65,7 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Reminders is not null && await Reminders.TryHandleAsync(Request, CancellationToken, AllowModelFallback: LanguageModel is not null) is { } ReminderResponse)
         {
-            return Result(ReminderResponse, "succeeded", "reminder");
+            return Result(ReminderResponse, ReminderResponse.Contains('?') || ReminderResponse.StartsWith("Do you mean") || ReminderResponse.StartsWith("Please ") ? "ambiguous" : "succeeded", "reminder");
         }
         if (Timers is not null && await Timers.TryHandleAsync(Request, CancellationToken) is { } TimerResponse)
         {
@@ -91,6 +96,13 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         DeviceContext?.Expire();
         var CurrentControl = ControlRequest.Parse(Request.Message, DeviceContext);
         var ClassifierText = Request.Message;
+        if (CurrentControl is null && DeviceContext is { AwaitingStateQuery: true })
+        {
+            var Candidates = Cache.Snapshot().Entities.Where(Entity => DeviceContext.References.Any(Reference => Reference.EntityId == Entity.EntityId)).ToArray();
+            var Selected = HomeAssistantEntitySearch.Find(Candidates, Request.Message);
+            if (Selected.Length == 1) ClassifierText = "what is the state of " + Selected[0].EntityId;
+            DeviceContext.AwaitingStateQuery = false;
+        }
         if (CurrentControl is null && DeviceContext?.LastAttempted is { } LastAttempt
             && System.Text.RegularExpressions.Regex.IsMatch(LanguageParser.Normalize(Request.Message), @"^(?:did you|have you) (?:turn|switch|set|dim|change)\b.*\b(?:them|it|those|these|both)\b"))
         {
@@ -170,6 +182,11 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             {
                 return Result(Error.Response ?? "I could not confirm the command completed. Please check the device or use its full name.", "failed", "language-model");
             }
+            catch (HomeAssistantConfirmationException)
+            {
+                if (DeviceContext?.LastAttempted is { } Attempt) DeviceContext.LastAttempted = Attempt with { Outcome = "accepted-unconfirmed" };
+                return Result("Home Assistant accepted the command, but I could not confirm the final device state. Please check the device before trying again.", "accepted-unconfirmed", "language-model");
+            }
             catch (DeviceClarificationRequiredException Error)
             {
                 return Result(Error.Message, "ambiguous", "clarification");
@@ -183,7 +200,10 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
                 using (var Failure = RunTracing.Start("Error", "Language model failure", "LLM routing stopped; supported direct commands remain available."))
                 {
                     Failure.Metadata(new { failureCategory = Error.GetType().Name,
-                        responseFailure = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.Reason });
+                        responseFailure = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.Reason,
+                        finishReason = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.FinishReason,
+                        streaming = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.Streaming,
+                        terminalEventSeen = (Error as Assister.Llm.InvalidLanguageModelResponseException)?.TerminalEventSeen });
                     Failure.Complete("failed");
                 }
                 Logger.LogWarning("Language model request failed ({FailureType}).", Error.GetType().Name);
@@ -252,9 +272,10 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
             }
             if (DeviceContext is not null && Resolution.Alternatives.Count > 0)
             {
-                DeviceContext.References = Resolution.Alternatives.Where(Entity => Entity.Domain is "light" or "switch")
+                DeviceContext.References = Resolution.Alternatives.Where(Entity => Entity.Domain is "light" or "switch" or "fan")
                     .Take(10).Select(Entity => new DeviceReference(Entity.EntityId, Entity.Name)).ToArray();
                 DeviceContext.Pending = CurrentControl;
+                DeviceContext.AwaitingStateQuery = Intent.Kind == DirectIntentKind.QueryState;
                 DeviceContext.UpdatedAt = DateTimeOffset.UtcNow;
             }
             return Result(Resolution.Alternatives.Count > 0 ? "Which device do you mean: " + string.Join(" or ", Resolution.Alternatives.Select(Entity => Entity.Name)) + "?" : "I could not find that device in the requested area.",
@@ -287,6 +308,11 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
                 ? IntentResponses.Render(Matched, Response.Response, Configuration ?? new ConfigurationBuilder().Build()) : Response.Response, Response.Outcome);
         }
         catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
+        catch (HomeAssistantConfirmationException)
+        {
+            if (DeviceContext?.LastAttempted is { } Attempt) DeviceContext.LastAttempted = Attempt with { Outcome = "accepted-unconfirmed" };
+            return Result("Home Assistant accepted the command, but I could not confirm the final device state. Please check the device before trying again.", "accepted-unconfirmed");
+        }
         catch (Exception Error) when (Error is HttpRequestException or OperationCanceledException or InvalidOperationException or System.Text.Json.JsonException or System.IO.IOException)
         {
             using (var Failure = RunTracing.Start("Error", "Direct action failure", "Device action completion could not be confirmed."))

@@ -287,6 +287,30 @@ public sealed class AnnouncementTests
         Assert.Equal(new[] { "kitchen" }, Manager.PendingAnnouncementIds);
     }
 
+    [Theory]
+    [InlineData(AnnouncementImportance.Acknowledge)]
+    [InlineData(AnnouncementImportance.Alarm)]
+    public async Task ClearingOneBroadcastRecipientClearsPeersAndSkipsQueuedDelivery(AnnouncementImportance Importance)
+    {
+        var (Manager, Kitchen, Office) = Setup();
+        var Broadcast = new SatelliteManager.AnnouncementBroadcast();
+        foreach (var Id in new[] { "kitchen", "office" })
+            Assert.True(await Manager.AnnounceAsync(Id, "Broadcast", new Speech(), default, Importance: Importance, Broadcast: Broadcast));
+        var Unrelated = new Speaker("other", "Other");
+        Manager.Register(Unrelated);
+        Manager.Update("other", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        await Manager.AnnounceAsync("other", "Unrelated alarm", new Speech(), default, Importance: AnnouncementImportance.Alarm);
+        Assert.True(await Manager.StopAsync("office", default));
+        Assert.Equal(new[] { "other" }, Manager.PendingAnnouncementIds);
+        Assert.False(Manager.IsAcknowledgementListening("kitchen"));
+        Assert.Contains(Manager.Events("kitchen"), Event => Event.Type == "Broadcast occurrence superseded or cancelled");
+        var Count = Kitchen.Events.Count;
+        Assert.True(await Manager.AnnounceAsync("kitchen", "Queued broadcast", new Speech(), default, Importance: Importance, Broadcast: Broadcast));
+        Assert.Equal(Count, Kitchen.Events.Count);
+        Assert.DoesNotContain(Unrelated.Events, Event => Event.Type == "stop-playback");
+        Assert.Contains(Office.Events, Event => Event.Type == "stop-playback");
+    }
+
     private static (SatelliteManager, Speaker, Speaker) Setup()
     {
         var Manager = new SatelliteManager();

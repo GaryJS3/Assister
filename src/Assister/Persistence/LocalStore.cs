@@ -5,6 +5,8 @@ namespace Assister.Persistence;
 
 public sealed class LocalStore(AssisterDbContext Database)
 {
+    public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(CancellationToken Token)
+        => Database.Database.BeginTransactionAsync(Token);
     private async Task<DbCommand> CommandAsync(string Sql, object?[] Values, CancellationToken Token)
     {
         await Database.Database.OpenConnectionAsync(Token);

@@ -31,6 +31,14 @@ public sealed class BermudaTrackerTests
     }
 
     [Fact]
+    public void CompactPhoneTrackerNamesMatchSpokenPossessives()
+    {
+        var Phone = Entity("sensor.renamed_phone", "Area", "Master Bedroom", "phone", "MegsPhone-Tracking");
+        Assert.Single(BermudaTracker.Find(Snapshot(Phone), "Meg's phone"));
+        Assert.Single(BermudaTracker.Find(Snapshot(Phone), "MegsPhone-Tracking"));
+    }
+
+    [Fact]
     public void GeneralLocationQuestionsRemainAvailableToTheModel()
     {
         Assert.Null(new IntentClassifier().Classify("Where is Bermuda?"));

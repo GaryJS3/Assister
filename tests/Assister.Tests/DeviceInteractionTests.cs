@@ -46,7 +46,7 @@ public sealed class DeviceInteractionTests
         var Result = await App.Send("Hey Jarvis, set kitchen lights to off.");
         Assert.Equal("succeeded", Result.Outcome);
         Assert.DoesNotContain("unavailable", Result.Response);
-        Assert.Equal("none", App.Model.Requests.Last().ToolChoice);
+        Assert.Equal("required", App.Model.Requests.Last().ToolChoice);
         Assert.Equal(["light.kitchen_main_lights", "light.kitchen_sink_light"], Assert.Single(App.Actions.Calls).EntityIds);
         if (FailingReply)
         {
@@ -62,6 +62,8 @@ public sealed class DeviceInteractionTests
     [InlineData("turn off all of the kitchen lights")]
     [InlineData("turn off both kitchen lights")]
     [InlineData("turn off all lights in the kitchen")]
+    [InlineData("Shut off kitchen lights.")]
+    [InlineData("turn on kitchen lights")]
     [InlineData("set all kitchen lights to 10 percent")]
     public async Task AuditedGroupCommandStaysInKitchenAndAvoidsModel(string Message)
     {
@@ -114,8 +116,8 @@ public sealed class DeviceInteractionTests
             OnText: Streaming ? (_, _) => Task.CompletedTask : null);
         Assert.Equal("Turned off Main Lights and Sink Light.", Answer);
         Assert.Single(App.Actions.Calls);
-        Assert.Equal("none", App.Model.Requests.Last().ToolChoice);
-        Assert.Equal(3, App.Model.Requests.Count);
+        Assert.Equal("required", App.Model.Requests.Last().ToolChoice);
+        Assert.Equal(2, App.Model.Requests.Count);
     }
 
     [Theory]
@@ -128,7 +130,7 @@ public sealed class DeviceInteractionTests
         using var Lifetime = new CancellationTokenSource();
         App.Model.Responses.Enqueue(new(null, [Call("search", "ha_search", """{"query":"kitchen lights","area":"kitchen"}""")], "tool_calls"));
         App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_ids":["light.kitchen_main_lights","light.kitchen_sink_light"],"action":"turn_off"}""")], "tool_calls"));
-        App.Model.BeforeReplyFailure = Lifetime.Cancel;
+        App.Actions.AfterControl = Lifetime.Cancel;
         App.Model.ReplyFailure = new OperationCanceledException(Lifetime.Token);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => App.Loop.RespondAsync(new("turn off kitchen lights"), [], Lifetime.Token,
             OnText: Streaming ? (_, _) => Task.CompletedTask : null));
@@ -186,7 +188,7 @@ public sealed class DeviceInteractionTests
         App.Model.Responses.Enqueue(new(null, [Call("control", "ha_control", """{"entity_id":"fan.office_fan","action":"set_fan_speed","speed_pct":50}""")], "tool_calls"));
         App.Model.Responses.Enqueue(new("Fan speed command completed.", [], "stop"));
         var Answer = await App.Loop.RespondAsync(new("Set the office fan speed to 50%"), [], CancellationToken.None);
-        Assert.Contains("completed", Answer);
+        Assert.Contains("50 percent speed", Answer);
         var Action = Assert.Single(App.Actions.Calls);
         Assert.Equal(HomeAssistantAction.SetFanSpeed, Action.Action);
         Assert.Equal(50, Action.SpeedPercent);
@@ -601,6 +603,42 @@ public sealed class DeviceInteractionTests
 
     private static JsonElement Json(string Text) => JsonSerializer.Deserialize<JsonElement>(Text);
     private static LlmToolCall Call(string Id, string Name, string Arguments) => new(Id, new(Name, Arguments));
+
+    [Fact]
+    public async Task FanClarificationUsesDirectReadWithoutAnotherModelRound()
+    {
+        await using var App = await Fixture.Create();
+        App.Cache.Load(Json("""
+            [{"entity_id":"fan.office_fan","state":"on","attributes":{"friendly_name":"Office Fan","percentage":30}},
+             {"entity_id":"fan.master_bedroom","state":"on","attributes":{"friendly_name":"Master Bedroom Fan","percentage":20}}]
+            """), Json("{}"), Json("[]"), Json("[]"), Json("[]"));
+        App.Cache.SetStale(false);
+        var Question = await App.Send("what is the fan set to?");
+        Assert.Equal("ambiguous", Question.Outcome);
+        var Answer = await App.Send("master bedroom", Question.ConversationId);
+        Assert.Equal("direct-intent", Answer.HandledBy);
+        Assert.Contains("20", Answer.Response);
+        Assert.Empty(App.Model.Requests); Assert.Empty(App.Actions.Calls);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RichContextSurvivesOneMinuteWhileVoiceStillExpires(bool Rich)
+    {
+        await using var App = await Fixture.Create();
+        var Coordinator = new ConversationCoordinator(App.Database,
+            new RequestCoordinator(new IntentClassifier(), new HomeAssistantEntityResolver(), new(App.Actions), App.Cache, NullLogger<RequestCoordinator>.Instance, App.Loop), new());
+        var Request = new UserRequest("what is the state of light.bedroom", Rich ? "client-conversation-audit" : "voice-audit", DeviceId: Rich ? "client-audit" : null);
+        var First = await Coordinator.ProcessAsync(Request, default);
+        var Row = await App.Database.Conversations.SingleAsync();
+        var Context = JsonSerializer.Deserialize<DeviceConversationContext>(Row.DeviceContextJson)!;
+        Context.ResponseFinishedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        Row.DeviceContextJson = JsonSerializer.Serialize(Context); Row.UpdatedAt = Context.ResponseFinishedAt.Value.ToUnixTimeSeconds();
+        await App.Database.SaveChangesAsync();
+        var Next = await Coordinator.ProcessAsync(Request with { ConversationId = First.ConversationId }, default);
+        Assert.Equal(Rich, Next.ConversationId == First.ConversationId);
+    }
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection Connection = new("Data Source=:memory:");
@@ -652,10 +690,10 @@ public sealed class DeviceInteractionTests
     private sealed class RecordingActions : IHomeAssistantClient
     {
         public List<HomeAssistantControl> Calls { get; } = [];
-        public string? FailOn;
+        public string? FailOn; public Action? AfterControl;
         public Task ControlAsync(HomeAssistantControl Control, CancellationToken Token)
         {
-            Calls.Add(Control);
+            Calls.Add(Control); AfterControl?.Invoke();
             if (Control.EntityIds.Contains(FailOn)) { throw new IOException("Readback failed after sending the command."); }
             return Task.CompletedTask;
         }

@@ -57,7 +57,7 @@
       const content = document.createElement('div');
       content.append(text('h3', item.message));
       const clock = String(item.hour).padStart(2, '0') + ':' + String(item.minute).padStart(2, '0');
-      content.append(text('p', (item.weekday === null ? 'Every day' : 'Every ' + days[item.weekday]) + ' · ' + clock, 'rhythm'));
+      content.append(text('p', (item.oneTime ? 'Once' : item.weekday === null ? 'Every day' : 'Every ' + days[item.weekday]) + ' · ' + clock + ' · ' + item.importance, 'rhythm'));
       let next;
       try { next = new Intl.DateTimeFormat(undefined, { timeZone: item.timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(item.nextDueAt)); }
       catch { next = new Date(item.nextDueAt).toISOString(); }

@@ -68,6 +68,26 @@ public sealed class SatelliteManager
             && NotificationSessions.GetValueOrDefault(Session) == NotificationId) await StopAsync(Id, Token);
     }
     public bool IsAcknowledgementListening(string Id) => Announcements.TryGetValue(Id, out var Item) && Interlocked.Read(ref Item.ListenUntilTicks) > Clock.GetUtcNow().UtcTicks;
+    public async Task CancelBroadcastAsync(AnnouncementBroadcast Broadcast, CancellationToken Token)
+    {
+        var Recipients = new List<string>();
+        lock (Broadcast.Gate)
+        {
+            Broadcast.Acknowledged = true;
+            foreach (var Pair in Announcements)
+                if (ReferenceEquals(Pair.Value.Broadcast, Broadcast)
+                    && ((ICollection<KeyValuePair<string, RepeatingAnnouncement>>)Announcements).Remove(Pair))
+                    Recipients.Add(Pair.Key);
+        }
+        foreach (var Id in Recipients)
+        {
+            Record(Id, "Broadcast occurrence superseded or cancelled");
+            if (AnnouncementSessions.TryGetValue(Id, out var Session) && Sessions.GetValueOrDefault(Id) == Session)
+                await StopAsync(Id, Token);
+            else if (TryGet(Id, out var Peer) && Peer is IAcknowledgementListener Listener)
+                await Listener.StopAcknowledgementListeningAsync(Token);
+        }
+    }
     public async Task<bool> AcknowledgeAsync(string Id, string Text, CancellationToken Token)
     {
         if (!AnnouncementLevels.IsAcknowledgement(Text) || !Announcements.TryRemove(Id, out var Acknowledged)) return false;
@@ -141,7 +161,8 @@ public sealed class SatelliteManager
     }
     public async Task<bool> StopAsync(string Id, CancellationToken Token)
     {
-        Announcements.TryRemove(Id, out _);
+        if (Announcements.TryRemove(Id, out var Pending) && Pending.Broadcast is { } Broadcast)
+            await CancelBroadcastAsync(Broadcast, Token);
         if (!TryGet(Id, out var Connection)) { return false; }
         if (Connection is IAcknowledgementListener Listener) await Listener.StopAcknowledgementListeningAsync(Token);
         var Session = Sessions.GetValueOrDefault(Id);
@@ -227,7 +248,7 @@ public sealed class SatelliteManager
             await Connection.SendAudioAsync(AnnouncementAudio(Text, Tts, Importance, Timeout.Token), Timeout.Token);
             if (Pending is not null && Announcements.TryGetValue(Id, out var Current) && ReferenceEquals(Pending, Current))
             {
-                Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().Add(Importance == AnnouncementImportance.Alarm ? TimeSpan.FromSeconds(10) : TimeSpan.FromMinutes(10)).UtcTicks);
+                Interlocked.Exchange(ref Pending.NextTicks, Clock.GetUtcNow().Add(Importance == AnnouncementImportance.Alarm ? AnnouncementLevels.AlarmRepeatInterval : AnnouncementLevels.AcknowledgeRepeatInterval).UtcTicks);
                 Interlocked.Exchange(ref Pending.ListenUntilTicks, Clock.GetUtcNow().AddSeconds(10).UtcTicks);
             }
             Record(Id, "Announcement completed", SessionId: Session);
