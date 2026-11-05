@@ -7,6 +7,7 @@ COPY src/ src/
 COPY bridge/satellite.proto bridge/
 COPY tones/ tones/
 RUN dotnet publish src/Assister/Assister.csproj -c Release -o /app --no-restore
+RUN test -s /app/wwwroot/_framework/blazor.web.js
 COPY tools/Assister.ServiceProbe/ tools/Assister.ServiceProbe/
 COPY tools/Assister.VoiceBench/EndpointBenchmark.cs tools/Assister.VoiceBench/
 RUN dotnet publish tools/Assister.ServiceProbe/Assister.ServiceProbe.csproj -c Release -o /probe
