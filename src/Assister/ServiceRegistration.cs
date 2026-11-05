@@ -20,6 +20,18 @@ public static class ServiceRegistration
 {
     public static IServiceCollection AddAssisterServices(this IServiceCollection Services)
     {
+        Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarStore>();
+        Services.AddSingleton<Assister.Modules.GoogleCalendar.GoogleCalendarClient>();
+        Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarDeletion>();
+        Services.AddSingleton<Assister.Modules.GoogleCalendar.CalendarScheduler>();
+        Services.AddHostedService(S => S.GetRequiredService<Assister.Modules.GoogleCalendar.CalendarScheduler>());
+        Services.AddHttpClient("google-calendar", C => C.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        foreach (var Name in new[] { "calendar_list", "calendar_events", "calendar_create", "calendar_edit", "calendar_delete" })
+            Services.AddTransient<IAssisterTool>(S => new GoogleCalendarTool(Name,
+                S.GetRequiredService<Assister.Modules.GoogleCalendar.CalendarStore>(),
+                S.GetRequiredService<Assister.Modules.GoogleCalendar.GoogleCalendarClient>(),
+                S.GetRequiredService<Assister.Modules.GoogleCalendar.CalendarDeletion>()));
         Services.AddSingleton<ClientUpdateHost>();
         Services.AddGrpc(Options => Options.MaxReceiveMessageSize = 128 * 1024);
         Services.AddSingleton<VoiceAudioStore>();

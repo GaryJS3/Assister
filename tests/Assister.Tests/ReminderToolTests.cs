@@ -50,7 +50,7 @@ public sealed class ReminderToolTests
     [InlineData("Change the reminder to 9 PM", true)]
     [InlineData("Can you remind me each evening?", true)]
     [InlineData("Put it on my calander", true)]
-    [InlineData("Check my calendar", true)]
+    [InlineData("Check my calendar", false)]
     [InlineData("Explain solar power", false)]
     public async Task ToolsAreOfferedOnlyForSchedulingRequests(string Text, bool Expected)
     {

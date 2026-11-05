@@ -1,0 +1,75 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+using Assister.Contracts;
+using Assister.Persistence;
+using Assister.Satellites;
+
+namespace Assister.Modules.GoogleCalendar;
+
+public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClient Client, IServiceScopeFactory Scopes,
+    SatelliteManager Satellites, ILogger<CalendarScheduler> Logger) : BackgroundService
+{
+    public string? LastError { get; private set; }
+    public DateTimeOffset? LastChecked { get; private set; }
+    protected override async Task ExecuteAsync(CancellationToken Ct)
+    {
+        while (!Ct.IsCancellationRequested)
+        {
+            LastError = null;
+            foreach (var Account in Settings.Snapshot())
+                foreach (var Calendar in Account.Calendars.Where(C => C.Enabled && C.Announce))
+                    try { await Tick(Account.Id, Calendar, DateTimeOffset.UtcNow, Ct); }
+                    catch (OperationCanceledException) when (Ct.IsCancellationRequested) { return; }
+                    catch (Exception Error)
+                    { LastError = "Calendar polling or announcement failed. Check credentials, sharing and satellite connectivity."; Logger.LogWarning("Calendar polling failed ({FailureType}).", Error.GetType().Name); }
+            LastChecked = DateTimeOffset.UtcNow;
+            try { await Task.Delay(TimeSpan.FromSeconds(30), Ct); } catch (OperationCanceledException) when (Ct.IsCancellationRequested) { return; }
+        }
+    }
+    public static DateTimeOffset? Start(JsonObject Event, string Zone)
+    {
+        if (Event["start"]?["dateTime"] is { } Time) return DateTimeOffset.Parse(Time.GetValue<string>(), CultureInfo.InvariantCulture);
+        if (Event["start"]?["date"] is not { } Date) return null;
+        var Local = DateTime.SpecifyKind(DateTime.ParseExact(Date.GetValue<string>(), "yyyy-MM-dd", CultureInfo.InvariantCulture), DateTimeKind.Unspecified);
+        var TimeZone = TimeZoneInfo.FindSystemTimeZoneById(Event["start"]?["timeZone"]?.GetValue<string>() ?? Zone);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(Local, TimeZone), TimeSpan.Zero);
+    }
+    public static int[] ReminderMinutes(JsonObject Event, JsonArray Defaults)
+    {
+        var Reminders = Event["reminders"];
+        var Items = Reminders?["useDefault"]?.GetValue<bool>() == true ? Defaults : Reminders?["overrides"] as JsonArray;
+        return Items?.Where(R => R?["method"]?.GetValue<string>() is "popup" or "email")
+            .Select(R => R!["minutes"]!.GetValue<int>()).Where(M => M is >= 0 and <= 40320).Distinct().ToArray() ?? [];
+    }
+    public async Task Tick(string Account, CalendarSubscription Calendar, DateTimeOffset Now, CancellationToken Ct)
+    {
+        if (!Satellites.ConnectedIds.Contains(Calendar.SatelliteId) || Satellites.IsBusy(Calendar.SatelliteId)) return;
+        var Metadata = await Client.Send(Account, HttpMethod.Get, "users/me/calendarList/" + GoogleCalendarClient.Escape(Calendar.Id), null, Ct);
+        await using var Scope = Scopes.CreateAsyncScope();
+        var Store = Scope.ServiceProvider.GetRequiredService<LocalStore>();
+        var Speech = Scope.ServiceProvider.GetRequiredService<ITextToSpeechProvider>();
+        string? Next = null;
+        do
+        {
+            var Page = await Client.Events(Account, Calendar.Id, Now.AddMinutes(-5), Now.AddDays(28).AddMinutes(1), Next, Ct);
+            foreach (var Item in Page["items"]!.AsArray().OfType<JsonObject>())
+            {
+                if (Item["status"]?.GetValue<string>() == "cancelled" || Start(Item, Metadata["timeZone"]?.GetValue<string>() ?? "UTC") is not { } At || At < Now.AddMinutes(-5)) continue;
+                foreach (var Minutes in ReminderMinutes(Item, Metadata["defaultReminders"] as JsonArray ?? []))
+                {
+                    if (At < Now && Minutes != 0) continue;
+                    var Due = At.AddMinutes(-Minutes);
+                    // A five-minute grace period tolerates polling delays without replaying old notifications after downtime.
+                    if (Due > Now || Due < Now.AddMinutes(-5)) continue;
+                    var Key = System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = Item["id"]!.GetValue<string>(), At, Minutes, Calendar.SatelliteId });
+                    if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) continue;
+                    var Text = "Upcoming event: " + (Item["summary"]?.GetValue<string>() ?? "Untitled event") + (Minutes == 0 ? ". Starting now." : $". Starts in {Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes))} minutes.");
+                    if (await Satellites.AnnounceAsync(Calendar.SatelliteId, Text, Speech, Ct))
+                        await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
+                }
+            }
+            Next = Page["nextPageToken"]?.GetValue<string>();
+        } while (Next is not null);
+        await Store.ExecuteAsync("DELETE FROM GoogleCalendarDeliveries WHERE ExpiresAt < $p0", Ct, Now.ToUnixTimeSeconds());
+    }
+}
