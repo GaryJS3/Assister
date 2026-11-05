@@ -22,6 +22,7 @@
             <p class="hint">Devices with the same owner share accessible conversations and notifications.</p>
         </section>
         <section class="card"><div class="row"><h2>Configured clients</h2><button disabled="@busy" @onclick="Load">Refresh</button></div>
+            <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Configured clients">
             @foreach(var c in clients){
                 <article class="panel stack"><div class="row"><strong>@c.Text("clientId")</strong><span class="status-pill @(c.Flag("revoked")?"bad":"good")">@(c.Flag("revoked")?"Revoked":"Active")</span></div>
                     <p class="muted">@(c.Flag("managed")?"Managed":"Server configuration") · Owner: @c.Text("owner")</p>
@@ -31,7 +32,7 @@
                     @if(!c.Flag("revoked")){<button class="danger" disabled="@busy" @onclick="()=>Revoke(c)">Revoke</button>}</div>
                 </article>
             }
-        </section>
+        </div></section>
     </div>
 }
 @code {

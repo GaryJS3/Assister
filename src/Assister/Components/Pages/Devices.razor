@@ -1,18 +1,21 @@
 @page "/devices"
 @page "/devices.html"
 @page "/satellites.html"
+@page "/devices/view/{DeviceId}"
+@inject NavigationManager Navigation
 @inject BrowserApi Api
 <PageTitle>Devices · Assister</PageTitle>
 <PageHeader Eyebrow="OPERATIONS / DEVICES" Title="Devices" Description="Audio satellites, desktop clients and Android devices with a unified inventory.">
     <Actions><button disabled="@busy" @onclick="Load">Refresh inventory</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />
+@if(!Focused){
 <section class="card">
     <div class="row"><h2>Satellites</h2><span class="status-pill">@satellites.Length devices</span></div>
     <div class="table-wrap"><table><thead><tr><th>Name</th><th>Area</th><th>Provider</th><th>Connection</th><th>Ownership</th><th>Activity</th><th>Last seen</th></tr></thead><tbody>
     @foreach(var entry in satellites){
         var d=entry.Prop("device");var r=entry.Prop("runtime");
-        <tr><td><button @onclick="@(() => Select(d.Text("id")))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
+        <tr><td><button @onclick="@(() => OpenDevice(d.Text("id")))">@d.Text("name")</button><div class="subtle mono">@d.Text("id")</div></td>
         <td>@d.Text("areaId","Unassigned")</td><td>@d.Text("providerType")</td>
         <td><span class="status-pill @(r.Text("connectionState")=="Online"?"good":"bad")">@r.Text("connectionState")</span></td>
         <td>@Ownership(r)</td><td>@Activity(r)</td><td>@Api.Date(r,"lastSeen")</td></tr>
@@ -20,6 +23,8 @@
     </tbody></table></div>
     @if(satellites.Length==0){<p class="empty">No registered satellites.</p>}
 </section>
+}
+@if(Focused){<div class="editor-toolbar"><a href="/devices">← Back to devices</a><span class="status-pill">Device details</span></div>}
 @if(selected.ValueKind==JsonValueKind.Object){
     var device=selected.Prop("device");var runtime=selected.Prop("runtime");var id=device.Text("id");
     <section class="card">
@@ -82,7 +87,8 @@
         }
     </section>
 }
-<section class="card"><h2>Registered clients</h2>
+@if(!Focused){
+<section class="card scroll-region collection-list" tabindex="0" role="region" aria-label="Registered clients"><h2>Registered clients</h2>
     @foreach(var section in new[]{("windows","Windows"),("android","Android"),("other","Web / other")}){
         var matches=clients.Where(c=>section.Item1=="other"?!new[]{"windows","android"}.Contains(c.Text("clientType")):c.Text("clientType")==section.Item1).ToArray();
         <h3>@section.Item2 (@matches.Length)</h3>
@@ -97,12 +103,17 @@
         }
     }
 </section>
-<section class="card"><h2>Shared device groups</h2>
+<section class="card scroll-region collection-list" tabindex="0" role="region" aria-label="Shared device groups"><h2>Shared device groups</h2>
     @foreach(var entry in groups.Prop("satellites").Items()){
         <div class="panel"><strong>@entry.Text("owner")</strong> · @entry.Text("satelliteId")<p>@string.Join(", ",entry.Prop("groups").Items().Select(x=>x.String()))</p></div>
     }
 </section>
+}
 @code {
+    [Parameter] public string? DeviceId {get;set;}
+    bool Focused=>!string.IsNullOrEmpty(DeviceId??Id);
+    void OpenDevice(string id)=>Navigation.NavigateTo("/devices/view/"+Uri.EscapeDataString(id));
+    protected override void OnParametersSet(){if(satellites.Length>0){if(Focused)Select(DeviceId??Id!);else selected=default;}}
     [SupplyParameterFromQuery(Name="id")] [Parameter] public string? Id {get;set;}
     static readonly string[] Tabs=["Status","Voice","Playback","Groups","Diagnostics","Configuration"];
     static readonly string[] Owners=["Unknown","Available","Owned by Assister","Conflict","Unsupported"];
@@ -121,7 +132,7 @@
         satellites=(await Api.Get("/api/satellites")).Items().ToArray();
         clients=(await Api.Get("/api/devices/clients")).Items().ToArray();
         groups=await Api.Get("/api/devices/groups");
-        if(selected.ValueKind!=JsonValueKind.Object && Id is not null)Select(Id);
+        if(selected.ValueKind!=JsonValueKind.Object && Focused)Select(DeviceId??Id!);
         else if(selected.ValueKind==JsonValueKind.Object)selected=satellites.FirstOrDefault(x=>x.Prop("device").Text("id")==selected.Prop("device").Text("id"));
         error=false;
     }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}

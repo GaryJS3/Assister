@@ -19,7 +19,7 @@ public sealed class ReminderDashboardTests
         {
             using var Http = Factory.CreateClient();
             var Page = await Http.GetStringAsync("/reminders.html");
-            Assert.Contains("Add a reminder", Page);
+            Assert.Contains("Add reminder", Page);
             Assert.Contains("_framework/blazor.web.js", Page);
             var Input = new ReminderInput("Take vitamin", "bedroom", 20, 0, null, "America/New_York");
             using var Created = await Http.PostAsJsonAsync("/api/reminders", Input);

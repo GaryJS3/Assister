@@ -27,6 +27,22 @@ public sealed class StartupTests
         Assert.True(File.Exists(Path.Combine(DataPath, "assister.db")));
     }
 
+    [Fact]
+    public async Task EditorsHaveDirectRoutesAndListsStartWithoutAnEditor()
+    {
+        await using var Factory = new TestApplication(Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()));
+        using var Client = Factory.CreateClient();
+        var List = await Client.GetStringAsync("/intents");
+        Assert.Contains("New custom intent", List);
+        Assert.DoesNotContain("Save intent", List);
+        var Editor = await Client.GetStringAsync("/intents/edit/builtin-date");
+        Assert.Contains("Back to definitions", Editor);
+        Assert.Contains("Save intent", Editor);
+        Assert.DoesNotContain("New custom intent", Editor);
+        Assert.Contains("Create intent", await Client.GetStringAsync("/intents/edit/new"));
+        Assert.Contains("Back to devices", await Client.GetStringAsync("/devices/view/test-device"));
+        Assert.DoesNotContain("Remind me to", await Client.GetStringAsync("/reminders"));
+    }
     private sealed class TestApplication(string DataPath) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder Builder)

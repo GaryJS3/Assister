@@ -8,6 +8,7 @@
 <Notice Message="@notice" Error="@error" />
 <div class="split">
     <section class="card"><h2>Available releases</h2>
+    <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Available releases">
     @if (releases.Length==0) { <p class="empty">No published packages.</p> }
     @foreach(var r in releases){
         <article class="panel"><div class="row"><h3>@r.Text("appId")</h3><span class="status-pill">@($"v{r.Text("version")}")</span></div>
@@ -15,7 +16,7 @@
         <p>@r.Text("notes","No release notes.")</p><small class="mono">SHA-256 @r.Text("sha256")</small>
         <p><a href="@r.Text("downloadUrl")" download>Download @r.Text("fileName") ↓</a></p></article>
     }
-    </section>
+    </div></section>
     <section class="card stack"><h2>Publish a release</h2>
         <label>App ID <input required maxlength="64" @bind="appId" placeholder="assister" /></label>
         <label>Platform <input required maxlength="64" @bind="platform" placeholder="android-arm64" /></label>

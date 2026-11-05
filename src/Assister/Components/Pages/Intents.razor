@@ -1,30 +1,52 @@
 @page "/intents"
 @page "/intents.html"
+@page "/intents/edit/{EditId}"
+@inject NavigationManager Navigation
 @inject BrowserApi Api
 <PageTitle>Intents · Assister</PageTitle>
 <PageHeader Eyebrow="LANGUAGE / INTENT WORKBENCH" Title="Intent workbench" Description="Manage deterministic actions, preview routing and maintain regression tests.">
-    <Actions><button @onclick="Load" disabled="@busy">Refresh definitions</button></Actions>
+    <Actions><button @onclick="Load" disabled="@(busy||Editing||exampleEditing)">Refresh definitions</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />
+@{ RenderFragment ExampleEditor = @<div class="panel stack inline-editor"><h3>@(string.IsNullOrEmpty(exampleId)?"New regression test":"Edit regression test")</h3>
+                <label>Name <input @bind="exampleName" maxlength="128" /></label>
+                <label>Request <textarea @bind="exampleText" rows="2" maxlength="1000"></textarea></label>
+                <label>Area <input @bind="exampleArea" maxlength="128" /></label>
+                <div class="form-grid">
+                    <label>Expected match <select @bind="exampleStatus"><option>matched</option><option>unmatched</option><option>ambiguous</option><option>invalid-request</option><option>timer-route</option></select></label>
+                    <label>Expected rule <select @bind="exampleRule"><option value="">Any / no rule</option>
+                        @foreach(var d in definitions){<option value="@d.Text("id")">@d.Text("name")</option>}
+                    </select></label>
+                    <label>Target <input @bind="exampleTarget" /></label><label>Brightness <input type="number" @bind="exampleBrightness" /></label>
+                </div>
+                <div class="actions"><button class="primary" @onclick="SaveExample" disabled="@busy">Save test</button><button @onclick="()=>exampleEditing=false">Cancel</button></div>
+            </div>; }
+@if(!Editing){
 <div class="tabs" role="tablist" aria-label="Intent workbench sections">
     @foreach(var p in new[]{("editor","Definitions"),("tests","Regression tests"),("candidates","Teaching candidates")}){
         <button role="tab" aria-selected="@(panel==p.Item1)" aria-pressed="@(panel==p.Item1)" @onclick="()=>Switch(p.Item1)">@p.Item2</button>
     }
 </div>
+}
 @if(panel=="editor"){
-    <div class="grid" style="grid-template-columns:minmax(220px,1fr) minmax(300px,1.45fr) minmax(300px,1.2fr)">
+    @if(Editing){<div class="editor-toolbar"><a href="/intents">← Back to definitions</a><span class="status-pill">@(isNew?"New intent":name)</span></div>}
+    <div class="intent-workspace">
+        @if(!Editing){
         <section class="card stack">
             <div class="row"><h2>Definitions</h2><span class="status-pill">@definitions.Count(x=>x.Flag("enabled")) enabled</span></div>
             <label>Search <input @bind="search" @bind:event="oninput" placeholder="Find an intent…" /></label>
-            <button @onclick="NewDefinition">New custom intent</button>
+            <button @onclick="OpenNewDefinition">New custom intent</button>
+            <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Intent definitions">
             @foreach(var d in definitions.Where(x=>x.Text("name").Contains(search,StringComparison.OrdinalIgnoreCase)||x.Text("actionId").Contains(search,StringComparison.OrdinalIgnoreCase))){
-                <button class="list-button @(selectedId==d.Text("id")?"selected":"")" @onclick="()=>SelectDefinition(d)">
+                <button class="list-button @(selectedId==d.Text("id")?"selected":"")" @onclick="()=>OpenDefinition(d)">
                     <strong>@d.Text("name")</strong><div class="subtle">@d.Text("actionId") · @(d.Flag("builtIn")?"Built-in":"Custom") · @(d.Flag("enabled")?"Enabled":"Disabled")</div>
                 </button>
             }
+            </div>
         </section>
-        <section class="card stack">
-            <h2>@(string.IsNullOrEmpty(selectedId)?"Create intent":"Edit intent")</h2>
+        }else{
+        <section class="card stack inline-editor">
+            <h2>@(EditId=="new"?"Create intent":"Edit intent")</h2>
             <small>@(builtIn?"Built-in definition — action and integration are locked":"Custom rule")</small>
             <label>Name <input maxlength="128" @bind="name" /></label>
             <label class="check"><input type="checkbox" @bind="enabled" /> Enabled</label>
@@ -46,14 +68,15 @@
                 <label>Area <input @bind="fixedArea" maxlength="128" /></label>
             </div></details>
             <label>Response template <textarea rows="3" maxlength="1000" @bind="response"></textarea></label>
-            <div class="actions"><button class="primary" disabled="@busy" @onclick="Save">Save intent</button>
+            <div class="actions editor-actions"><a href="/intents">Cancel editing</a><button class="primary" disabled="@busy" @onclick="Save">Save intent</button>
                 @if(!builtIn&&!isNew){<button class="danger" disabled="@busy" @onclick="Delete">Delete</button>}</div>
         </section>
+        }
         <section class="card stack">
             <h2>Inspect a request</h2><p class="muted">Preview matching and device targets without executing actions.</p>
             <label>Request <textarea rows="3" maxlength="1000" @bind="request" placeholder="Set living room light to 100."></textarea></label>
             <label>Area <input @bind="requestArea" maxlength="128" placeholder="Optional" /></label>
-            <label class="check"><input type="checkbox" @bind="previewDraft" /> Include unsaved changes</label>
+            <label class="check"><input type="checkbox" disabled="@(!Editing)" @bind="previewDraft" /> Include unsaved changes</label>
             <button class="primary" disabled="@busy" @onclick="Inspect">Inspect without executing</button>
             @if(preview.ValueKind==JsonValueKind.Object){
                 <div class="panel"><strong>@preview.Prop("action").Text("name","Routing decision")</strong> <span class="status-pill">@preview.Text("outcome")</span>
@@ -74,45 +97,46 @@
     </div>
 }else if(panel=="tests"){
     <section class="card stack"><div class="row"><h2>Saved regression tests</h2><span class="status-pill">@examples.Length tests</span>
-        <button @onclick="NewExample">New test</button><button class="primary" @onclick="RunTests" disabled="@busy">Run all tests</button></div>
+        <button disabled="@exampleEditing" @onclick="NewExample">New test</button><button class="primary" @onclick="RunTests" disabled="@busy">Run all tests</button></div>
         <p class="muted">@testSummary · Tests inspect intent matching without performing actions.</p>
-        @if(exampleEditing){
-            <div class="panel stack"><h3>@(string.IsNullOrEmpty(exampleId)?"New regression test":"Edit regression test")</h3>
-                <label>Name <input @bind="exampleName" maxlength="128" /></label>
-                <label>Request <textarea @bind="exampleText" rows="2" maxlength="1000"></textarea></label>
-                <label>Area <input @bind="exampleArea" maxlength="128" /></label>
-                <div class="form-grid">
-                    <label>Expected match <select @bind="exampleStatus"><option>matched</option><option>unmatched</option><option>ambiguous</option><option>invalid-request</option><option>timer-route</option></select></label>
-                    <label>Expected rule <select @bind="exampleRule"><option value="">Any / no rule</option>
-                        @foreach(var d in definitions){<option value="@d.Text("id")">@d.Text("name")</option>}
-                    </select></label>
-                    <label>Target <input @bind="exampleTarget" /></label><label>Brightness <input type="number" @bind="exampleBrightness" /></label>
-                </div>
-                <div class="actions"><button class="primary" @onclick="SaveExample" disabled="@busy">Save test</button><button @onclick="()=>exampleEditing=false">Cancel</button></div>
-            </div>
-        }
+        @if(exampleEditing&&string.IsNullOrEmpty(exampleId)){@ExampleEditor}
         <div class="table-wrap"><table><thead><tr><th>Test</th><th>Expected</th><th>Result</th><th>Actions</th></tr></thead><tbody>
             @foreach(var e in examples){
                 var result=results.FirstOrDefault(r=>r.Prop("example").Text("id")==e.Text("id"));
+                @if(exampleEditing&&exampleId==e.Text("id")){<tr><td colspan="4">@ExampleEditor</td></tr>}else{
                 <tr><td><strong>@e.Text("name")</strong><div class="subtle">@e.Text("text")</div></td>
                 <td>@e.Text("matchStatus")<div class="subtle">@e.Text("expectedRuleId")</div></td>
                 <td>@(result.ValueKind==JsonValueKind.Object?(result.Flag("passed")?"PASS":"FAIL"):"Not run")
                     @if(result.ValueKind==JsonValueKind.Object){<JsonDetails Title="Test diagnostics" Data="@result" />}</td>
-                <td><div class="actions"><button @onclick="()=>InspectExample(e)">Inspect</button><button @onclick="()=>EditExample(e)">Edit</button>
+                <td><div class="actions"><button @onclick="()=>InspectExample(e)">Inspect</button><button disabled="@exampleEditing" @onclick="()=>EditExample(e)">Edit</button>
                     <button class="danger" @onclick="()=>DeleteExample(e)">Delete</button></div></td></tr>
-            }
+            }}
         </tbody></table></div>
     </section>
 }else{
     <section class="card"><div class="row"><h2>Recent requests worth teaching</h2><button @onclick="LoadCandidates">Refresh</button></div>
     @if(candidates.Length==0){<p class="empty">No recent LLM or unmatched requests.</p>}
+    <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Teaching candidates">
     @foreach(var c in candidates){
         <div class="panel"><p>@c.Text("userText")</p><small>@c.Text("handledBy") · @c.Text("outcome")</small>
         <p class="muted">@c.Text("rawResponse")</p><button @onclick="()=>InspectCandidate(c)">Inspect request</button></div>
     }
-    </section>
+    </div></section>
 }
 @code {
+    [Parameter] public string? EditId {get;set;}
+    void OpenNewDefinition()=>Navigation.NavigateTo("/intents/edit/new");
+    void OpenDefinition(JsonElement definition)=>Navigation.NavigateTo("/intents/edit/"+Enc(definition.Text("id")));
+    bool Editing=>!string.IsNullOrEmpty(EditId);
+    protected override void OnParametersSet(){if(actions.Length>0)ApplyRoute();}
+    void ApplyRoute(){
+        if(!Editing){selectedId="";isNew=false;previewDraft=false;preview=default;return;}
+        panel="editor";
+        if(EditId=="new"){NewDefinition();return;}
+        var definition=definitions.FirstOrDefault(d=>d.Text("id")==EditId);
+        if(definition.ValueKind==JsonValueKind.Object)SelectDefinition(definition);
+        else{notice="This intent no longer exists.";error=true;Navigation.NavigateTo("/intents");}
+    }
     JsonElement[] definitions=[],examples=[],actions=[],integrations=[],results=[],candidates=[];
     JsonElement nativePhrases,selected,preview;
     string panel="editor",search="",selectedId="",name="",integrationId="",actionId="",patterns="",target="",fixedArea="",response="",request="",requestArea="",notice="",executionNotice="",testSummary="";
@@ -123,7 +147,7 @@
     async Task Load(){busy=true;try{
         var catalog=await Api.Get(A("/catalog"));actions=catalog.Prop("actions").Items().ToArray();integrations=catalog.Prop("integrations").Items().ToArray();nativePhrases=catalog.Prop("nativePhrases");
         definitions=(await Api.Get(A(""))).Items().ToArray();examples=(await Api.Get(A("/examples"))).Items().ToArray();
-        if(!isNew){var next=definitions.FirstOrDefault(x=>x.Text("id")==selectedId);if(next.ValueKind==JsonValueKind.Object)SelectDefinition(next);else if(definitions.Length>0)SelectDefinition(definitions[0]);}
+        ApplyRoute();
         notice="";error=false;
     }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
     async Task Switch(string value){panel=value;if(value=="candidates")await LoadCandidates();}
@@ -146,10 +170,10 @@
         speedPercent=speed,response,builtIn,version};
     async Task Save(){await Execute(async()=>{
         if(string.IsNullOrWhiteSpace(name)||string.IsNullOrWhiteSpace(actionId)||string.IsNullOrWhiteSpace(response))throw new Exception("Enter a name, action and response template.");
-        await Api.Put(A("/"+Enc(selectedId)),Definition());isNew=false;await Load();notice="Intent saved.";
+        await Api.Put(A("/"+Enc(selectedId)),Definition());isNew=false;Navigation.NavigateTo("/intents");await Load();notice="Intent saved.";
     });}
     async Task Delete(){if(builtIn||!await Api.Confirm("Delete custom intent "+name+"?"))return;
-        await Execute(async()=>{await Api.Delete(A("/"+Enc(selectedId)+"?version="+version));selectedId="";isNew=false;await Load();notice="Intent deleted.";});}
+        await Execute(async()=>{await Api.Delete(A("/"+Enc(selectedId)+"?version="+version));selectedId="";isNew=false;Navigation.NavigateTo("/intents");await Load();notice="Intent deleted.";});}
     async Task Inspect(){await Execute(async()=>{
         if(string.IsNullOrWhiteSpace(request))throw new Exception("Enter a request.");
         preview=await Api.Post(A("/inspect"),previewDraft?new{text=request,area=string.IsNullOrEmpty(requestArea)?null:requestArea,draft=Definition()}:

@@ -4,9 +4,31 @@
 @inject IJSRuntime JS
 <PageTitle>Calendars · Assister</PageTitle>
 <PageHeader Eyebrow="GOOGLE CALENDAR / CONNECTED SCHEDULES" Title="Calendars" Description="Manage service accounts, calendar notifications, and upcoming events.">
-    <Actions><button disabled="@busy" @onclick="Refresh">Refresh accounts</button></Actions>
+    <Actions><button disabled="@(busy||eventEditing)" @onclick="Refresh">Refresh accounts</button></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />
+@{ RenderFragment EventEditor = @<section class="panel stack inline-editor">
+                <h3>@(editingId is null?"Add event":"Edit event")</h3>
+                <label>Title <input @bind="summary" maxlength="256" /></label>
+                <label>Location <input @bind="location" maxlength="1000" /></label>
+                <label>Description <textarea rows="3" maxlength="8000" @bind="description"></textarea></label>
+                <label class="check"><input type="checkbox" @bind="allDay" /> All-day event</label>
+                <div class="form-grid">
+                    @if(allDay){
+                        <label>Start <input type="date" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End (exclusive) <input type="date" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
+                    }else{
+                        <label>Start <input type="datetime-local" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End <input type="datetime-local" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
+                    }
+                </div>
+                <label>Google notification <select @bind="notification">
+                    <option value="preserve">Preserve existing / defaults for new events</option><option value="default">Calendar defaults</option>
+                    <option value="none">None</option><option value="0">At start</option><option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option>
+                    <option value="1440">1 day</option><option value="custom">Custom</option>
+                </select></label>
+                @if(notification=="custom"){<label>Lead times, minutes (comma-separated) <input @bind="customMinutes" /></label>}
+                <div class="actions editor-actions"><button class="primary" disabled="@busy" @onclick="SaveEvent">Save event</button><button @onclick="()=>eventEditing=false">Cancel</button></div>
+            </section>; }
 <div class="two-col">
     <section>
         <div class="card stack"><h2>Connect a Google service account</h2>
@@ -16,6 +38,7 @@
             <button disabled="@busy" @onclick="Connect">Connect account</button>
         </div>
         <h2>Connected accounts</h2>
+        <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Connected calendar accounts">
         @if(accounts.Length==0){<p class="empty">No connected accounts.</p>}
         @foreach(var account in accounts){
             var accountId=account.Text("id");
@@ -73,10 +96,11 @@
                 }
             </section>
         }
+        </div>
     </section>
     <section class="card stack">
-        <div class="row"><h2>Events and agenda</h2><button @onclick="NewEvent" disabled="@(string.IsNullOrEmpty(selectedCalendar))">Add event</button></div>
-        <label>Subscribed calendar <select @bind="selectedCalendar" @bind:after="ResetEvents">
+        <div class="row"><h2>Events and agenda</h2><button @onclick="NewEvent" disabled="@(busy||eventEditing||string.IsNullOrEmpty(selectedCalendar))">Add event</button></div>
+        <label>Subscribed calendar <select disabled="@eventEditing" @bind="selectedCalendar" @bind:after="ResetEvents">
             <option value="">Choose a calendar</option>
             @foreach(var a in accounts){@foreach(var cal in a.Prop("calendars").Items().Where(x=>x.Flag("enabled"))){
                 <option value="@(a.Text("id")+"|"+cal.Text("id"))">@a.Text("name") / @cal.Text("name")</option>
@@ -86,41 +110,21 @@
             <label>From <input type="date" value="@from" @onchange="e => from = e.Value?.ToString() ?? string.Empty" /></label>
             <label>Through <input type="date" value="@to" @onchange="e => to = e.Value?.ToString() ?? string.Empty" /></label>
         </div>
-        <button disabled="@(busy||string.IsNullOrEmpty(selectedCalendar))" @onclick="()=>LoadEvents(false)">Fetch events</button>
-        @if(eventEditing){
-            <section class="panel stack">
-                <h3>@(editingId is null?"Add event":"Edit event")</h3>
-                <label>Title <input @bind="summary" maxlength="256" /></label>
-                <label>Location <input @bind="location" maxlength="1000" /></label>
-                <label>Description <textarea rows="3" maxlength="8000" @bind="description"></textarea></label>
-                <label class="check"><input type="checkbox" @bind="allDay" /> All-day event</label>
-                <div class="form-grid">
-                    @if(allDay){
-                        <label>Start <input type="date" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End (exclusive) <input type="date" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
-                    }else{
-                        <label>Start <input type="datetime-local" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End <input type="datetime-local" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
-                    }
-                </div>
-                <label>Google notification <select @bind="notification">
-                    <option value="preserve">Preserve existing / defaults for new events</option><option value="default">Calendar defaults</option>
-                    <option value="none">None</option><option value="0">At start</option><option value="5">5 minutes</option>
-                    <option value="10">10 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option>
-                    <option value="1440">1 day</option><option value="custom">Custom</option>
-                </select></label>
-                @if(notification=="custom"){<label>Lead times, minutes (comma-separated) <input @bind="customMinutes" /></label>}
-                <div class="actions"><button class="primary" disabled="@busy" @onclick="SaveEvent">Save event</button><button @onclick="()=>eventEditing=false">Cancel</button></div>
-            </section>
-        }
+        <button disabled="@(busy||eventEditing||string.IsNullOrEmpty(selectedCalendar))" @onclick="()=>LoadEvents(false)">Fetch events</button>
+        @if(eventEditing&&editingId is null){@EventEditor}
         @if(events.Length==0){<p class="empty">Select a calendar and fetch events.</p>}
+        <div class="scroll-region collection-list" tabindex="0" role="region" aria-label="Calendar events">
         @foreach(var ev in events){
+            @if(eventEditing&&editingId==ev.Text("id")){@EventEditor}else{
             <article class="panel">
                 <h3>@ev.Text("summary","Untitled event")</h3>
                 <p class="muted">@EventTime(ev.Prop("start")) → @EventTime(ev.Prop("end"))</p>
                 @if(!string.IsNullOrEmpty(ev.Text("location"))){<p>@ev.Text("location")</p>}
                 @if(!string.IsNullOrEmpty(ev.Text("description"))){<p>@ev.Text("description")</p>}
-                <div class="actions"><button @onclick="()=>EditEvent(ev)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>PrepareDelete(ev)">Remove</button></div>
-            </article>
+                <div class="actions"><button disabled="@(busy||eventEditing)" @onclick="()=>EditEvent(ev)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>PrepareDelete(ev)">Remove</button></div>
+            </article>}
         }
+        </div>
         @if(!string.IsNullOrEmpty(nextPage)){<button disabled="@busy" @onclick="()=>LoadEvents(true)">Load more events</button>}
         @if(!string.IsNullOrEmpty(deleteConfirmation)){
             <section class="notice notice-error"><p>Delete event “@deleteSummary”? This cannot be undone.</p>

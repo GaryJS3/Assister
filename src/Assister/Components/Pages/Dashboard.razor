@@ -7,12 +7,12 @@
     <Actions><button disabled="@loading" @onclick="Refresh">Refresh</button><span class="status-pill">@connection</span></Actions>
 </PageHeader>
 <Notice Message="@notice" Error="@error" />
-<section class="grid" aria-label="Component health">
+<section class="health-grid" aria-label="Component health">
     @foreach(var c in health.Prop("components").Items()){
-        <article class="card"><div class="row"><strong>@c.Text("name")</strong><span class="status-pill @(c.Text("status").Equals("Healthy",StringComparison.OrdinalIgnoreCase)?"good":"")">@c.Text("status")</span></div>
+        <details class="card health-card"><summary><strong>@c.Text("name")</strong><span class="status-pill @(c.Text("status").Equals("Healthy",StringComparison.OrdinalIgnoreCase)?"good":"")">@c.Text("status")</span></summary>
         <p class="muted">@c.Text("detail")</p>
         @if(c.Text("name")=="Home Assistant"){<button disabled="@loading" @onclick="Rebuild">Rebuild cache</button>}
-        </article>
+        </details>
     }
 </section>
 <div class="tabs" role="tablist" aria-label="Diagnostic panels">
@@ -20,7 +20,7 @@
     <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
 </div>
 @if(panel=="explorer"){
-    <div class="split">
+    <div class="split run-workspace">
         <section class="card">
             <h2>Recent interactions</h2>
             <div class="stack">
@@ -31,7 +31,8 @@
                 </div>
                 <div class="tabs">@foreach(var q in new[]{"All","Failures","LLM","Direct","Voice","Debug"}){<button aria-pressed="@(quick==q)" @onclick="()=>quick=q">@q</button>}</div>
                 <small>@Filtered.Length of @runs.Length interactions · refresh every 3 seconds</small>
-                @foreach(var run in Filtered.Take(150)){
+                <div class="scroll-region run-list" tabindex="0" role="region" aria-label="Recent interactions list">
+                @foreach(var run in Filtered){
                     <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="@(() => SelectRun(run.Text("runId")))">
                         <strong>@run.Text("userText","Waiting for transcript…")</strong>
                         <div class="subtle">@run.Text("source") · @Api.Date(run,"startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
@@ -39,14 +40,16 @@
                     </button>
                 }
                 @if(Filtered.Length==0){<p class="empty">No matching interactions.</p>}
+                </div>
             </div>
         </section>
-        <section class="card">
+        <section class="card run-detail">
             @if(selectedRun.ValueKind!=JsonValueKind.Object){<div class="empty">Select an interaction to inspect the pipeline.</div>}
             else{
                 <div class="row"><h2>Run details</h2><span class="status-pill">@selectedRun.Text("outcome")</span></div>
                 <p>@selectedRun.Text("userText")</p>
-                <div class="grid">
+                <RunTimeline Run="@selectedRun" />
+                <div class="grid run-facts">
                     @foreach(var field in new[]{("Source",selectedRun.Text("source")),("Handled by",selectedRun.Text("handledBy")),("Duration",selectedRun.Number("durationMilliseconds").ToString("F0")+" ms"),("Satellite",selectedRun.Text("satelliteId")),("Run ID",selectedRun.Text("runId"))}){
                         <div class="panel"><small>@field.Item1</small><div class="mono">@field.Item2</div></div>
                     }
@@ -55,14 +58,14 @@
                 @if(selectedRun.Text("spokenResponse")!=selectedRun.Text("rawResponse")){<details><summary>Spoken output</summary><p>@selectedRun.Text("spokenResponse")</p></details>}
                 <h3>Pipeline stages</h3>
                 @foreach(var step in selectedRun.Prop("steps").Items().OrderBy(x=>x.Number("sequence"))){
-                    <details class="panel"><summary><span class="status-pill @(step.Text("status")=="failed"?"bad":"")">@step.Text("status")</span> @step.Text("name") · @step.Text("kind") · @step.Number("durationMilliseconds").ToString("F0") ms</summary><JsonDetails Title="Stage metadata" Data="@step" /></details>
+                    <details class="panel" @key="@(step.Text("id"))"><summary><span class="status-pill @(step.Text("status")=="failed"?"bad":"")">@step.Text("status")</span> @step.Text("name") · @step.Text("kind") · @step.Number("durationMilliseconds").ToString("F0") ms</summary><p>@step.Text("summary")</p><JsonDetails Title="Input" Data="@step.Prop("input")" /><JsonDetails Title="Output" Data="@step.Prop("output")" /><JsonDetails Title="Stage metadata" Data="@step.Prop("metadata")" /></details>
                 }
                 <JsonDetails Title="Full run record" Data="@selectedRun" />
             }
         </section>
     </div>
 }else{
-    <div class="split">
+    <div class="split run-workspace">
         <section class="card stack"><h2>Debug session</h2><p class="muted">This uses the real request coordinator and can execute device commands. No microphone or audio output.</p>
             <label>Area <input @bind="area" placeholder="office" /></label>
             <label>Synthetic satellite ID <input @bind="satellite" maxlength="128" /></label>
@@ -70,7 +73,7 @@
             <button @onclick="NewConversation">New conversation</button>
         </section>
         <section class="card stack"><h2>Messages</h2>
-            <div aria-live="polite">
+            <div aria-live="polite" class="scroll-region debug-messages" tabindex="0" role="region" aria-label="Debug messages">
                 @foreach(var m in messages){<article class="panel"><strong>@m.Role</strong><p>@m.Content</p>@if(m.RunId is not null){<button @onclick="()=>InspectFromDebug(m.RunId)">Inspect run</button>}</article>}
                 @if(messages.Count==0){<p class="empty">Send a request to exercise the assistant.</p>}
             </div>
