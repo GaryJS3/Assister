@@ -120,9 +120,9 @@ public sealed class RichClientTests
         Assert.False(Tablet.Online);
         Assert.Equal("Kitchen", Assert.Single(Tablet.Groups!));
         var Page = await Http.GetStringAsync("/devices.html");
-        Assert.Contains("Devices.", Page);
-        Assert.Contains("client-sections", Page);
-        Assert.Contains("Devices.", await Http.GetStringAsync("/satellites.html"));
+        Assert.Contains("Devices", Page);
+        Assert.Contains("Registered clients", Page);
+        Assert.Contains("Devices", await Http.GetStringAsync("/satellites.html"));
     }
 
     [Fact]
@@ -790,7 +790,7 @@ public sealed class RichClientTests
     {
         using var App = new TestApplication();
         using var Client = App.CreateClient();
-        Assert.Contains("Ask. Watch it happen.", await Client.GetStringAsync("/chat.html"));
+        Assert.Contains("Conversation", await Client.GetStringAsync("/chat.html"));
         Assert.Equal(HttpStatusCode.OK, (await Client.PostAsJsonAsync("/api/client/session", new { token = Token })).StatusCode);
         var Protocol = await Client.GetFromJsonAsync<JsonElement>("/api/client/protocol");
         Assert.Equal(1, Protocol.GetProperty("protocolVersion").GetInt32());

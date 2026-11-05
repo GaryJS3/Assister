@@ -32,7 +32,7 @@ public sealed class ClientCredentialTests
         Assert.Contains("web", Body);
         Assert.DoesNotContain(WebToken, Body);
         Assert.DoesNotContain(Admin, Body);
-        Assert.Contains("One identity", await Http.GetStringAsync("/client-tokens.html"));
+        Assert.Contains("Client tokens", await Http.GetStringAsync("/client-tokens.html"));
     }
 
     [Fact]
