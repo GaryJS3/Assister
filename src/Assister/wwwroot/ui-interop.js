@@ -65,17 +65,23 @@ window.assisterApi.voiceStart=async function() {
     const capture={stream,context,node,source,chunks:[],size:0};
     node.port.onmessage=e=>{
       if(e.data.pcm){capture.chunks.push(new Uint8Array(e.data.pcm));capture.size+=e.data.pcm.byteLength;}
+      if(e.data.limit){
+        capture.limit=true;
+        capture.stream.getTracks().forEach(track=>track.stop());
+        void capture.context.close().catch(()=>{});
+      }
       if(e.data.done)capture.done?.();
     };
     source.connect(node);node.connect(context.destination);voiceCapture=capture;
   }catch(e){stream.getTracks().forEach(track=>track.stop());throw e;}
 };
+window.assisterApi.voiceLimitReached=()=>voiceCapture?.limit===true;
 window.assisterApi.voiceStop=async function() {
   const capture=voiceCapture;if(!capture)return null;voiceCapture=null;
   try{
-    await Promise.race([new Promise(resolve=>{capture.done=resolve;capture.node.port.postMessage('stop');}),new Promise(resolve=>setTimeout(resolve,2000))]);
+    if(!capture.limit)await Promise.race([new Promise(resolve=>{capture.done=resolve;capture.node.port.postMessage('stop');}),new Promise(resolve=>setTimeout(resolve,2000))]);
   }finally{
-    capture.stream.getTracks().forEach(track=>track.stop());capture.source.disconnect();capture.node.disconnect();await capture.context.close();
+    capture.stream.getTracks().forEach(track=>track.stop());capture.source.disconnect();capture.node.disconnect();if(capture.context.state!=='closed')await capture.context.close();
   }
   const bytes=new Uint8Array(capture.size);let position=0;
   for(const chunk of capture.chunks){bytes.set(chunk,position);position+=chunk.length;}
@@ -87,7 +93,7 @@ window.assisterApi.voiceStop=async function() {
 };
 window.assisterApi.voiceCancel=async function() {
   const capture=voiceCapture;if(!capture)return;voiceCapture=null;
-  capture.stream.getTracks().forEach(track=>track.stop());capture.source.disconnect();capture.node.disconnect();await capture.context.close();
+  capture.stream.getTracks().forEach(track=>track.stop());capture.source.disconnect();capture.node.disconnect();if(capture.context.state!=='closed')await capture.context.close();
 };
 
 window.assisterApi.toIso = value => new Date(value).toISOString();

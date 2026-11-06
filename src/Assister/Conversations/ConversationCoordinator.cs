@@ -30,8 +30,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
 
     private async Task<RequestResult> ProcessCoreAsync(UserRequest Request, Func<string, CancellationToken, Task>? OnText, CancellationToken CancellationToken, bool AuthoritativeText = false)
     {
-        var Arrived = UtcNow;
-        var ArrivedAt = Arrived.ToUnixTimeSeconds();
+        var ContinuationTime = UtcNow;
         var SourceDevice = Request.DeviceId ?? Request.SatelliteId;
         var Lifetime = Request.DeviceId is not null && Request.SatelliteId.StartsWith("client-conversation-", StringComparison.Ordinal)
             ? Math.Clamp(Configuration?.GetValue<int?>("Conversations:RichClientLifetimeSeconds") ?? 1800, 30, 86400) : 30;
@@ -42,7 +41,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
                 var Context = JsonSerializer.Deserialize<DeviceConversationContext>(Candidate.DeviceContextJson);
                 var Finished = Context?.ResponseFinishedAt ?? DateTimeOffset.FromUnixTimeSeconds(Candidate.UpdatedAt);
                 return (Context?.SourceDeviceId ?? Candidate.SatelliteId) == SourceDevice
-                    && Arrived >= Finished && Arrived - Finished <= TimeSpan.FromSeconds(Lifetime);
+                    && ContinuationTime >= Finished && ContinuationTime - Finished <= TimeSpan.FromSeconds(Lifetime);
             }
             catch (JsonException) { return false; }
         }
@@ -56,7 +55,8 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
         await Gate.WaitAsync(CancellationToken);
         try
         {
-            var Now = ArrivedAt;
+            ContinuationTime = UtcNow;
+            var Now = ContinuationTime.ToUnixTimeSeconds();
             Conversation? Conversation;
             if (Request.ConversationId is { } Id)
             {

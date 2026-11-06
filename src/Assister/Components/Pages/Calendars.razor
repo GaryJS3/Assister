@@ -12,7 +12,7 @@
                 <label>Title <input @bind="summary" maxlength="256" /></label>
                 <label>Location <input @bind="location" maxlength="1000" /></label>
                 <label>Description <textarea rows="3" maxlength="8000" @bind="description"></textarea></label>
-                <label class="check"><input type="checkbox" @bind="allDay" /> All-day event</label>
+                <label class="check"><input type="checkbox" @bind="allDay" @bind:after="ChangeEventMode" /> All-day event</label>
                 <div class="form-grid">
                     @if(allDay){
                         <label>Start <input type="date" value="@eventStart" @onchange="e => eventStart = e.Value?.ToString() ?? string.Empty" /></label><label>End (exclusive) <input type="date" value="@eventEnd" @onchange="e => eventEnd = e.Value?.ToString() ?? string.Empty" /></label>
@@ -168,30 +168,32 @@
         from=Api.Clock.Now.ToString("yyyy-MM-dd");to=Api.Clock.Now.AddDays(7).ToString("yyyy-MM-dd");
         StateHasChanged();
     }}
-    async Task Refresh(){busy=true;try{
+    Task Refresh()=>Execute(RefreshAccounts);
+    async Task RefreshAccounts(){
         accounts=(await Api.Get("/api/calendars/accounts")).Items().ToArray();
         clients=(await Api.Get("/api/calendars/recipients")).Items().ToArray();
         satellites=(await Api.Get("/api/satellites")).Items().Select(x=>x.Prop("device")).ToArray();
-        subscriptions.Clear();notice="";error=false;
-    }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    }
     async Task ReadKey(InputFileChangeEventArgs e){try{
         if(e.File.Size>32768)throw new Exception("Service account key is too large.");
         using var reader=new StreamReader(e.File.OpenReadStream(maxAllowedSize:32768));keyJson=await reader.ReadToEndAsync();
     }catch(Exception ex){notice=ex.Message;error=true;}}
-    async Task Connect(){await Execute(async()=>{await Api.Post("/api/calendars/accounts",new{name=accountName,credential=keyJson});accountName="";keyJson="";await Refresh();notice="Account connected.";});}
-    async Task Discover(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/discover");await Refresh();notice="Calendar discovery completed.";});}
+    async Task Connect(){await Execute(async()=>{await Api.Post("/api/calendars/accounts",new{name=accountName,credential=keyJson});accountName="";keyJson="";await RefreshAccounts();notice="Account connected.";});}
+    async Task Discover(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/discover");await RefreshAccounts();notice="Calendar discovery completed.";});}
     async Task Disconnect(JsonElement a){if(!await Api.Confirm("Disconnect "+a.Text("name")+"? Google events will be retained."))return;
-        await Execute(async()=>{await Api.Delete("/api/calendars/accounts/"+Enc(a.Text("id")));await Refresh();notice="Account disconnected.";});}
-    async Task AddCalendar(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/calendar-list",new{calendarId=CalendarIdFor(id)});calendarIds[id]="";await Refresh();notice="Calendar added.";});}
+        await Execute(async()=>{await Api.Delete("/api/calendars/accounts/"+Enc(a.Text("id")));await RefreshAccounts();notice="Account disconnected.";});}
+    async Task AddCalendar(string id){await Execute(async()=>{await Api.Post("/api/calendars/"+Enc(id)+"/calendar-list",new{calendarId=CalendarIdFor(id)});calendarIds[id]="";await RefreshAccounts();notice="Calendar added.";});}
     async Task SaveSubscription(string account,string cal,SubscriptionState s){await Execute(async()=>{
         var rich=s.RichClients.Select(key=>{var parts=key.Split('|',2);return new{owner=parts[0],clientId=parts.Length>1?parts[1]:""};}).ToArray();
         await Api.Put("/api/calendars/"+Enc(account)+"/subscriptions/"+Enc(cal),
             new{enabled=s.Enabled,announce=s.Announce,allSatellites=s.AllSatellites,allRichClients=s.AllRichClients,
             satelliteIds=s.SatelliteIds.ToArray(),richClients=rich,notifications=new{before=s.Before.Select(x=>new{amount=x.Amount,unit=x.Unit}).ToArray(),
             dailyTimes=s.DailyTimes.Select(x=>x.Time).ToArray(),timeZone=s.TimeZone}});
-        await Refresh();notice="Subscription saved.";
+        subscriptions.Remove(account+"|"+cal);
+        await RefreshAccounts();notice="Subscription saved.";
     });}
-    async Task LoadEvents(bool more){await Execute(async()=>{
+    Task LoadEvents(bool more)=>Execute(()=>FetchEvents(more));
+    async Task FetchEvents(bool more){
         if(string.IsNullOrEmpty(selectedCalendar))throw new Exception("Choose a calendar.");
         if(!DateOnly.TryParse(from,out var first)||!DateOnly.TryParse(to,out var last)||last<first)throw new Exception("Choose a valid date range.");
         var start=await JS.InvokeAsync<string>("assisterApi.toIso",from+"T00:00");
@@ -199,8 +201,25 @@
         var url=Prefix()+"/events?from="+Enc(start)+"&to="+Enc(end)+(more&&!string.IsNullOrEmpty(nextPage)?"&page="+Enc(nextPage):"");
         var result=await Api.Get(url);var chunk=result.Prop("items").Items().ToArray();
         events=more?events.Concat(chunk).ToArray():chunk;nextPage=result.Text("nextPageToken");eventsLoaded=true;
-    });}
+    }
     string EventTime(JsonElement date)=>date.Text("date",Api.Date(date,"dateTime"));
+    void ChangeEventMode()
+    {
+        if(!DateOnly.TryParse(eventStart.Split('T')[0],out var start))return;
+        if(!DateOnly.TryParse(eventEnd.Split('T')[0],out var end))end=start;
+        var culture=System.Globalization.CultureInfo.InvariantCulture;
+        if(allDay)
+        {
+            if(end<=start)end=start.AddDays(1);
+            eventStart=start.ToString("yyyy-MM-dd",culture);
+            eventEnd=end.ToString("yyyy-MM-dd",culture);
+        }
+        else
+        {
+            eventStart=start.ToString("yyyy-MM-dd",culture)+"T09:00";
+            eventEnd=(end>start?end.AddDays(-1):start).ToString("yyyy-MM-dd",culture)+"T10:00";
+        }
+    }
     void NewEvent(){editingId=null;editingEtag=null;originalStart=null;originalEnd=null;summary="";location="";description="";allDay=false;notification="preserve";
         eventStart=Api.Clock.Now.ToString("yyyy-MM-ddTHH:mm");eventEnd=Api.Clock.Convert(DateTimeOffset.UtcNow.AddHours(1)).ToString("yyyy-MM-ddTHH:mm");eventEditing=true;}
     void EditEvent(JsonElement e){editingId=e.Text("id");editingEtag=e.Text("etag");summary=e.Text("summary");location=e.Text("location");description=e.Text("description");
@@ -226,10 +245,10 @@
         if(reminders is not null)payload["reminders"]=reminders;
         if(editingId is null)await Api.Post(Prefix()+"/events",payload);
         else await Api.Patch(Prefix()+"/events/"+Enc(editingId),payload,editingEtag);
-        eventEditing=false;await LoadEvents(false);notice="Event saved.";
+        eventEditing=false;await FetchEvents(false);notice="Event saved.";
     });}
     async Task PrepareDelete(JsonElement ev){await Execute(async()=>{var v=await Api.Post(Prefix()+"/events/"+Enc(ev.Text("id"))+"/prepare-delete");
         deleteConfirmation=v.Text("confirmation");deleteSummary=v.Text("summary");});}
-    async Task ConfirmDelete(){await Execute(async()=>{await Api.Post("/api/calendars/confirm-delete",new{confirmation=deleteConfirmation});deleteConfirmation=null;await LoadEvents(false);notice="Event removed.";});}
+    async Task ConfirmDelete(){await Execute(async()=>{await Api.Post("/api/calendars/confirm-delete",new{confirmation=deleteConfirmation});deleteConfirmation=null;await FetchEvents(false);notice="Event removed.";});}
     async Task Execute(Func<Task> action){busy=true;try{await action();error=false;}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
 }

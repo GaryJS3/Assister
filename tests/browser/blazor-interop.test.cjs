@@ -7,7 +7,7 @@ test('API results use a blob for chunked interop, including payloads above the h
  const scope={window:{},Blob,fetch:async(path,options)=>{calls.push({path,options});return {ok:true,status:200,text:async()=>JSON.stringify({text:'x'.repeat(100000)})};}};
  scope.window=scope;vm.createContext(scope);vm.runInContext(fs.readFileSync('src/Assister/wwwroot/ui-interop.js','utf8'),scope);
  const blob=await scope.assisterApi.requestStream('GET','/api/diagnostics/runs');
- assert.ok(blob instanceof Blob);assert.equal(JSON.parse(await blob.text()).text.length,100000);
+ assert.ok(blob instanceof Blob);assert.equal(JSON.parse(await blob.text()).data.text.length,100000);
  assert.equal(calls[0].options.credentials,'same-origin');
 });
 test('streamed speech deduplicates replayed events, finishes after terminal events, and reports playback',async()=>{

@@ -10,7 +10,6 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
     ILogger<InteractionRunner> Logger, ToneCatalog Tones, IConfiguration Configuration) : BackgroundService
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, CancellationTokenSource> Active = new();
-    private readonly SemaphoreSlim[] Conversations = Enumerable.Range(0, 128).Select(_ => new SemaphoreSlim(1)).ToArray();
     private void Cue(Guid Id, string Name, string Placement = "immediate")
     {
         if (Tones.Enabled && Store.Get(Id) is { CancelRequested: false, Status: not ("completed" or "failed" or "cancelled") })
@@ -38,37 +37,38 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
     protected override async Task ExecuteAsync(CancellationToken StoppingToken)
     {
         Store.Recover();
-        var Tasks = new List<Task>();
+        var Tasks = new Dictionary<Guid, Task>();
         try
         {
             while (!StoppingToken.IsCancellationRequested)
             {
-                Tasks.RemoveAll(Task => Task.IsCompleted);
+                foreach (var Finished in Tasks.Where(Entry => Entry.Value.IsCompleted).ToArray())
+                {
+                    await Finished.Value;
+                    Tasks.Remove(Finished.Key);
+                }
                 foreach (var Id in Store.Pending())
                 {
                     if (Tasks.Count >= 4) break;
+                    var Item = Store.Get(Id);
+                    if (Item is null || Tasks.ContainsKey(Item.ConversationId)) continue;
                     var Source = CancellationTokenSource.CreateLinkedTokenSource(StoppingToken);
                     if (!Active.TryAdd(Id, Source)) { Source.Dispose(); continue; }
-                    Tasks.Add(RunAsync(Id, Source));
+                    Tasks.Add(Item.ConversationId, RunAsync(Id, Source));
                 }
                 await Task.Delay(50, StoppingToken);
             }
         }
         catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { }
-        finally { await Task.WhenAll(Tasks); }
+        finally { await Task.WhenAll(Tasks.Values); }
     }
     private async Task RunAsync(Guid Id, CancellationTokenSource Source)
     {
-        SemaphoreSlim? ConversationGate = null;
-        var Acquired = false;
         try
         {
             var Item = Store.Get(Id)!;
             if (Item.CancelRequested) Source.Cancel();
             Source.Token.ThrowIfCancellationRequested();
-            ConversationGate = Conversations[(uint)Item.ConversationId.GetHashCode() % (uint)Conversations.Length];
-            await ConversationGate.WaitAsync(Source.Token);
-            Acquired = true;
             await using var Scope = Scopes.CreateAsyncScope();
             var Database = Scope.ServiceProvider.GetRequiredService<AssisterDbContext>();
             // Rich-client conversations have a server-created routing identity; callers cannot impersonate satellites.
@@ -182,6 +182,6 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             Logger.LogWarning("Rich interaction {InteractionId} failed ({FailureType}).", Id, Error.GetType().Name);
             Store.Append(Id, "interaction.failed", new ProtocolError("execution_failed", "The request could not be completed.", true), "failed");
         }
-        finally { Signals.CancelInteraction(Id); if (Acquired) ConversationGate!.Release(); Active.TryRemove(Id, out _); Source.Dispose(); }
+        finally { Signals.CancelInteraction(Id); Active.TryRemove(Id, out _); Source.Dispose(); }
     }
 }

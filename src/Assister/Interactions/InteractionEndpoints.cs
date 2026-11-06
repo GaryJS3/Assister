@@ -69,10 +69,10 @@ public static class InteractionEndpoints
         });
         Group.MapGet("/attachments/{id:guid}/metadata", (Guid Id, InteractionStore Store, HttpContext Http) =>
             Store.Attachment(Id, Owner(Http)) is { } Item ? Results.Ok(Item.Metadata) : Results.NotFound());
-        Group.MapGet("/conversations", (InteractionStore Store, HttpContext Http) => Store.Conversations(Owner(Http)));
+        Group.MapGet("/conversations", (Guid? Before, InteractionStore Store, HttpContext Http) => Store.Conversations(Owner(Http), Before));
         Group.MapPost("/conversations", (InteractionStore Store, HttpContext Http) => Results.Ok(Store.CreateConversation(Owner(Http))));
-        Group.MapGet("/conversations/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) =>
-            Store.OwnsConversation(Id, Owner(Http)) ? Results.Ok(Store.History(Id)) : Results.NotFound());
+        Group.MapGet("/conversations/{id:guid}", (Guid Id, Guid? Before, InteractionStore Store, HttpContext Http) =>
+            Store.OwnsConversation(Id, Owner(Http)) ? Results.Ok(Store.History(Id, Before)) : Results.NotFound());
         Group.MapPost("/conversations/{id:guid}/interactions", (Guid Id, SubmitInteraction Request, InteractionStore Store, HttpContext Http) =>
         {
             if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > 1000 || string.IsNullOrWhiteSpace(Request.IdempotencyKey) || Request.IdempotencyKey.Length > 128)

@@ -15,16 +15,29 @@
         <button class="primary" type="submit" disabled="@busy">Connect</button>
     </form>
 }else{
+    @if(notifications.Length>0){
+        <section class="card stack" aria-label="Due notifications">
+            <h2>Notifications</h2>
+            @foreach(var item in notifications){
+                <article class="panel">
+                    <p>@item.Text("text")</p>
+                    <button disabled="@busy" @onclick="()=>Acknowledge(item)">Acknowledge</button>
+                </article>
+            }
+        </section>
+    }
     <div class="toolbar">
         <label>Conversation <select disabled="@(busy||recording)" @bind="conversationId" @bind:after="Open">
             @foreach(var c in conversations){<option value="@c.Text("id")">@c.Text("title","Conversation")</option>}
         </select></label>
+        @if(conversations.Length>=100 && !endOfConversations){<button disabled="@busy" @onclick="LoadOlderConversations">Older conversations</button>}
         <button disabled="@(busy||recording)" @onclick="NewConversation">New conversation</button>
         <button disabled="@busy" @onclick="Logout">Sign out</button>
     </div>
     <div class="split chat-workspace">
         <section class="card stack">
             <div aria-live="polite" class="stack scroll-region chat-history" tabindex="0" role="region" aria-label="Conversation history">
+                @if(interactions.Length>=100 && !endOfHistory){<button disabled="@busy" @onclick="LoadOlderMessages">Load earlier messages</button>}
                 @if(interactions.Length==0){<p class="empty">Start a conversation by sending a message.</p>}
                 @foreach(var item in interactions){
                     var id=item.Text("id");
@@ -61,7 +74,7 @@
                 </div>
                 <label class="check"><input type="checkbox" @bind="speak" /> Request spoken answers</label>
                 <div class="actions">
-                    <button disabled="@busy" @onclick="ToggleMic">@(recording?"Stop and send recording":"Record voice")</button>
+                    <button disabled="@busy" @onclick="ToggleMic">@(recordingLimited?"Send 30-second recording":recording?"Stop and send recording":"Record voice")</button>
                     <button @onclick="StopSpeech">Stop speech</button>
                     <button disabled="@(busy||string.IsNullOrEmpty(activeId))" @onclick="Cancel">Cancel current run</button>
                     <button id="chat-send" class="primary" disabled="@(busy||recording)" @onclick="() => Send()">Send</button>
@@ -81,10 +94,11 @@
     </div>
 }
 @code {
-    JsonElement[] conversations=[],interactions=[];List<JsonElement> attachments=new();
+    JsonElement[] conversations=[],interactions=[],notifications=[];List<JsonElement> attachments=new();
     Dictionary<string,List<JsonElement>> eventMap=new();Dictionary<string,long> cursors=new();
     Dictionary<string,JsonElement> context=new(),traces=new(),attachmentsFor=new();HashSet<string> audioReady=new();
     string conversationId="",credential="",message="",connection="Connecting…",notice="";string? activeId;
+    bool recordingLimited,endOfHistory,endOfConversations;
     bool connected,busy,error,speak,recording,rendered,refreshing,pollError;
     CancellationTokenSource polling=new(); DateTimeOffset lastRegistration;
     string ResponseFor(JsonElement item){var value=item.Text("response");if(!string.IsNullOrEmpty(value))return value;
@@ -136,7 +150,7 @@
     {
         await JS.InvokeVoidAsync("assisterSpeech.stop");
         eventMap.Clear();cursors.Clear();audioReady.Clear();context.Clear();traces.Clear();attachmentsFor.Clear();
-        interactions=[];activeId=null;
+        interactions=[];endOfHistory=false;activeId=null;
         await RefreshConversation();
         await Api.SetStorage("assister-conversation",conversationId);
     }
@@ -163,7 +177,7 @@
     }
     void ClearSession()
     {
-        connected=false;connection="Authentication required";conversationId="";interactions=[];attachments.Clear();eventMap.Clear();
+        notifications=[];connected=false;connection="Authentication required";conversationId="";interactions=[];attachments.Clear();eventMap.Clear();
         message="";activeId=null;pending=null;
     }
     async Task UploadFiles(){if(busy)return;busy=true;try{
@@ -172,9 +186,9 @@
     }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
     async Task RemoveAttachment(JsonElement item){if(busy)return;busy=true;try{await Api.Delete("/api/client/attachments/"+item.Text("id"));attachments.Remove(item);}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
     async Task ToggleMic(){if(busy)return;busy=true;try{
-        if(!recording){await JS.InvokeVoidAsync("assisterApi.voiceStart");recording=true;connection="Recording";}
-        else{var id=await JS.InvokeAsync<string>("assisterApi.voiceStop");recording=false;connection="Connected";await Submit("Voice input",id);}
-    }catch(Exception ex){recording=false;connection="Connected";notice=ex.Message;error=true;}finally{busy=false;}}
+        if(!recording){await JS.InvokeVoidAsync("assisterApi.voiceStart");recording=true;recordingLimited=false;connection="Recording";}
+        else{var id=await JS.InvokeAsync<string>("assisterApi.voiceStop");recording=false;recordingLimited=false;connection="Connected";await Submit("Voice input",id);}
+    }catch(Exception ex){recording=false;recordingLimited=false;connection="Connected";notice=ex.Message;error=true;}finally{busy=false;}}
     (string Conversation, string Message, string Attachments, string? Audio, bool Speak, bool StreamSpeech)? pending;
     string? pendingKey;
     async Task Send(){if(busy||recording||string.IsNullOrWhiteSpace(message)||string.IsNullOrEmpty(conversationId))return;busy=true;
@@ -202,7 +216,7 @@
         if(string.IsNullOrEmpty(selected))return;
         var history=(await Api.Get("/api/client/conversations/"+Uri.EscapeDataString(selected))).Items().ToArray();
         if(conversationId!=selected)return;
-        interactions=history;
+        interactions=interactions.Concat(history).GroupBy(item=>item.Text("id")).Select(group=>group.Last()).ToArray();
         activeId=history.LastOrDefault(x=>x.Text("status") is not ("completed" or "failed" or "cancelled")).Text("id");
         foreach(var item in history)
         {
@@ -231,6 +245,46 @@
         }catch(Exception ex){notice=ex.Message;error=true;}}
     async Task StopSpeech()=>await JS.InvokeVoidAsync("assisterSpeech.stop");
     async Task Cancel(){if(activeId is null)return;try{await JS.InvokeVoidAsync("assisterSpeech.stop");await Api.Post("/api/client/interactions/"+activeId+"/cancel");notice="Cancellation requested.";}catch(Exception ex){notice=ex.Message;error=true;}}
+    async Task LoadOlderConversations()
+    {
+        busy=true;
+        try
+        {
+            var page=(await Api.Get("/api/client/conversations?before="+conversations.Last().Text("id"))).Items().ToArray();
+            conversations=conversations.Concat(page).ToArray();
+            endOfConversations=page.Length<100;
+        }
+        catch(Exception ex){notice=ex.Message;error=true;}
+        finally{busy=false;}
+    }
+    async Task LoadOlderMessages()
+    {
+        busy=true;
+        try
+        {
+            var selected=conversationId;
+            var page=(await Api.Get("/api/client/conversations/"+selected+"?before="+interactions.First().Text("id"))).Items().ToArray();
+            if(selected!=conversationId)return;
+            interactions=page.Concat(interactions).ToArray();
+            endOfHistory=page.Length<100;
+            foreach(var item in page)await LoadEvents(selected,item.Text("id"));
+        }
+        catch(Exception ex){notice=ex.Message;error=true;}
+        finally{busy=false;}
+    }
+    async Task LoadNotifications() => notifications=(await Api.Get("/api/client/notifications?dueOnly=true")).Items().ToArray();
+    async Task Acknowledge(JsonElement item)
+    {
+        if(busy)return;
+        busy=true;
+        try
+        {
+            await Api.Post("/api/client/notifications/"+Uri.EscapeDataString(item.Text("id"))+"/receipts",new{state="acknowledged"});
+            await LoadNotifications();
+        }
+        catch(Exception ex){notice=ex.Message;error=true;}
+        finally{busy=false;}
+    }
     async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));while(await timer.WaitForNextTickAsync(token)){
         await InvokeAsync(async()=>{
             if(!connected||busy||refreshing)return;
@@ -238,7 +292,9 @@
             try{
                 if(DateTimeOffset.UtcNow-lastRegistration>=TimeSpan.FromSeconds(30))await Register();
                 await RefreshConversation();
-                connection=recording?"Recording":"Connected";
+                await LoadNotifications();
+                recordingLimited=recording && await JS.InvokeAsync<bool>("assisterApi.voiceLimitReached");
+                connection=recordingLimited?"Recording limit reached":recording?"Recording":"Connected";
                 if(pollError){notice="";error=false;pollError=false;}
             }
             catch(BrowserApiException ex) when(ex.StatusCode==401){ ClearSession();notice="Your session expired. Connect again.";error=true; }

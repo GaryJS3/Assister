@@ -121,11 +121,11 @@ public sealed class InteractionStore : IDisposable
             return Item;
         }
     }
-    public IReadOnlyList<ClientConversation> Conversations(string Owner)
+    public IReadOnlyList<ClientConversation> Conversations(string Owner, Guid? Before = null)
     {
         lock (Gate)
         {
-            using var Query = Command("SELECT Id,Title,CreatedAt FROM ClientConversations WHERE Owner=$owner ORDER BY CreatedAt DESC LIMIT 100", ("$owner", Owner));
+            using var Query = Command("SELECT Id,Title,CreatedAt FROM ClientConversations WHERE Owner=$owner AND ($before IS NULL OR rowid < (SELECT rowid FROM ClientConversations WHERE Id=$before AND Owner=$owner)) ORDER BY rowid DESC LIMIT 100", ("$owner", Owner), ("$before", Before?.ToString()));
             using var Reader = Query.ExecuteReader();
             var Items = new List<ClientConversation>();
             while (Reader.Read()) Items.Add(new(Guid.Parse(Reader.GetString(0)), Reader.GetString(1), DateTimeOffset.Parse(Reader.GetString(2))));
@@ -241,14 +241,16 @@ public sealed class InteractionStore : IDisposable
             return (Reader.IsDBNull(0) ? null : Reader.GetInt64(0), Reader.IsDBNull(1) ? null : Reader.GetInt64(1), Reader.GetBoolean(2));
         }
     }
-    public IReadOnlyList<InteractionSnapshot> History(Guid ConversationId)
+    public IReadOnlyList<InteractionSnapshot> History(Guid ConversationId, Guid? Before = null)
     {
         lock (Gate)
         {
             using var Query = Command("""
                 SELECT Id,ConversationId,Status,Input,Response,CreatedAt,LastSequence,RunId,CancelRequested
-                FROM Interactions WHERE ConversationId=$id ORDER BY CreatedAt DESC,rowid DESC LIMIT 100
-                """, ("$id", ConversationId.ToString()));
+                FROM Interactions WHERE ConversationId=$id
+                  AND ($before IS NULL OR rowid < (SELECT rowid FROM Interactions WHERE Id=$before AND ConversationId=$id))
+                ORDER BY rowid DESC LIMIT 100
+                """, ("$id", ConversationId.ToString()), ("$before", Before?.ToString()));
             using var Reader = Query.ExecuteReader();
             var Items = new List<InteractionSnapshot>();
             while (Reader.Read()) Items.Add(ReadSnapshot(Reader));

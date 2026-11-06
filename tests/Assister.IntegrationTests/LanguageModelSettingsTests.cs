@@ -29,7 +29,7 @@ public sealed class LanguageModelSettingsTests
             Assert.False(Configuration.GetValue<bool>("LanguageModel:EnableThinking"));
             (await Client.PutAsJsonAsync("/api/settings/ai-server", Settings with { ApiKey = "", Model = "updated" })).EnsureSuccessStatusCode();
             Assert.Equal("private-key", Configuration["LanguageModel:ApiKey"]);
-            foreach (var Invalid in new[] { Settings with { BaseUrl = "file:///tmp" }, Settings with { MaxTokens = 0 }, Settings with { TimeoutSeconds = 121 }, Settings with { Temperature = 3 }, Settings with { Model = " " }, Settings with { ApiKey = "bad\nkey" } })
+            foreach (var Invalid in new[] { Settings with { BaseUrl = "file:///tmp" }, Settings with { BaseUrl = "http://localhost:4321/v1", ApiKey = "" }, Settings with { MaxTokens = 0 }, Settings with { TimeoutSeconds = 121 }, Settings with { Temperature = 3 }, Settings with { Model = " " }, Settings with { ApiKey = "bad\nkey" } })
                 Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync("/api/settings/ai-server", Invalid)).StatusCode);
             Assert.Equal("updated", Configuration["LanguageModel:Model"]);
             using var CrossOrigin = new HttpRequestMessage(HttpMethod.Put, "/api/settings/ai-server") { Content = JsonContent.Create(Settings) };

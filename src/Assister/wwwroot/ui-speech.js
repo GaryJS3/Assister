@@ -10,11 +10,11 @@ window.assisterSpeech = (() => {
   }
   function stop() {
     if (!current) return;
-    const old=current; current=null; clearTimeout(old.retry); old.socket?.close(); old.player?.stop(); old.audio?.pause();
+    const old=current; current=null; clearTimeout(old.retry); old.socket?.close(); old.player?.stop(); old.audio?.pause(); old.tone?.pause(); old.finishTone?.();
   }
   function start(id) {
     stop();
-    const run=current={id,cursor:0,terminal:false};
+    const run=current={id,cursor:0,terminal:false,tones:Promise.resolve()};
     function connect() {
       if(current!==run || run.terminal)return;
       const socket=run.socket=new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}/api/client/interactions/${id}/stream?afterSequence=${run.cursor}`);
@@ -25,20 +25,33 @@ window.assisterSpeech = (() => {
           if(!ev.sequence || ev.sequence<=run.cursor)return;
           if(ev.sequence!==run.cursor+1) {socket.close();return;}
           run.cursor=ev.sequence;
+          if(ev.type==='tone.play' && Date.parse(data.expiresAt)>=Date.now()) {
+            const play=()=>new Promise(resolve=>{
+              if(current!==run || run.cancelled || Date.parse(data.expiresAt)<Date.now())return resolve();
+              const tone=run.tone=new Audio(data.url);
+              const finish=()=>{clearTimeout(timeout);run.finishTone=null;resolve();};
+              const timeout=setTimeout(()=>{tone.pause();finish();},5000);
+              run.finishTone=finish;
+              tone.onended=finish;tone.onerror=finish;
+              tone.play().catch(finish);
+            });
+            if(data.placement==='after-response-audio'){if(run.playbackCompleted)void play();else run.goodbye=play;}
+            else run.tones=run.tones.then(play);
+          }
           if(ev.type==='tts.segment' && context?.state==='running') {
-            if(!run.player) { const playbackId=identifier(); run.player=new AssisterSpeechPlayer(context,{report:state=>report(id,playbackId,state)}); }
+            if(!run.player) { const playbackId=identifier(); run.player=new AssisterSpeechPlayer(context,{ready:run.tones,report:state=>{report(id,playbackId,state);if(state==='completed'){run.playbackCompleted=true;void run.goodbye?.();}}}); }
             run.player.add(data);
           }
           if(ev.type==='tts.completed' && data.streaming)run.player?.finish(data.segmentCount);
           if(ev.type==='tts.audio' && !run.player) {
             const audio=run.audio=new Audio(data.url), playbackId=identifier();
             audio.onplaying=()=>report(id,playbackId,'started');
-            audio.onended=()=>report(id,playbackId,'completed');
+            audio.onended=()=>{report(id,playbackId,'completed');run.playbackCompleted=true;void run.goodbye?.();};
             audio.onpause=()=>{if(!audio.ended)report(id,playbackId,'stopped');};
             audio.onerror=()=>report(id,playbackId,'failed');
-            audio.play().catch(()=>{}); // Retained controls remain available if autoplay is blocked.
+            void run.tones.then(()=>current===run && !run.cancelled && audio.play().catch(()=>{})); // Retained controls remain available if autoplay is blocked.
           }
-          if(['tts.failed','interaction.failed','interaction.cancelled','interaction.cancel_requested'].includes(ev.type)){run.player?.stop('failed');run.audio?.pause();}
+          if(['tts.failed','interaction.failed','interaction.cancelled','interaction.cancel_requested'].includes(ev.type)){run.cancelled=true;run.tone?.pause();run.finishTone?.();run.player?.stop('failed');run.audio?.pause();}
           if(['interaction.completed','interaction.failed','interaction.cancelled'].includes(ev.type)){run.terminal=true;socket.close();}
         } catch {socket.close();}
       };

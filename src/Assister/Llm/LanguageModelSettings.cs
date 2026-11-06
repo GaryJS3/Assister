@@ -51,6 +51,13 @@ public static class LanguageModelSettingsEndpoints
             await Gate.WaitAsync(Token);
             try
             {
+                var ExistingKey = Configuration["LanguageModel:ApiKey"];
+                if (!Settings.ClearApiKey && string.IsNullOrWhiteSpace(Settings.ApiKey)
+                    && !string.IsNullOrWhiteSpace(ExistingKey)
+                    && (!Uri.TryCreate(Configuration["LanguageModel:BaseUrl"], UriKind.Absolute, out var ExistingUrl)
+                        || !string.Equals(ExistingUrl.GetLeftPart(UriPartial.Authority), Url.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase)))
+                    return Results.BadRequest(new { Error = "Changing the server origin requires replacing or removing the existing API key." });
+
                 var Values = new Dictionary<string, string?>
                 {
                     ["LanguageModel:BaseUrl"] = Url.AbsoluteUri.TrimEnd('/'),
