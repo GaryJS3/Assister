@@ -47,6 +47,18 @@ App.MapGet("/api/voice/stream/{id:guid}.wav", async (Guid Id, VoiceAudioStore Au
 App.UseStaticFiles();
 App.MapStaticAssets();
 App.UseWebSockets();
+App.Use(async (Context, Next) =>
+{
+    var Request = Context.Request;
+    if (Request.Path.StartsWithSegments("/api")
+        && !HttpMethods.IsGet(Request.Method) && !HttpMethods.IsHead(Request.Method) && !HttpMethods.IsOptions(Request.Method)
+        && !BrowserRequestOrigin.IsAllowed(Request))
+    {
+        Context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await Next(Context);
+});
 App.MapRichClients();
 App.MapDashboard();
 Assister.Modules.Reminders.ReminderEndpoints.MapReminders(App);

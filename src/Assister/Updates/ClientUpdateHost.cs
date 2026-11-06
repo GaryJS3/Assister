@@ -95,14 +95,20 @@ public sealed partial class ClientUpdateHost
     public IResult Download(string AppId, string Platform, string Version)
     {
         if (!ValidKey(AppId) || !ValidKey(Platform) || !TryVersion(Version, out var Parsed)) return Results.BadRequest();
-        var Directory = ReleasePath(AppId, Platform, Parsed.ToString());
-        if (!System.IO.Directory.Exists(Directory)) return Results.NotFound();
-        var Release = ReadRelease(Directory);
-        if (Release is null) return Results.NotFound();
-        return Results.File(Path.Combine(Directory, "package"),
-            Release.FileName.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ? "application/vnd.android.package-archive" : "application/octet-stream",
-            Release.FileName, enableRangeProcessing: true, lastModified: Release.PublishedAt,
-            entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{Release.Sha256}\""));
+        PublishLock.Wait();
+        try
+        {
+            var Directory = ReleasePath(AppId, Platform, Parsed.ToString());
+            if (!System.IO.Directory.Exists(Directory) || ReadRelease(Directory) is not { } Release) return Results.NotFound();
+            // Hold the open file through response execution, even if a later publish prunes it.
+            var Package = new FileStream(Path.Combine(Directory, "package"), FileMode.Open, FileAccess.Read,
+                FileShare.Read | FileShare.Delete, 81920, FileOptions.Asynchronous);
+            return Results.File(Package,
+                Release.FileName.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ? "application/vnd.android.package-archive" : "application/octet-stream",
+                Release.FileName, enableRangeProcessing: true, lastModified: Release.PublishedAt,
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{Release.Sha256}\""));
+        }
+        finally { PublishLock.Release(); }
     }
 
     public async Task<IResult> UploadAsync(HttpContext Http, string AppId, string Platform, string Version, CancellationToken Token)
@@ -149,6 +155,10 @@ public sealed partial class ClientUpdateHost
             try
             {
                 if (Directory.Exists(Destination)) return Results.Conflict(new { Error = "This version is already published." });
+                var NewerVersions = ReadReleases().Count(Item => Item.AppId == AppId && Item.Platform == Platform
+                    && System.Version.Parse(Item.Version) > Parsed);
+                if (NewerVersions >= 2)
+                    return Results.Conflict(new { Error = "Two newer versions are already published. This version would fall outside release retention." });
                 Directory.Move(Temporary, Destination);
                 PruneReleases();
             }

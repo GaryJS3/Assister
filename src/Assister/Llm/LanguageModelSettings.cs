@@ -38,11 +38,8 @@ public static class LanguageModelSettingsEndpoints
             Response.Headers.CacheControl = "no-store";
             return Results.Ok(Snapshot());
         });
-        App.MapPut("/api/settings/ai-server", async (LanguageModelSettings Settings, HttpRequest Request, CancellationToken Token) =>
+        App.MapPut("/api/settings/ai-server", async (LanguageModelSettings Settings, CancellationToken Token) =>
         {
-            // Browser writes must originate from this management UI.
-            if (Request.Headers.Origin.Count > 0 && Request.Headers.Origin.ToString() != $"{Request.Scheme}://{Request.Host}")
-                return Results.StatusCode(403);
             if (!Uri.TryCreate(Settings.BaseUrl?.Trim(), UriKind.Absolute, out var Url)
                 || Url.Scheme is not ("http" or "https") || Url.UserInfo.Length > 0 || Url.Query.Length > 0 || Url.Fragment.Length > 0
                 || string.IsNullOrWhiteSpace(Settings.Model) || Settings.Model.Length > 256

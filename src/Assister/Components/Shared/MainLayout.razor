@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 <div class="app-layout">
-    <aside class="sidebar @(menuOpen ? "open" : "")" id="sidebar">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <aside class="sidebar @(menuOpen ? "open" : "")" id="sidebar" @onkeydown="HandleKey">
         <div class="brand"><a href="/" aria-label="Assister dashboard"><span class="brand-icon">A</span><span><strong>Assister</strong><small>CONTROL CENTER</small></span></a></div>
         <nav class="sidebar-nav" aria-label="Primary navigation">
             <span class="nav-caption">WORKSPACE</span>
@@ -22,13 +23,20 @@
     @if (menuOpen) { <button class="sidebar-scrim" aria-label="Close navigation" @onclick="Close"></button> }
     <div class="content-frame">
         <div class="mobile-nav">
-            <button class="mobile-menu ghost" @onclick="Toggle" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="@menuOpen">☰</button>
+            <button class="mobile-menu ghost" @ref="menuButton" @onclick="Toggle" @onkeydown="HandleKey" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="@(menuOpen ? "true" : "false")">☰</button>
         </div>
-        <main class="content" id="main-content">@Body</main>
+        <main class="content" id="main-content" tabindex="-1">@Body</main>
     </div>
 </div>
 @code {
     private bool menuOpen;
+    private ElementReference menuButton;
     private void Toggle() => menuOpen = !menuOpen;
     private void Close() => menuOpen = false;
+    private async Task HandleKey(KeyboardEventArgs args)
+    {
+        if (!menuOpen || args.Key != "Escape") return;
+        Close();
+        await menuButton.FocusAsync();
+    }
 }

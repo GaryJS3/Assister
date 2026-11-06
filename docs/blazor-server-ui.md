@@ -18,9 +18,8 @@ original `.html` bookmarks; all old static HTML entry points were removed.
 The API transport intentionally sends requests **from the browser**, rather
 than from the server circuit via a loopback HTTP client, to preserve existing
 session-cookie behavior and avoid accidentally bypassing client ownership
-authorization. Administration APIs retain their original security model.
-The management UI is **not** an authentication boundary: place it behind
-trusted network access or an authenticated reverse proxy.
+authorization. API writes reject cross-origin browser requests. Administration
+still relies on trusted network access or an authenticated reverse proxy.
 
 The original page-specific JavaScript and CSS files remain in the repository
 as non-loaded legacy references and for existing browser regression tests.

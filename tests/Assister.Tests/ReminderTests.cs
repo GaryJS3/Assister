@@ -44,6 +44,30 @@ public sealed class ReminderTests
         public void Advance(int Seconds) => Now = Now.AddSeconds(Seconds);
     }
     [Fact]
+    public async Task DeliveredBroadcastsDoNotConsumeThePendingDeliveryBatch()
+    {
+        await using var Database = await OpenAsync();
+        var Store = new LocalStore(Database);
+        await Store.ExecuteAsync("INSERT INTO Satellites VALUES('kitchen','Kitchen',NULL,'test','',1,'','', '')", default);
+        for (var Index = 0; Index < 100; Index++)
+        {
+            var Id = $"delivered-{Index}";
+            await Store.ExecuteAsync("INSERT INTO Reminders VALUES($p0,'Done','all','America/New_York',20,0,NULL,0,'completed')", default, Id);
+            await Store.ExecuteAsync("INSERT INTO ReminderBroadcastDeliveries VALUES($p0,0,'kitchen',1)", default, Id);
+        }
+        await Store.ExecuteAsync("INSERT INTO Reminders VALUES('pending','Stretch','all','America/New_York',20,0,NULL,1,'active')", default);
+        var Manager = new SatelliteManager();
+        var Kitchen = new Satellite();
+        Manager.Register(Kitchen);
+        Manager.Update("kitchen", State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        var Scheduler = new ReminderScheduler(null!, Manager, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReminderScheduler>.Instance);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Equal(1, Kitchen.Deliveries);
+        await Scheduler.TickAsync(Store, new Speech(), DateTimeOffset.UtcNow, default);
+        Assert.Contains("kitchen", Manager.PendingAnnouncementIds);
+    }
+
+    [Fact]
     public async Task BroadcastRetriesOfflineDestinationWithoutRepeatingSuccessfulPlayback()
     {
         await using var Database = await OpenAsync();

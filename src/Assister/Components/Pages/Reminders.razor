@@ -9,13 +9,24 @@
 @{ RenderFragment ReminderEditor = @<section class="panel stack inline-editor"><h2>@(editing is null?"Add a reminder":"Edit reminder")</h2>
         <label>Remind me to <textarea rows="3" maxlength="500" @bind="message"></textarea></label>
         <div class="form-grid">
-            <label>Repeat <select @bind="weekday"><option value="">Every day</option>@for(int day=0;day<7;day++){<option value="@day">Every @Days[day]</option>}</select></label>
-            <label>At <input type="time" value="@time" @onchange="e => time = e.Value?.ToString() ?? string.Empty" /></label>
+            <label>Schedule <select @bind="weekday"><option value="once">Once</option><option value="">Every day</option>@for(int day=0;day<7;day++){<option value="@day">Every @Days[day]</option>}</select></label>
+            @if(weekday=="once"){
+                <label>Date and time <input type="datetime-local" value="@due" @onchange="e => due = e.Value?.ToString() ?? string.Empty" /></label>
+            }else{
+                <label>At <input type="time" value="@time" @onchange="e => time = e.Value?.ToString() ?? string.Empty" /></label>
+            }
         </div>
-        <label>Time zone <input @bind="zone" maxlength="100" /></label>
-        <label>Announce on <select @bind="satellite"><option value="all">All satellites</option>
-            @foreach(var s in satellites){<option value="@s.Text("id")">@s.Text("name")</option>}
-        </select></label>
+        <div class="form-grid">
+            <label>Schedule time zone <input @bind="zone" maxlength="100" /></label>
+            <label>Importance <select @bind="importance"><option value="notify">Notify once</option><option value="high-importance">High importance</option>
+                <option value="acknowledge">Repeat until acknowledged</option><option value="alarm">Alarm</option></select></label>
+            <label>Deliver to <select @bind="satellite"><option value="all">All satellites</option>
+                @if(satellite!="all" && !satellites.Any(s=>s.Text("id")==satellite)){
+                    <option value="@satellite">@(satellite.StartsWith("client-conversation-",StringComparison.Ordinal)?"Original conversation":satellite)</option>
+                }
+                @foreach(var s in satellites){<option value="@s.Text("id")">@s.Text("name")</option>}
+            </select></label>
+        </div>
         <p class="hint">Announcements queue while devices are offline or busy.</p>
         <div class="actions editor-actions"><button class="primary" disabled="@busy" @onclick="Save">@(editing is null?"Add reminder":"Save changes")</button>
         <button disabled="@busy" @onclick="Reset">Cancel editing</button></div>
@@ -29,9 +40,9 @@
         @if(editing==item.Text("id")){@ReminderEditor}else{
         <article class="panel">
             <h3>@item.Text("message")</h3>
-            <p class="muted">@(item.Flag("oneTime")?"Once":item.Prop("weekday").ValueKind == JsonValueKind.Null?"Daily":Days[(int)item.Number("weekday")]) at @($"{(int)item.Number("hour"):00}:{(int)item.Number("minute"):00}") · @item.Text("importance")</p>
-            <p class="subtle">Next: @Api.Date(item,"nextDueAt") · @item.Text("timeZone")</p>
-            <p class="subtle">Destination: @item.Text("satelliteId")</p>
+            <p class="muted">@Schedule(item) · @item.Text("importance")</p>
+            <p class="subtle">Next: @Api.Date(item,"nextDueAt") (your local time)</p>
+            <p class="subtle">Destination: @Destination(item.Text("satelliteId"))</p>
             <div class="actions"><button disabled="@(busy||creating||editing is not null)" @onclick="()=>Edit(item)">Edit</button><button class="danger" disabled="@busy" @onclick="()=>Remove(item)">Remove</button></div>
         </article>}
     }
@@ -41,19 +52,60 @@
 </div>
 @code {
     static readonly string[] Days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    JsonElement[] items=[],satellites=[]; string? editing;string message="",weekday="",time="20:00",zone="America/New_York",satellite="all",notice="";bool busy,error,creating;
+    JsonElement[] items=[],satellites=[];
+    JsonElement original;
+    string? editing;
+    string message="",weekday="",time="20:00",due="",originalDue="",defaultZone="America/New_York",zone="America/New_York",satellite="all",importance="acknowledge",notice="";
+    bool busy,error,creating;
+    static string Schedule(JsonElement item) => item.Flag("oneTime") ? $"Once · {item.Text("timeZone")}"
+        : $"{(item.Prop("weekday").ValueKind==JsonValueKind.Null?"Daily":Days[(int)item.Number("weekday")])} at {(int)item.Number("hour"):00}:{(int)item.Number("minute"):00} · {item.Text("timeZone")}";
+    string Destination(string id) => id=="all" ? "All satellites" : id.StartsWith("client-conversation-",StringComparison.Ordinal) ? "Original conversation"
+        : satellites.FirstOrDefault(s=>s.Text("id")==id).Text("name",id);
     protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();try{satellites=(await Api.Get("/api/satellites")).Items().Select(x=>x.Prop("device")).ToArray();}catch{}StateHasChanged();}}
     async Task Load(){busy=true;try{
         var all=new List<JsonElement>();JsonElement page=default;
         do{page=await Api.Get("/api/reminders?offset="+all.Count);all.AddRange(page.Prop("items").Items());}while(page.Prop("items").Items().Count()==100);
-        items=all.ToArray();if(editing is null)zone=page.Text("defaultTimeZone","America/New_York");notice="";error=false;
+        items=all.ToArray();defaultZone=page.Text("defaultTimeZone","America/New_York");notice="";error=false;
         }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
     void NewReminder(){Reset();creating=true;}
-    void Edit(JsonElement i){creating=false;editing=i.Text("id");message=i.Text("message");weekday=i.Prop("weekday").ValueKind==JsonValueKind.Null?"":i.Prop("weekday").String();time=$"{(int)i.Number("hour"):00}:{(int)i.Number("minute"):00}";zone=i.Text("timeZone");satellite=i.Text("satelliteId");}
-    void Reset(){creating=false;editing=null;message="";weekday="";time="20:00";satellite="all";}
+    void Edit(JsonElement i)
+    {
+        Reset();original=i;editing=i.Text("id");message=i.Text("message");zone=i.Text("timeZone");
+        satellite=i.Text("satelliteId");importance=i.Text("importance","acknowledge").ToLowerInvariant();
+        weekday=i.Flag("oneTime")?"once":i.Prop("weekday").String();
+        time=$"{(int)i.Number("hour"):00}:{(int)i.Number("minute"):00}";
+        if(i.Flag("oneTime") && DateTimeOffset.TryParse(i.Text("nextDueAt"),out var next) && TimeZoneInfo.TryFindSystemTimeZoneById(zone,out var scheduleZone))
+            due=originalDue=TimeZoneInfo.ConvertTime(next,scheduleZone).ToString("yyyy-MM-ddTHH:mm",System.Globalization.CultureInfo.InvariantCulture);
+    }
+    void Reset(){creating=false;editing=null;original=default;message="";weekday="";time="20:00";due=originalDue="";zone=defaultZone;satellite="all";importance="acknowledge";}
     async Task Save(){busy=true;try{
-        if(string.IsNullOrWhiteSpace(message)||string.IsNullOrWhiteSpace(zone)||!TimeOnly.TryParse(time,out var at))throw new Exception("Provide a message, valid time and time zone.");
-        var payload=new {message=message.Trim(),satelliteId=satellite,hour=at.Hour,minute=at.Minute,weekday=string.IsNullOrWhiteSpace(weekday)?(int?)null:int.Parse(weekday),timeZone=zone};
+        if(string.IsNullOrWhiteSpace(message)||!TimeZoneInfo.TryFindSystemTimeZoneById(zone.Trim(),out var scheduleZone))
+            throw new InvalidOperationException("Enter a message and a valid time zone.");
+        var once=weekday=="once";
+        var unchanged=once && original.Flag("oneTime") && zone.Trim()==original.Text("timeZone") && due==originalDue;
+        DateTimeOffset? dueAt=null;
+        TimeOnly at;
+        int? day=null;
+        if(unchanged)
+        {
+            at=new((int)original.Number("hour"),(int)original.Number("minute"));
+            if(original.Prop("weekday").ValueKind==JsonValueKind.Number)day=(int)original.Number("weekday");
+        }
+        else if(once)
+        {
+            if(!DateTime.TryParse(due,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var local))
+                throw new InvalidOperationException("Choose a date and time.");
+            if(scheduleZone.IsInvalidTime(local)||scheduleZone.IsAmbiguousTime(local))
+                throw new InvalidOperationException("Choose a date and time that occurs once in the schedule time zone.");
+            dueAt=new DateTimeOffset(local,scheduleZone.GetUtcOffset(local));
+            at=TimeOnly.FromDateTime(local);
+        }
+        else
+        {
+            if(!TimeOnly.TryParse(time,out at))throw new InvalidOperationException("Choose a time.");
+            if(weekday.Length>0)day=int.Parse(weekday);
+        }
+        var payload=new {message=message.Trim(),satelliteId=satellite,hour=at.Hour,minute=at.Minute,weekday=day,timeZone=zone.Trim(),oneTime=unchanged?(bool?)null:once,dueAt,importance};
         if(editing is null)await Api.Post("/api/reminders",payload);else await Api.Put("/api/reminders/"+Uri.EscapeDataString(editing),payload);
         Reset();await Load();notice="Reminder saved.";
         }catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}

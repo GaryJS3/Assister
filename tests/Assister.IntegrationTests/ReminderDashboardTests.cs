@@ -47,6 +47,44 @@ public sealed class ReminderDashboardTests
     }
 
     [Fact]
+    public async Task BrowserWritesRequireSameOriginAndNativeRequestsStillWork()
+    {
+        await using var Factory = new Application(Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()));
+        using var Http = Factory.CreateClient();
+        var Input = new ReminderInput("Stretch", "desk", 8, 0, null, "America/New_York");
+        foreach (var Origin in new[] { "https://other.example", "null" })
+        {
+            using var Request = new HttpRequestMessage(HttpMethod.Post, "/api/reminders") { Content = JsonContent.Create(Input) };
+            Request.Headers.Add("Origin", Origin);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Http.SendAsync(Request)).StatusCode);
+        }
+        Http.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-site");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Http.PostAsJsonAsync("/api/reminders", Input)).StatusCode);
+        Http.DefaultRequestHeaders.Remove("Sec-Fetch-Site");
+        Assert.Empty((await Http.GetFromJsonAsync<JsonElement>("/api/reminders")).GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.Created, (await Http.PostAsJsonAsync("/api/reminders", Input)).StatusCode);
+        Http.DefaultRequestHeaders.Add("Origin", Http.BaseAddress!.GetLeftPart(UriPartial.Authority));
+        Assert.Equal(HttpStatusCode.Created, (await Http.PostAsJsonAsync("/api/reminders", Input)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangingReminderKindRecalculatesItsDeadline()
+    {
+        await using var Factory = new Application(Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()));
+        using var Http = Factory.CreateClient();
+        var Original = new ReminderInput("Stretch", "desk", 8, 0, null, "Etc/UTC", OneTime: true, DueAt: DateTimeOffset.UtcNow.AddDays(10));
+        using var Created = await Http.PostAsJsonAsync("/api/reminders", Original);
+        Created.EnsureSuccessStatusCode();
+        var Id = (await Created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PutAsJsonAsync("/api/reminders/" + Id, Original with { OneTime = null, DueAt = null, Hour = 9 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.PutAsJsonAsync("/api/reminders/" + Id, Original with { OneTime = false, DueAt = null })).StatusCode);
+        var List = await Http.GetFromJsonAsync<JsonElement>("/api/reminders");
+        var Item = Assert.Single(List.GetProperty("items").EnumerateArray());
+        Assert.False(Item.GetProperty("oneTime").GetBoolean());
+        Assert.InRange(Item.GetProperty("nextDueAt").GetDateTimeOffset(), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    [Fact]
     public async Task InvalidSchedulesAreRejectedWithoutSaving()
     {
         await using var Factory = new Application(Path.Combine(Path.GetTempPath(), "assister-tests", Guid.NewGuid().ToString()));

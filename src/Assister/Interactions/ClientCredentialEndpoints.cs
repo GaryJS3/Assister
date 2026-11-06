@@ -55,7 +55,7 @@ public sealed class ClientCredentialStore
 
     private static void Validate(string Id, string Owner)
     {
-        if (!Regex.IsMatch(Id, @"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$") || string.IsNullOrWhiteSpace(Owner)
+        if (string.IsNullOrEmpty(Id) || !Regex.IsMatch(Id, @"\A[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\z") || string.IsNullOrWhiteSpace(Owner)
             || Owner.Length > 128 || Owner.Any(char.IsControl))
             throw new ArgumentException("Use a client ID of 1–64 letters, digits, underscores or hyphens and an owner of 1–128 characters.");
     }
@@ -120,9 +120,7 @@ public static class ClientCredentialEndpoints
         {
             var Http = Context.HttpContext;
             Http.Response.Headers.CacheControl = "no-store";
-            var Origin = Http.Request.Headers.Origin.ToString();
-            if (Origin.Length > 0 && (!Uri.TryCreate(Origin, UriKind.Absolute, out var OriginUri)
-                || OriginUri.Authority != Http.Request.Host.Value || OriginUri.Scheme != Http.Request.Scheme)) return Results.StatusCode(403);
+            if (!BrowserRequestOrigin.IsAllowed(Http.Request)) return Results.StatusCode(403);
             var Expected = Configuration["ClientManagement:AdminToken"]
                 ?? (File.Exists(AdminPath) ? File.ReadAllText(AdminPath).Trim() : null);
             var Header = Http.Request.Headers.Authorization.ToString();

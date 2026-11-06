@@ -37,14 +37,18 @@ public static class ReminderEndpoints
         {
             var Error = Validate(Input, Config, out var Zone);
             if (Error is not null) { return Results.BadRequest(new { Error }); }
+            await using var Transaction = await Store.BeginTransactionAsync(Token);
             var Rows = await Store.QueryAsync("SELECT Id,Message,SatelliteId,TimeZone,Hour,Minute,Weekday,NextDueAt,COALESCE((SELECT OneTime FROM ReminderPolicies WHERE ReminderId=Reminders.Id),0),COALESCE((SELECT Importance FROM ReminderPolicies WHERE ReminderId=Reminders.Id),'acknowledge') FROM Reminders WHERE Id=$p0 AND Status='active'", Token, Id.ToString());
             if (Rows.Count == 0) { return Results.NotFound(); }
             var Previous = Item(Rows[0]);
             var OneTime = Input.OneTime ?? Previous.OneTime;
-            var Changed = Previous.Hour != Input.Hour || Previous.Minute != Input.Minute || Previous.Weekday != Input.Weekday || Previous.TimeZone != Zone!.Id;
-            var Next = Changed ? new ReminderSchedule(Input.Hour, Input.Minute, Input.Weekday is { } Day ? (DayOfWeek)Day : null).Next(DateTimeOffset.UtcNow, Zone!) : Previous.NextDueAt;
-            if (OneTime && Input.DueAt is { } Due) Next = Due;
-            await using var Transaction = await Store.BeginTransactionAsync(Token);
+            var Changed = Previous.OneTime != OneTime || Previous.Hour != Input.Hour || Previous.Minute != Input.Minute
+                || Previous.Weekday != Input.Weekday || Previous.TimeZone != Zone!.Id;
+            if (OneTime && Changed && Input.DueAt is null)
+                return Results.BadRequest(new { Error = "Supply a future dueAt when changing a one-time schedule." });
+            var Next = OneTime ? Input.DueAt ?? Previous.NextDueAt
+                : Changed ? new ReminderSchedule(Input.Hour, Input.Minute, Input.Weekday is { } Day ? (DayOfWeek)Day : null).Next(DateTimeOffset.UtcNow, Zone!)
+                : Previous.NextDueAt;
             var Updated = await Store.ExecuteAsync("""
                 UPDATE Reminders SET Message=$p0,SatelliteId=$p1,TimeZone=$p2,Hour=$p3,Minute=$p4,Weekday=$p5,NextDueAt=$p6
                 WHERE Id=$p7 AND Status='active'

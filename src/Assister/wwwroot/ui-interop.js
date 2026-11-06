@@ -6,7 +6,12 @@ window.assisterApi = {
     if(token)headers.Authorization='Bearer '+token;
     if(ifMatch)headers['If-Match']=ifMatch;
     const r=await fetch(path,{method,headers,credentials:'same-origin',cache:'no-store',body:body===null||body===undefined?undefined:JSON.stringify(body)});
-    if(!r.ok){const d=await r.json().catch(()=>null);throw new Error(d?.error||d?.message||d?.detail||'Request failed: '+path+' (HTTP '+r.status+').' );}
+    if(!r.ok){
+      const d=await r.json().catch(()=>null);
+      const error=new Error(d?.message||d?.error||d?.detail||'Request failed (HTTP '+r.status+').');
+      error.status=r.status;
+      throw error;
+    }
     if(r.status===204)return null;
     const s=await r.text();return s?JSON.parse(s):null;
   },
@@ -24,15 +29,24 @@ window.assisterApi = {
 };
 
 // Rich client attachments remain browser-to-API uploads to avoid routing large files through Blazor's SignalR circuit.
-window.assisterApi.uploadAttachments = async function(inputId) {
+window.assisterApi.uploadAttachments = async function(inputId, remaining) {
   const input=document.getElementById(inputId), files=Array.from(input?.files||[]);
+  if(!files.length)throw new Error('Choose a text file to attach.');
+  if(files.length>remaining)throw new Error('Attach at most eight files.');
+  if(files.some(file=>!/\.(txt|md|json)$/i.test(file.name)||!file.size||file.size>1048576))
+    throw new Error('Choose nonempty TXT, Markdown or JSON files up to 1 MiB each.');
   const result=[];
-  for(const file of files.slice(0,8)) {
-    const mime=/\.md$/i.test(file.name)?'text/markdown':/\.json$/i.test(file.name)?'application/json':/\.txt$/i.test(file.name)?'text/plain':file.type||'application/octet-stream';
-    const response=await fetch('/api/client/attachments?name='+encodeURIComponent(file.name)+'&source=file_picker',
-      {method:'POST',headers:{'Content-Type':mime},credentials:'same-origin',body:file});
-    if(!response.ok){const error=await response.json().catch(()=>null);throw new Error(error?.message||'Attachment upload failed (HTTP '+response.status+')');}
-    result.push(await response.json());
+  try {
+    for(const file of files) {
+      const mime=/\.md$/i.test(file.name)?'text/markdown':/\.json$/i.test(file.name)?'application/json':'text/plain';
+      const response=await fetch('/api/client/attachments?name='+encodeURIComponent(file.name)+'&source=file_picker',
+        {method:'POST',headers:{'Content-Type':mime},credentials:'same-origin',body:file});
+      if(!response.ok){const error=await response.json().catch(()=>null);throw new Error(error?.message||'Attachment upload failed (HTTP '+response.status+')');}
+      result.push(await response.json());
+    }
+  } catch(error) {
+    await Promise.allSettled(result.map(file=>assisterApi.request('DELETE','/api/client/attachments/'+file.id)));
+    throw error;
   }
   if(input)input.value='';
   return result;
@@ -79,7 +93,12 @@ window.assisterApi.voiceCancel=async function() {
 window.assisterApi.toIso = value => new Date(value).toISOString();
 
 // Chunk large JSON responses over interop while retaining browser-origin cookie authorization.
-assisterApi.requestStream = async (...args) => new Blob([JSON.stringify(await assisterApi.request(...args))], {type:'application/json'});
+assisterApi.requestStream = async (...args) => {
+  let payload;
+  try { payload={data:await assisterApi.request(...args)}; }
+  catch(error) { payload={error:error.message,status:error.status||0}; }
+  return new Blob([JSON.stringify(payload)], {type:'application/json'});
+};
 assisterApi.uploadStream = async (...args) => new Blob([JSON.stringify(await assisterApi.upload(...args))], {type:'application/json'});
 
 assisterApi.timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;

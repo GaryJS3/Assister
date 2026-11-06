@@ -33,6 +33,8 @@ public sealed class ClientCredentialTests
         Assert.DoesNotContain(WebToken, Body);
         Assert.DoesNotContain(Admin, Body);
         Assert.Contains("Client tokens", await Http.GetStringAsync("/client-tokens.html"));
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PostAsJsonAsync("/api/devices/credentials", new { owner = "test" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.PostAsJsonAsync("/api/devices/credentials", new { clientId = "test\n", owner = "test" })).StatusCode);
     }
 
     [Fact]

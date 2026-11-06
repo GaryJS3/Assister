@@ -22,9 +22,7 @@ public static class InteractionEndpoints
         Group.AddEndpointFilter(async (Context, Next) =>
         {
             var Http = Context.HttpContext;
-            var Origin = Http.Request.Headers.Origin.ToString();
-            if (Origin.Length > 0 && (!Uri.TryCreate(Origin, UriKind.Absolute, out var OriginUri) || OriginUri.Authority != Http.Request.Host.Value || OriginUri.Scheme != Http.Request.Scheme))
-                return Results.StatusCode(403);
+            if (!BrowserRequestOrigin.IsAllowed(Http.Request)) return Results.StatusCode(403);
             if (Http.Request.Path == "/api/client/session" && Http.Request.Method == "POST") return await Next(Context);
             var Auth = Http.RequestServices.GetRequiredService<ClientAuthentication>();
             var ClientId = Auth.Authenticate(Http);
@@ -93,9 +91,12 @@ public static class InteractionEndpoints
                     "attachment_not_found" => "An attachment is unavailable or belongs to another owner.",
                     "attachment_context_too_large" => "Combined attachment text exceeds 12,000 characters.",
                     "invalid_attachments" => "Supply at most eight distinct attachment IDs.",
+                    "invalid_audio" => "Upload a valid PCM recording before sending.",
+                    "idempotency_conflict" => "This idempotency key was already used for a different request.",
+                    "queue_full" => "The request queue is full. Try again shortly.",
                     _ => "The request conflicts with an earlier submission or the queue is full."
                 };
-                return Results.Conflict(new ProtocolError(Error.Message, Message, true));
+                return Results.Conflict(new ProtocolError(Error.Message, Message, Error.Message == "queue_full"));
             }
         });
         Group.MapGet("/interactions/{id:guid}", (Guid Id, InteractionStore Store, HttpContext Http) => Store.Get(Id, Owner(Http)) is { } Item ? Results.Ok(Item) : Results.NotFound());

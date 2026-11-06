@@ -22,9 +22,9 @@
                 <div class="actions"><button class="primary" @onclick="SaveExample" disabled="@busy">Save test</button><button @onclick="()=>exampleEditing=false">Cancel</button></div>
             </div>; }
 @if(!Editing){
-<div class="tabs" role="tablist" aria-label="Intent workbench sections">
+<div class="tabs" role="group" aria-label="Intent workbench sections">
     @foreach(var p in new[]{("editor","Definitions"),("tests","Regression tests"),("candidates","Teaching candidates")}){
-        <button role="tab" aria-selected="@(panel==p.Item1)" aria-pressed="@(panel==p.Item1)" @onclick="()=>Switch(p.Item1)">@p.Item2</button>
+        <button aria-pressed="@(panel==p.Item1)" @onclick="()=>Switch(p.Item1)">@p.Item2</button>
     }
 </div>
 }
@@ -141,7 +141,7 @@
     JsonElement nativePhrases,selected,preview;
     string panel="editor",search="",selectedId="",name="",integrationId="",actionId="",patterns="",target="",fixedArea="",response="",request="",requestArea="",notice="",executionNotice="",testSummary="";
     string exampleId="",exampleName="",exampleText="",exampleArea="",exampleStatus="matched",exampleRule="",exampleTarget="";
-    int? brightness,speed,exampleBrightness;int version;bool busy,error,builtIn,enabled,previewDraft,isNew,exampleEditing;
+    int? brightness,speed,exampleBrightness;long version;bool busy,error,builtIn,enabled,previewDraft,isNew,exampleEditing;
     string A(string path)=>"/api/intents"+path; static string Enc(string v)=>Uri.EscapeDataString(v);
     protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){await Load();StateHasChanged();}}
     async Task Load(){busy=true;try{
@@ -157,7 +157,9 @@
         enabled=d.Flag("enabled");patterns=string.Join("\n",d.Prop("patterns").Items().Select(x=>x.String()));
         target=d.Text("target");brightness=d.Prop("brightness").ValueKind==JsonValueKind.Number?(int?)d.Number("brightness"):null;
         speed=d.Prop("speedPercent").ValueKind==JsonValueKind.Number?(int?)d.Number("speedPercent"):null;fixedArea=d.Text("area");response=d.Text("response");
-        version=(int)d.Number("version");builtIn=d.Flag("builtIn");isNew=false;preview=default;
+        var versionField=d.Prop("version");
+        version=versionField.ValueKind==JsonValueKind.Number && versionField.TryGetInt64(out var currentVersion)?currentVersion:0;
+        builtIn=d.Flag("builtIn");isNew=false;preview=default;
     }
     void NewDefinition(){selected=default;selectedId="intent-"+Guid.NewGuid().ToString("N");name="";enabled=true;patterns="hello assister";response="Hello.";
         actionId="assister.reply";integrationId=actions.FirstOrDefault(x=>x.Text("id")==actionId).Text("integrationId");
@@ -208,5 +210,5 @@
         candidates=all.Where(x=>x.Text("handledBy")=="language-model"||x.Text("outcome")=="unmatched")
             .Where(x=>!string.IsNullOrWhiteSpace(x.Text("userText"))).DistinctBy(x=>x.Text("userText").ToLowerInvariant()).ToArray();});}
     async Task InspectCandidate(JsonElement c){request=c.Text("userText");requestArea=c.Text("area");previewDraft=false;panel="editor";await Inspect();}
-    async Task Execute(Func<Task> cb){busy=true;try{await cb();error=false;notice="";}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
+    async Task Execute(Func<Task> cb){if(busy)return;busy=true;notice="";error=false;try{await cb();}catch(Exception ex){notice=ex.Message;error=true;}finally{busy=false;}}
 }

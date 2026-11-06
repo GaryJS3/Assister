@@ -5,6 +5,7 @@
 <PageTitle>Overview · Assister</PageTitle>
 <h1 class="visually-hidden">Overview</h1>
 <Notice Message="@notice" Error="@error" />
+<Notice Message="@refreshError" Error="true" />
 <section class="health-grid" aria-label="Component health">
     @foreach(var c in health.Prop("components").Items()){
         <details class="card health-card"><summary><strong>@c.Text("name")</strong><span class="status-pill @(c.Text("status").Equals("Healthy",StringComparison.OrdinalIgnoreCase)?"good":"")">@c.Text("status")</span></summary>
@@ -14,9 +15,9 @@
     }
 </section>
 <div class="dashboard-toolbar">
-    <div class="tabs" role="tablist" aria-label="Diagnostic panels">
-        <button role="tab" aria-selected="@(panel=="explorer")" aria-pressed="@(panel=="explorer")" @onclick="@(() => panel = "explorer")">Run explorer</button>
-        <button role="tab" aria-selected="@(panel=="debug")" aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
+    <div class="tabs" role="group" aria-label="Diagnostic panels">
+        <button aria-pressed="@(panel=="explorer")" @onclick="@(() => panel = "explorer")">Run explorer</button>
+        <button aria-pressed="@(panel=="debug")" @onclick="@(() => panel = "debug")">Debug chat</button>
     </div>
     <div class="row">
         <button disabled="@loading" @onclick="Refresh">Refresh</button>
@@ -30,14 +31,14 @@
             <div class="stack">
                 <label>Search <input placeholder="Request, response or ID" @bind="search" @bind:event="oninput" /></label>
                 <div class="form-grid">
-                    <label>Source <select @bind="source"><option value="">All sources</option><option>voice</option><option>rich-client</option><option>debug</option><option>text</option></select></label>
-                    <label>Outcome <select @bind="outcome"><option value="">All outcomes</option><option>succeeded</option><option>failed</option><option>cancelled</option><option>running</option><option>unavailable</option><option>ambiguous</option></select></label>
+                    <label>Source <select @bind="source"><option value="">All sources</option>@foreach(var value in Values("source",source)){<option>@value</option>}</select></label>
+                    <label>Outcome <select @bind="outcome"><option value="">All outcomes</option>@foreach(var value in Values("outcome",outcome)){<option>@value</option>}</select></label>
                 </div>
                 <div class="tabs">@foreach(var q in new[]{"All","Failures","LLM","Direct","Voice","Debug"}){<button aria-pressed="@(quick==q)" @onclick="()=>quick=q">@q</button>}</div>
                 <small>@Filtered.Length of @runs.Length interactions · refresh every 3 seconds</small>
                 <div class="scroll-region run-list" tabindex="0" role="region" aria-label="Recent interactions list">
                 @foreach(var run in Filtered){
-                    <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" @onclick="@(() => SelectRun(run.Text("runId")))">
+                    <button class="list-button @(run.Text("runId")==selectedId?"selected":"")" aria-pressed="@(run.Text("runId")==selectedId)" @key="@(run.Text("runId"))" @onclick="@(() => SelectRun(run.Text("runId")))">
                         <strong>@run.Text("userText","Waiting for transcript…")</strong>
                         <div class="subtle">@run.Text("source") · @Api.Date(run,"startedAt") · @run.Number("durationMilliseconds").ToString("F0") ms</div>
                         <span class="status-pill @(run.Text("outcome")=="succeeded"?"good":run.Flag("hasFailures")?"bad":"")">@run.Text("outcome")</span>
@@ -48,7 +49,7 @@
             </div>
         </section>
         <section class="card run-detail">
-            @if(selectedRun.ValueKind!=JsonValueKind.Object){<div class="empty">Select an interaction to inspect the pipeline.</div>}
+            @if(selectedRun.ValueKind!=JsonValueKind.Object){<div class="empty">@(runNotice??"Select an interaction to inspect the pipeline.")</div>}
             else{
                 <div class="row"><h2>Run details</h2><span class="status-pill">@selectedRun.Text("outcome")</span></div>
                 <p>@selectedRun.Text("userText")</p>
@@ -60,10 +61,11 @@
                 </div>
                 <h3>Assistant response</h3><p>@selectedRun.Text("rawResponse")</p>
                 @if(selectedRun.Text("spokenResponse")!=selectedRun.Text("rawResponse")){<details><summary>Spoken output</summary><p>@selectedRun.Text("spokenResponse")</p></details>}
-                <h3>Pipeline stages</h3>
+                <details class="panel"><summary>Complete stage log</summary>
                 @foreach(var step in selectedRun.Prop("steps").Items().OrderBy(x=>x.Number("sequence"))){
                     <details class="panel" @key="@(step.Text("id"))"><summary><span class="status-pill @(step.Text("status")=="failed"?"bad":"")">@step.Text("status")</span> @step.Text("name") · @step.Text("kind") · @step.Number("durationMilliseconds").ToString("F0") ms</summary><p>@step.Text("summary")</p><JsonDetails Title="Input" Data="@step.Prop("input")" /><JsonDetails Title="Output" Data="@step.Prop("output")" /><JsonDetails Title="Stage metadata" Data="@step.Prop("metadata")" /></details>
                 }
+                </details>
                 <JsonDetails Title="Full run record" Data="@selectedRun" />
             }
         </section>
@@ -74,7 +76,7 @@
             <label>Area <input @bind="area" placeholder="office" /></label>
             <label>Synthetic satellite ID <input @bind="satellite" maxlength="128" /></label>
             <p class="mono">@((conversation??"New conversation"))</p>
-            <button @onclick="NewConversation">New conversation</button>
+            <button @onclick="NewConversation" disabled="@sending">New conversation</button>
         </section>
         <section class="card stack"><h2>Messages</h2>
             <div aria-live="polite" class="scroll-region debug-messages" tabindex="0" role="region" aria-label="Debug messages">
@@ -90,28 +92,71 @@
     [Parameter][SupplyParameterFromQuery(Name="run")] public string? RunQuery {get;set;}
     record MessageRow(string Role,string Content,string? RunId=null);
     JsonElement[] runs=[];JsonElement health,selectedRun;
-    string? selectedId,conversation;string panel="explorer",connection="Connecting",notice="",search="",source="",outcome="",quick="All",area="",satellite="debug-ui",message="";
-    bool loading,error,sending,newConversation=true;List<MessageRow> messages=new();
+    string? selectedId,conversation,runNotice,refreshError;
+    string panel="explorer",connection="Connecting",notice="",search="",source="",outcome="",quick="All",area="",satellite="debug-ui",message="";
+    bool loading,error,sending,loadRouteSelection,newConversation=true;List<MessageRow> messages=new();
     CancellationTokenSource poll=new();
-    JsonElement[] Filtered=>runs.Where(r=>(string.IsNullOrWhiteSpace(search)||r.Pretty().Contains(search,StringComparison.OrdinalIgnoreCase))&&
+    long selectionVersion;
+    IEnumerable<string> Values(string field,string selected)=>runs.Select(r=>r.Text(field)).Append(selected).Where(v=>v.Length>0).Distinct().Order();
+    JsonElement[] Filtered=>runs.Where(r=>(string.IsNullOrWhiteSpace(search)||
+        r.Text("userText").Contains(search,StringComparison.OrdinalIgnoreCase)||r.Text("rawResponse").Contains(search,StringComparison.OrdinalIgnoreCase)||
+        r.Text("runId").Contains(search,StringComparison.OrdinalIgnoreCase))&&
         (source==""||r.Text("source")==source)&&(outcome==""||r.Text("outcome")==outcome)&&
         (quick=="All"||quick=="Voice"&&r.Text("source")=="voice"||quick=="Debug"&&r.Text("source")=="debug"||
         quick=="LLM"&&r.Text("handledBy")=="language-model"||quick=="Direct"&&r.Text("handledBy")=="direct-intent"||
         quick=="Failures"&&(r.Flag("hasFailures")||!new[]{"succeeded","running","no-speech"}.Contains(r.Text("outcome"))))).ToArray();
+    protected override void OnParametersSet()
+    {
+        if(RunQuery is not { Length:>0 } || RunQuery==selectedId)return;
+        SetSelection(RunQuery);
+        panel="explorer";
+        loadRouteSelection=true;
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender){
-        if(firstRender){satellite=(await Api.Storage("assister-debug-satellite"))??"debug-ui";conversation=await Api.Storage("assister-debug-conversation");newConversation=string.IsNullOrEmpty(conversation);
-            selectedId=RunQuery;await Refresh();StateHasChanged();_ = Poll(poll.Token);}
+        if(firstRender){
+            loadRouteSelection=false;
+            try { satellite=(await Api.Storage("assister-debug-satellite"))??"debug-ui";conversation=await Api.Storage("assister-debug-conversation"); }
+            catch(JSException){ }
+            newConversation=string.IsNullOrEmpty(conversation);
+            await Refresh();
+            if(!poll.IsCancellationRequested){StateHasChanged();_ = Poll(poll.Token);}
+        }
+        else if(loadRouteSelection){
+            loadRouteSelection=false;await LoadSelected();if(!poll.IsCancellationRequested)StateHasChanged();
+        }
     }
     async Task Poll(CancellationToken token){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(token)){await InvokeAsync(async()=>{await Refresh();StateHasChanged();});}}catch(OperationCanceledException){}}
     async Task Refresh(){if(loading)return;loading=true;try{
-        runs=(await Api.Get("/api/diagnostics/runs")).Items().ToArray();health=await Api.Get("/api/diagnostics/health");
+        var runRequest=Api.Get("/api/diagnostics/runs").AsTask();
+        var healthRequest=Api.Get("/api/diagnostics/health").AsTask();
+        await Task.WhenAll(runRequest,healthRequest);
+        runs=runRequest.Result.Items().ToArray();health=healthRequest.Result;
         connection="Live · "+Api.Clock.Now.ToString("T");
-        selectedId??=runs.FirstOrDefault().Text("runId");
-        if(!string.IsNullOrEmpty(selectedId)) await LoadSelected();
-        error=false;
-    }catch(Exception ex){connection="Offline";notice=ex.Message;error=true;}finally{loading=false;}}
-    async Task LoadSelected(){if(selectedId is null)return;try{selectedRun=await Api.Get("/api/diagnostics/runs/"+Uri.EscapeDataString(selectedId));}catch{selectedRun=default;}}
-    async Task SelectRun(string id){selectedId=id;await LoadSelected();}
+        if(string.IsNullOrEmpty(selectedId) && runs.Length>0)SetSelection(runs[0].Text("runId"));
+        if(panel=="explorer")await LoadSelected();
+        refreshError=null;
+    }catch(Exception ex){connection="Offline";refreshError=ex.Message;}finally{loading=false;}}
+    void SetSelection(string id)
+    {
+        selectedId=id;selectedRun=default;runNotice="Loading interaction…";selectionVersion++;
+    }
+    async Task LoadSelected()
+    {
+        if(selectedId is not { Length:>0 } id || (selectedRun.Text("runId")==id && selectedRun.Text("finishedAt").Length>0
+            && runs.Any(r=>r.Text("runId")==id)))return;
+        var version=++selectionVersion;
+        try
+        {
+            var run=await Api.Get("/api/diagnostics/runs/"+Uri.EscapeDataString(id));
+            if(version==selectionVersion){selectedRun=run;runNotice=null;}
+        }
+        catch(BrowserApiException ex) when(ex.StatusCode==404)
+        {
+            if(version==selectionVersion){selectedRun=default;runNotice="This interaction is no longer in the retained history.";}
+        }
+        catch(Exception ex){if(version==selectionVersion)runNotice=ex.Message;}
+    }
+    async Task SelectRun(string id){SetSelection(id);await LoadSelected();}
     async Task Rebuild(){try{await Api.Post("/api/homeassistant/cache/rebuild");notice="Home Assistant cache rebuilt.";error=false;await Refresh();}catch(Exception ex){notice=ex.Message;error=true;}}
     async Task NewConversation(){conversation=null;messages.Clear();newConversation=true;await Api.SetStorage("assister-debug-conversation",null);}
     async Task Send(){if(string.IsNullOrWhiteSpace(message)||sending)return;sending=true;var prompt=message.Trim();messages.Add(new("You",prompt));message="";
@@ -120,6 +165,6 @@
             await Api.SetStorage("assister-debug-conversation",conversation);await Api.SetStorage("assister-debug-satellite",satellite);
             messages.Add(new("Assister",r.Text("response")+"\n"+r.Text("outcome"),r.Text("runId")));await Refresh();notice="";error=false;
         }catch(Exception ex){notice=ex.Message;error=true;}finally{sending=false;}}
-    async Task InspectFromDebug(string? id){selectedId=id;panel="explorer";await LoadSelected();}
+    async Task InspectFromDebug(string? id){if(string.IsNullOrEmpty(id))return;panel="explorer";await SelectRun(id);}
     public ValueTask DisposeAsync(){poll.Cancel();poll.Dispose();return ValueTask.CompletedTask;}
 }

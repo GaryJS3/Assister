@@ -84,13 +84,18 @@ public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory
     public static string EventsPath(string CalendarId) => "calendars/" + Escape(CalendarId) + "/events";
     public async Task<JsonArray> Discover(string AccountId, CancellationToken Ct)
     {
-        var Items = new JsonArray(); string? Next = null;
+        var Items = new JsonArray();
+        var Seen = new HashSet<string>(StringComparer.Ordinal);
+        string? Next = null;
         do
         {
             var Page = await Send(AccountId, HttpMethod.Get, "users/me/calendarList?maxResults=250" + (Next is null ? "" : "&pageToken=" + Escape(Next)), null, Ct);
-            foreach (var Item in Page["items"]!.AsArray()) Items.Add(Item!.DeepClone());
+            if (Page["items"] is { } Results)
+                foreach (var Item in Results.AsArray()) Items.Add(Item?.DeepClone());
             Next = Page["nextPageToken"]?.GetValue<string>();
-        } while (Next is not null && Items.Count < 1000);
+            if (Items.Count > 1000 || !string.IsNullOrEmpty(Next) && (!Seen.Add(Next) || Seen.Count >= 20))
+                throw new InvalidOperationException("Calendar discovery exceeded its pagination limit. Existing subscriptions were preserved.");
+        } while (!string.IsNullOrEmpty(Next));
         Store.Update(AccountId, Account => Account with { Calendars = Items.Select(Item => Account.Calendars.FirstOrDefault(C => C.Id == Item!["id"]!.GetValue<string>()) ?? new CalendarSubscription(Item!["id"]!.GetValue<string>(), Item["summary"]?.GetValue<string>() ?? "Calendar")).ToArray() });
         return Items;
     }

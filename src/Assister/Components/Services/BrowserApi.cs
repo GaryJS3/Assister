@@ -8,7 +8,16 @@ public sealed class BrowserApi(IJSRuntime Javascript)
 {
     public BrowserClock Clock { get; } = new();
     private Task? clockInitialization;
-    public Task InitializeClock() => clockInitialization ??= InitializeClockCore();
+    public async Task InitializeClock()
+    {
+        var initialization = clockInitialization ??= InitializeClockCore();
+        try { await initialization; }
+        catch
+        {
+            if (ReferenceEquals(clockInitialization, initialization)) clockInitialization = null;
+            throw;
+        }
+    }
     private async Task InitializeClockCore()
     {
         var zone = await Javascript.InvokeAsync<string>("assisterApi.timeZone");
@@ -19,10 +28,15 @@ public sealed class BrowserApi(IJSRuntime Javascript)
     public ValueTask<JsonElement> Get(string path) => Request("GET", path);
     public ValueTask<JsonElement> Post(string path, object? body = null, string? token = null) => Request("POST", path, body, token);
     public ValueTask<JsonElement> Put(string path, object? body = null, string? token = null) => Request("PUT", path, body, token);
-    public ValueTask<JsonElement> Patch(string path, object? body = null, string? ifMatch = null) => Read("assisterApi.requestStream", "PATCH", path, body, null, ifMatch);
+    public ValueTask<JsonElement> Patch(string path, object? body = null, string? ifMatch = null) => Request("PATCH", path, body, ifMatch: ifMatch);
     public ValueTask<JsonElement> Delete(string path, string? token = null) => Request("DELETE", path, null, token);
-    public ValueTask<JsonElement> Request(string method, string path, object? body = null, string? token = null) =>
-        Read("assisterApi.requestStream", method, path, body, token);
+    public async ValueTask<JsonElement> Request(string method, string path, object? body = null, string? token = null, string? ifMatch = null)
+    {
+        var result = await Read("assisterApi.requestStream", method, path, body, token, ifMatch);
+        if (result.Prop("error").ValueKind == JsonValueKind.String)
+            throw new BrowserApiException((int)result.Number("status"), result.Text("error"));
+        return result.Prop("data");
+    }
     public ValueTask<JsonElement> Upload(string path, string inputId, string token) =>
         Read("assisterApi.uploadStream", path, inputId, token);
     private async ValueTask<JsonElement> Read(string identifier, params object?[] arguments)
@@ -37,6 +51,11 @@ public sealed class BrowserApi(IJSRuntime Javascript)
     public ValueTask SetStorage(string key, string? value) => Javascript.InvokeVoidAsync("assisterApi.setStorage", key, value);
     public ValueTask Copy(string value) => Javascript.InvokeVoidAsync("assisterApi.copy", value);
     public ValueTask<bool> Confirm(string message) => Javascript.InvokeAsync<bool>("assisterApi.confirm", message);
+}
+
+public sealed class BrowserApiException(int statusCode, string message) : Exception(message)
+{
+    public int StatusCode { get; } = statusCode;
 }
 
 /// <summary>Null-safe access to untyped API payloads. Keeps server-side page markup readable.</summary>

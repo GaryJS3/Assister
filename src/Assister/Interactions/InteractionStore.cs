@@ -211,9 +211,13 @@ public sealed class InteractionStore : IDisposable
         {
             using var Query = Command("SELECT Id,ConversationId,Status,Input,Response,CreatedAt,LastSequence,RunId,CancelRequested FROM Interactions WHERE Id=$id AND ($owner IS NULL OR Owner=$owner)", ("$id", Id.ToString()), ("$owner", Owner));
             using var Reader = Query.ExecuteReader();
-            return Reader.Read() ? new(Guid.Parse(Reader.GetString(0)), Guid.Parse(Reader.GetString(1)), Reader.GetString(2), Reader.GetString(3), Reader.GetString(4), DateTimeOffset.Parse(Reader.GetString(5)), Reader.GetInt64(6), Reader.IsDBNull(7) ? null : Guid.Parse(Reader.GetString(7)), Reader.GetBoolean(8)) : null;
+            return Reader.Read() ? ReadSnapshot(Reader) : null;
         }
     }
+    private static InteractionSnapshot ReadSnapshot(Microsoft.Data.Sqlite.SqliteDataReader Reader) =>
+        new(Guid.Parse(Reader.GetString(0)), Guid.Parse(Reader.GetString(1)), Reader.GetString(2), Reader.GetString(3),
+            Reader.GetString(4), DateTimeOffset.Parse(Reader.GetString(5)), Reader.GetInt64(6),
+            Reader.IsDBNull(7) ? null : Guid.Parse(Reader.GetString(7)), Reader.GetBoolean(8));
     public InteractionSnapshot? ForRun(Guid RunId, string Owner)
     {
         lock (Gate)
@@ -241,10 +245,15 @@ public sealed class InteractionStore : IDisposable
     {
         lock (Gate)
         {
-            using var Query = Command("SELECT Id FROM Interactions WHERE ConversationId=$id ORDER BY CreatedAt DESC LIMIT 100", ("$id", ConversationId.ToString()));
-            var Ids = new List<Guid>();
-            using (var Reader = Query.ExecuteReader()) while (Reader.Read()) Ids.Add(Guid.Parse(Reader.GetString(0)));
-            return Ids.Select(Id => Get(Id)!).Reverse().ToArray();
+            using var Query = Command("""
+                SELECT Id,ConversationId,Status,Input,Response,CreatedAt,LastSequence,RunId,CancelRequested
+                FROM Interactions WHERE ConversationId=$id ORDER BY CreatedAt DESC,rowid DESC LIMIT 100
+                """, ("$id", ConversationId.ToString()));
+            using var Reader = Query.ExecuteReader();
+            var Items = new List<InteractionSnapshot>();
+            while (Reader.Read()) Items.Add(ReadSnapshot(Reader));
+            Items.Reverse();
+            return Items;
         }
     }
     public IReadOnlyList<InteractionEvent> Events(Guid Id, long AfterSequence)

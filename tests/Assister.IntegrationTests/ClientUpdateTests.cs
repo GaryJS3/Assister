@@ -69,8 +69,9 @@ public sealed class ClientUpdateTests
         await using (var Factory = new UpdateApplication(Data))
         {
             using var Http = Factory.CreateClient();
-            foreach (var Version in new[] { "1.9", "1.10", "1.2", "2.0" })
+            foreach (var Version in new[] { "1.9", "1.10", "2.0" })
                 Assert.Equal(HttpStatusCode.Created, (await Publish(Http, Version, [1, 2])).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Publish(Http, "1.2", [1, 2])).StatusCode);
             var Releases = (await Http.GetFromJsonAsync<ClientRelease[]>("/api/updates"))!;
             Assert.Equal(new[] { "2.0.0.0", "1.10.0.0" }, Releases.Select(Release => Release.Version));
             Assert.Equal(2, Directory.GetDirectories(Path.Combine(Data, "client-releases")).Length);

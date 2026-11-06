@@ -21,8 +21,8 @@ downgrades. An older upload does not become latest when a newer version exists.
 
 The host keeps only the two highest numeric versions for each app/platform pair.
 At startup and after each successful upload, older release directories (including
-their packages) are automatically deleted from the data volume. Uploading a version
-older than the retained two succeeds but its package is immediately pruned.
+their packages) are automatically deleted from the data volume. The server rejects
+an upload with HTTP 409 when two newer versions already occupy the retained slots.
 
 Each manifest is validated independently against its directory identity, filename,
 version, hash format, download URL and package size. Damaged or missing manifests
@@ -36,7 +36,7 @@ version. A failed deletion of an old release is logged and retried on later prun
 - `GET /api/updates`: public release archive, newest version first per app/platform.
 - `PUT /api/updates/{appId}/{platform}/{version}?name=client.apk&notes=...`:
   authenticated upload with the package as the raw request body. Returns 201 with
-  metadata, 401 for invalid authentication, 409 for an existing version,
+  metadata, 401 for invalid authentication, 409 for a duplicate or out-of-retention version,
   400 for invalid input, or 413 above the size limit.
 - `GET /api/updates/{appId}/{platform}/check?currentVersion=1.0.0`:
   public check; returns `{ "updateAvailable": false, "release": null }` when
