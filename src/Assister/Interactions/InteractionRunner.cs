@@ -160,7 +160,7 @@ public sealed class InteractionRunner(InteractionStore Store, ClientSignals Sign
             Source.Token.ThrowIfCancellationRequested();
             Cue(Id, "goodbye", Options.Speak && Store.Audio(Id) is not null ? "after-response-audio" : "immediate");
             if (Coordinator is Assister.Conversations.ConversationCoordinator FinishedCoordinator && Result.ConversationId is { } FinishedConversation)
-                await FinishedCoordinator.MarkResponseFinishedAsync(FinishedConversation, Source.Token);
+                await FinishedCoordinator.MarkResponseFinishedAsync(FinishedConversation, Source.Token, ExpectedRunId: Result.TraceId);
             Store.Append(Id, Failed ? "interaction.failed" : "interaction.completed",
                 new { code = Failed ? Result.Outcome.Replace('-', '_') : null, message = Failed ? Result.Response : null,
                     recoverable = Failed, outcome = Result.Outcome, handledBy = Result.HandledBy }, Failed ? "failed" : "completed");

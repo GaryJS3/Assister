@@ -140,7 +140,7 @@ public sealed class MvpAcceptanceTests
         var NewChat = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device", NewConversation: true), default);
         Assert.NotEqual(Expired.ConversationId, NewChat.ConversationId);
         Clock.Advance(TimeSpan.FromMinutes(1));
-        await App.Coordinator.MarkResponseFinishedAsync(NewChat.ConversationId!.Value, default);
+        await App.Coordinator.MarkResponseFinishedAsync(NewChat.ConversationId!.Value, default, ExpectedRunId: NewChat.TraceId);
         Clock.Advance(TimeSpan.FromSeconds(29));
         var AfterPlayback = await App.Coordinator.ProcessAsync(new("what is the temperature in the office", "device"), default);
         Assert.Equal(NewChat.ConversationId, AfterPlayback.ConversationId);

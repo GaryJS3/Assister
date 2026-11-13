@@ -8,13 +8,28 @@ namespace Assister.Modules.GoogleCalendar;
 
 public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory Clients, ILogger<GoogleCalendarClient>? Logger = null)
 {
-    private readonly SemaphoreSlim Gate = new(1);
-    private readonly Dictionary<string, (string Value, DateTimeOffset Expires)> Tokens = [];
+    private sealed class AccountGate
+    {
+        public readonly SemaphoreSlim Mutex = new(1, 1);
+        public int Users;
+    }
+    private readonly object GateLock = new();
+    private readonly Dictionary<string, AccountGate> Gates = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Value, DateTimeOffset Expires)> Tokens = new();
     private async Task<string> Access(CalendarAccount Account, CancellationToken Ct)
     {
-        await Gate.WaitAsync(Ct);
+        AccountGate Gate;
+        lock (GateLock)
+        {
+            if (!Gates.TryGetValue(Account.Id, out Gate!)) Gates[Account.Id] = Gate = new();
+            Gate.Users++;
+        }
+        var Acquired = false;
         try
         {
+            await Gate.Mutex.WaitAsync(Ct);
+            Acquired = true;
+            foreach (var Id in Tokens.Keys.Except(Store.Snapshot().Select(Item => Item.Id))) Tokens.TryRemove(Id, out _);
             if (Tokens.TryGetValue(Account.Id, out var Cached) && Cached.Expires > DateTimeOffset.UtcNow.AddMinutes(2)) return Cached.Value;
             using var Key = JsonDocument.Parse(Store.Key(Account));
             static string Encode(byte[] Data) => Convert.ToBase64String(Data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -25,22 +40,42 @@ public sealed class GoogleCalendarClient(CalendarStore Store, IHttpClientFactory
             Rsa.ImportFromPem(Key.RootElement.GetProperty("private_key").GetString());
             var Unsigned = Header + "." + Payload;
             var Assertion = Unsigned + "." + Encode(Rsa.SignData(Encoding.UTF8.GetBytes(Unsigned), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
-            using var Response = await Clients.CreateClient("google-calendar").PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "urn:ietf:params:oauth:grant-type:jwt-bearer", ["assertion"] = Assertion }), Ct);
+            using var Request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token")
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "urn:ietf:params:oauth:grant-type:jwt-bearer", ["assertion"] = Assertion })
+            };
+            using var Response = await Clients.CreateClient("google-calendar").SendAsync(Request, HttpCompletionOption.ResponseHeadersRead, Ct);
+            await Response.Content.LoadIntoBufferAsync(64 * 1024, Ct);
             if (!Response.IsSuccessStatusCode) throw new InvalidOperationException("Google authentication failed. Check the service account key and enabled Calendar API.");
             var Data = await Response.Content.ReadFromJsonAsync<JsonElement>(Ct);
             var Value = Data.GetProperty("access_token").GetString()!;
             Tokens[Account.Id] = (Value, DateTimeOffset.UtcNow.AddSeconds(Data.GetProperty("expires_in").GetInt32()));
             return Value;
         }
-        finally { Gate.Release(); }
+        finally
+        {
+            if (Acquired) Gate.Mutex.Release();
+            lock (GateLock)
+            {
+                if (--Gate.Users == 0)
+                {
+                    Gates.Remove(Account.Id);
+                    Gate.Mutex.Dispose();
+                }
+            }
+        }
     }
     public async Task<JsonObject> Send(string AccountId, HttpMethod Method, string Path, JsonObject? Body, CancellationToken Ct, string? Etag = null)
     {
+        using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        Deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        Ct = Deadline.Token;
         using var Request = new HttpRequestMessage(Method, "https://www.googleapis.com/calendar/v3/" + Path);
         Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await Access(Store.Get(AccountId), Ct));
         if (Etag is not null) Request.Headers.TryAddWithoutValidation("If-Match", Etag);
         if (Body is not null) Request.Content = JsonContent.Create(Body);
-        using var Response = await Clients.CreateClient("google-calendar").SendAsync(Request, Ct);
+        using var Response = await Clients.CreateClient("google-calendar").SendAsync(Request, HttpCompletionOption.ResponseHeadersRead, Ct);
+        await Response.Content.LoadIntoBufferAsync(2 * 1024 * 1024, Ct);
         if (!Response.IsSuccessStatusCode)
         {
             var Message = await FailureMessage(Response, Method, Path, Ct);

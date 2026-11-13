@@ -10,6 +10,7 @@ public sealed record ControlAttempt(string Action, string[] EntityIds, string Ou
 public sealed class DeviceConversationContext
 {
     public Assister.Satellites.PendingAnnouncement? Announcement { get; set; }
+    public Guid? LastResponseRunId { get; set; }
     public string? SourceDeviceId { get; set; }
     public DateTimeOffset? ResponseFinishedAt { get; set; }
     public DeviceReference[] References { get; set; } = [];

@@ -8,6 +8,21 @@ namespace Assister.Tests;
 
 public sealed class ToolLoopTests
 {
+    [Fact]
+    public async Task RegisteredContributorOffersAnAdditionalToolWithoutChangingTheLoop()
+    {
+        var Registry = new ToolRegistry([new NamedTool("example_lookup"), new NamedTool("ha_get_state")]);
+        var Model = new FakeModel();
+        Model.Responses.Enqueue(new("An answer.", [], "stop"));
+        var Loop = new ToolLoop(Model, Registry, new(Registry), new ConfigurationBuilder().Build(),
+            [new BuiltInToolSelectionPolicy(), new ExamplePolicy()]);
+        await Loop.RespondAsync(new("Explain something"), [], default);
+        Assert.Equal(new[] { "example_lookup", "ha_get_state" }, Model.Requests[0].Tools!.Select(Tool => Tool.Function.Name).Order());
+    }
+    private sealed class ExamplePolicy : IToolSelectionPolicy
+    {
+        public bool Includes(string Name, ToolSelectionContext Context) => Name == "example_lookup";
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

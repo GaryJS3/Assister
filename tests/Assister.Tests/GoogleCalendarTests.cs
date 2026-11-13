@@ -30,6 +30,76 @@ public sealed class GoogleCalendarTests : IDisposable
         Assert.DoesNotContain("sensitive-body", Message);
     }
     [Fact]
+    public async Task SlowSpeakerDoesNotDelayPeerAndSuccessfulDeliveriesAreNotReplayed()
+    {
+        var Store = this.Store();
+        var Account = Store.Add("Home", Credential());
+        var Now = DateTimeOffset.UtcNow;
+        var Calendar = new CalendarSubscription("shared", "Shared", true, Announce: true, SatelliteIds: ["kitchen", "office"]);
+        Store.Update(Account.Id, Row => Row with { Calendars = [Calendar] });
+        var Client = new GoogleCalendarClient(Store, new Factory(new FakeGoogle { EventStart = Now, ReminderLead = 0 }));
+        var Services = new ServiceCollection();
+        Services.AddDbContext<AssisterDbContext>(Options => Options.UseSqlite("Data Source=" + Path.Combine(DirectoryName, "slow-speaker.db") + ";Pooling=False"));
+        Services.AddScoped<LocalStore>();
+        Services.AddSingleton<ITextToSpeechProvider, Speech>();
+        await using var Provider = Services.BuildServiceProvider();
+        await using (var Scope = Provider.CreateAsyncScope()) await Scope.ServiceProvider.GetRequiredService<AssisterDbContext>().Database.MigrateAsync();
+        var Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var Slow = new Speaker { BlockPlayback = Release.Task };
+        var Ready = new Speaker("office");
+        var Manager = new SatelliteManager();
+        foreach (var Speaker in new[] { Slow, Ready })
+        {
+            Manager.Register(Speaker);
+            Manager.Update(Speaker.SatelliteId, State => State with { Capabilities = new() { AnnouncementPlayback = true } });
+        }
+        var Scheduler = new CalendarScheduler(Store, Client, Provider.GetRequiredService<IServiceScopeFactory>(), Manager,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarScheduler>.Instance);
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var Tick = Scheduler.Tick(Account.Id, Calendar, Now, Deadline.Token);
+        try
+        {
+            await Ready.Completed.Task.WaitAsync(Deadline.Token);
+            Assert.False(Tick.IsCompleted);
+            Assert.Equal(1, Ready.Deliveries);
+        }
+        finally { Release.TrySetResult(); }
+        await Tick;
+        await Scheduler.Tick(Account.Id, Calendar, Now.AddSeconds(1), Deadline.Token);
+        Assert.Equal(1, Slow.Deliveries);
+        Assert.Equal(1, Ready.Deliveries);
+    }
+    [Fact]
+    public async Task SlowAccountAuthenticationDoesNotBlockAnotherAccountAndSameAccountSharesRefresh()
+    {
+        var Store = this.Store();
+        var First = Store.Add("First", Credential());
+        var Second = Store.Add("Second", Credential());
+        var Handler = new FakeGoogle { AuthEntered = new(TaskCreationOptions.RunContinuationsAsynchronously), AuthRelease = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var Client = new GoogleCalendarClient(Store, new Factory(Handler));
+        using var Deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var Waiting = Client.Discover(First.Id, Deadline.Token);
+        await Handler.AuthEntered.Task.WaitAsync(Deadline.Token);
+        var SameAccount = Client.Discover(First.Id, Deadline.Token);
+        try
+        {
+            await Client.Discover(Second.Id, Deadline.Token);
+            Assert.False(Waiting.IsCompleted);
+            Assert.Equal(2, Handler.AuthCalls);
+        }
+        finally { Handler.AuthRelease.TrySetResult(); }
+        await Task.WhenAll(Waiting, SameAccount);
+        Assert.Equal(2, Handler.AuthCalls);
+    }
+    [Fact]
+    public async Task CalendarResponseSizeIsBoundedBeforeJsonParsing()
+    {
+        var Store = this.Store();
+        var Account = Store.Add("Home", Credential());
+        var Client = new GoogleCalendarClient(Store, new Factory(new FakeGoogle { Oversized = true }));
+        await Assert.ThrowsAsync<HttpRequestException>(() => Client.Send(Account.Id, HttpMethod.Get, "users/me/calendarList", null, default));
+    }
+    [Fact]
     public async Task NonJsonFailureStillProvidesSafeDiagnostic()
     {
         using var Response = new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new StringContent("private proxy response") };
@@ -331,6 +401,8 @@ public sealed class GoogleCalendarTests : IDisposable
     private sealed class Factory(FakeGoogle Handler) : IHttpClientFactory { public HttpClient CreateClient(string Name) => new(Handler, false); }
     private sealed class FakeGoogle : HttpMessageHandler
     {
+        public TaskCompletionSource? AuthEntered, AuthRelease;
+        public bool Oversized;
         public int TokenLifetime = 3600;
         public int ReminderLead = 10;
         public JsonArray CalendarDefaults = [];
@@ -343,10 +415,13 @@ public sealed class GoogleCalendarTests : IDisposable
         {
             if (Request.RequestUri!.Host == "oauth2.googleapis.com")
             {
-                AuthCalls++; Assert.Equal("/token", Request.RequestUri.AbsolutePath);
+                var Attempt = Interlocked.Increment(ref AuthCalls);
+                if (Attempt == 1 && AuthRelease is not null) { AuthEntered!.TrySetResult(); await AuthRelease.Task.WaitAsync(Ct); }
+                Assert.Equal("/token", Request.RequestUri.AbsolutePath);
                 var Body = await Request.Content!.ReadAsStringAsync(Ct); Assert.Contains("assertion=", Body);
                 return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { access_token = "test-token", expires_in = TokenLifetime })) };
             }
+            if (Oversized) return new(HttpStatusCode.OK) { Content = new StringContent(new string('x', 2 * 1024 * 1024 + 1)) };
             Assert.Equal("www.googleapis.com", Request.RequestUri.Host); Assert.Equal("test-token", Request.Headers.Authorization!.Parameter);
             if (Request.Method == HttpMethod.Delete) { Deletes++; IfMatch = Request.Headers.GetValues("If-Match").Single(); return new(HttpStatusCode.NoContent); }
             if (EventStart is { } At)
@@ -375,9 +450,11 @@ public sealed class GoogleCalendarTests : IDisposable
     {
         public string SatelliteId => Id; public string Name => Id; public string? Area => null;
         public int Deliveries; public string Text = "";
+        public Task? BlockPlayback;
+        public TaskCompletionSource Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Fail;
         public IAsyncEnumerable<AudioChunk> ReceiveAudioAsync(CancellationToken Token) => throw new NotSupportedException();
         public Task SendEventAsync(SatelliteEvent Event, CancellationToken Token) { Text += JsonSerializer.Serialize(Event); return Task.CompletedTask; }
-        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) { if (Fail) throw new IOException("Simulated speaker failure"); await foreach (var Chunk in Audio.WithCancellation(Token)) { } Deliveries++; }
+        public async Task SendAudioAsync(IAsyncEnumerable<AudioChunk> Audio, CancellationToken Token) { if (Fail) throw new IOException("Simulated speaker failure"); await foreach (var Chunk in Audio.WithCancellation(Token)) { } if (BlockPlayback is not null) await BlockPlayback.WaitAsync(Token); Deliveries++; Completed.TrySetResult(); }
     }
 }

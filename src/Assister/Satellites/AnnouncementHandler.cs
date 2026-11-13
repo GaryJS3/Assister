@@ -12,6 +12,9 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
     public static bool Recognizes(string Text) => Regex.IsMatch(Text.Trim(), @"^(?:please )?(?:announce|broadcast)\b", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
 
     public async Task<string?> TryHandleAsync(UserRequest Request, DeviceConversationContext? Context, CancellationToken Token)
+        => (await TryHandleResultAsync(Request, Context, Token))?.Response;
+
+    public async Task<NativeModuleResult?> TryHandleResultAsync(UserRequest Request, DeviceConversationContext? Context, CancellationToken Token)
     {
         if (Context?.Announcement is { } Pending)
         {
@@ -19,13 +22,13 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
             if (Pending.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-5))
             {
                 var Selection = Request.Message.Trim().TrimEnd('.', '!', '?');
-                if (Selection.Equals("cancel", StringComparison.OrdinalIgnoreCase)) return "Announcement cancelled.";
+                if (Selection.Equals("cancel", StringComparison.OrdinalIgnoreCase)) return new("Announcement cancelled.", "succeeded");
                 if (int.TryParse(Selection, out var Index) && Index >= 1 && Index <= Pending.Targets.Length + 1)
                     Selection = Index == 1 ? "all" : Pending.Targets[Index - 2];
                 if (Selection.Equals("all satellites", StringComparison.OrdinalIgnoreCase) || Selection.Equals("all clients", StringComparison.OrdinalIgnoreCase)) Selection = "all";
                 if (Selection.Equals("all", StringComparison.OrdinalIgnoreCase) || Selection.StartsWith("group ", StringComparison.OrdinalIgnoreCase)
                     || Pending.Targets.Any(Id => Matches(Id, Selection, Request.SatelliteId)))
-                    return await ExecuteAsync(Pending.Message, Selection, Context, Token, Request.SatelliteId, Pending.Importance);
+                    return await ExecuteResultAsync(Pending.Message, Selection, Context, Token, Request.SatelliteId, Pending.Importance);
             }
         }
         if (!Recognizes(Request.Message)) return null;
@@ -38,19 +41,19 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
             Text = Text[Level.Length..];
         }
         var Match = Regex.Match(Text, @"^(?:to|on) (?<target>.+?)(?::\s*| (?:that|saying) )(?<message>.+)$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
-        if (Match.Success) return await ExecuteAsync(Match.Groups["message"].Value, Match.Groups["target"].Value, Context, Token, Request.SatelliteId, Importance);
+        if (Match.Success) return await ExecuteResultAsync(Match.Groups["message"].Value, Match.Groups["target"].Value, Context, Token, Request.SatelliteId, Importance);
         foreach (var Target in Available(Request.SatelliteId).Select(Id => Name(Id, Request.SatelliteId))
             .Concat((Rich?.Groups(Request.SatelliteId) ?? []).Select(Group => "group " + Group))
             .Prepend("all").Prepend("all satellites").Prepend("all clients").OrderByDescending(Target => Target.Length))
         {
             foreach (var Prefix in new[] { "to " + Target + " ", "on " + Target + " " })
                 if (Text.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase))
-                    return await ExecuteAsync(Text[Prefix.Length..].TrimStart(':', ' '), Target, Context, Token, Request.SatelliteId, Importance);
+                    return await ExecuteResultAsync(Text[Prefix.Length..].TrimStart(':', ' '), Target, Context, Token, Request.SatelliteId, Importance);
             foreach (var Suffix in new[] { " to " + Target, " on " + Target })
                 if (Text.TrimEnd('.', '!', '?').EndsWith(Suffix, StringComparison.OrdinalIgnoreCase))
-                    return await ExecuteAsync(Text.TrimEnd('.', '!', '?')[..^Suffix.Length], Target, Context, Token, Request.SatelliteId, Importance);
+                    return await ExecuteResultAsync(Text.TrimEnd('.', '!', '?')[..^Suffix.Length], Target, Context, Token, Request.SatelliteId, Importance);
         }
-        return await ExecuteAsync(Text, null, Context, Token, Request.SatelliteId, Importance);
+        return await ExecuteResultAsync(Text, null, Context, Token, Request.SatelliteId, Importance);
     }
 
     private string Name(string Id, string? Source = null) => Rich?.Owner(Source) is not null
@@ -63,9 +66,13 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
 
     public async Task<string> ExecuteAsync(string Message, string? Target, DeviceConversationContext? Context, CancellationToken Token, string? SourceId = null,
         AnnouncementImportance Importance = AnnouncementImportance.Notify)
+        => (await ExecuteResultAsync(Message, Target, Context, Token, SourceId, Importance)).Response;
+
+    public async Task<NativeModuleResult> ExecuteResultAsync(string Message, string? Target, DeviceConversationContext? Context, CancellationToken Token, string? SourceId = null,
+        AnnouncementImportance Importance = AnnouncementImportance.Notify)
     {
-        if (string.IsNullOrWhiteSpace(Message)) return "What would you like to announce?";
-        if (Message.Length > 500) return "Announcements must be at most 500 characters.";
+        if (string.IsNullOrWhiteSpace(Message)) return new("What would you like to announce?", "ambiguous");
+        if (Message.Length > 500) return new("Announcements must be at most 500 characters.", "invalid-request");
         if (Target?.StartsWith("group ", StringComparison.OrdinalIgnoreCase) == true)
         {
             Token.ThrowIfCancellationRequested();
@@ -80,8 +87,8 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
                 _ => "notify"
             };
             return SourceId is not null && Rich?.PublishGroup(SourceId, Group, "announcement", Message, "announcement:" + Key.ToString("N"), Level) == true
-                ? "Queued announcement for device group " + Group + "."
-                : "That device group is unavailable from this device or conversation.";
+                ? new("Queued announcement for device group " + Group + ".", "succeeded")
+                : new("That device group is unavailable from this device or conversation.", "unavailable");
         }
         if (Rich?.Owner(SourceId) is not null)
         {
@@ -94,7 +101,7 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
             {
                 var Choices = Clients.Concat(Rich.Groups(SourceId).Select(Group => "group " + Group)).ToArray();
                 if (Context is not null) Context.Announcement = new(Message, Choices, DateTimeOffset.UtcNow, Importance);
-                return "Which client should receive the announcement?\n1. All clients\n" + string.Join("\n", Choices.Select((Id, Index) => $"{Index + 2}. {Name(Id, SourceId)}"));
+                return new("Which client should receive the announcement?\n1. All clients\n" + string.Join("\n", Choices.Select((Id, Index) => $"{Index + 2}. {Name(Id, SourceId)}")), "ambiguous");
             }
             var Run = Assister.Diagnostics.RunTracing.RunId;
             var Key = Run != Guid.Empty ? Run : Guid.NewGuid();
@@ -105,18 +112,18 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
                 AnnouncementImportance.Alarm => "alarm",
                 _ => "notify"
             }, Broadcast ? null : Matches[0]);
-            return Broadcast ? "Sent announcement to your clients." : "Sent announcement to " + Name(Matches[0], SourceId) + ".";
+            return new(Broadcast ? "Sent announcement to your clients." : "Sent announcement to " + Name(Matches[0], SourceId) + ".", "succeeded");
         }
         var AvailableIds = Available();
         var GroupChoices = (Rich?.Groups(SourceId) ?? []).Select(Group => "group " + Group).ToArray();
-        if (AvailableIds.Length == 0 && GroupChoices.Length == 0) return "There are no connected satellites that support announcements.";
+        if (AvailableIds.Length == 0 && GroupChoices.Length == 0) return new("There are no connected satellites that support announcements.", "unavailable");
         var All = Target is not null && (Target.Equals("all", StringComparison.OrdinalIgnoreCase) || Target.Equals("all satellites", StringComparison.OrdinalIgnoreCase));
         var Targets = All ? AvailableIds : AvailableIds.Where(Id => Target is not null && Matches(Id, Target)).ToArray();
         if (!All && Targets.Length != 1)
         {
             var Choices = AvailableIds.Concat(GroupChoices).ToArray();
             if (Context is not null) Context.Announcement = new(Message, Choices, DateTimeOffset.UtcNow, Importance);
-            return "Which satellite should receive the announcement?\n1. All satellites\n" + string.Join("\n", Choices.Select((Id, Index) => $"{Index + 2}. {Name(Id)}"));
+            return new("Which satellite should receive the announcement?\n1. All satellites\n" + string.Join("\n", Choices.Select((Id, Index) => $"{Index + 2}. {Name(Id)}")), "ambiguous");
         }
         var SatelliteBroadcast = All ? new SatelliteManager.AnnouncementBroadcast() : null;
         var Queued = Targets.Where(Id => Id == SourceId && Satellites.IsBusy(Id) && Queue?.Enqueue(Id, Message, Importance, SatelliteBroadcast) == true).ToArray();
@@ -128,9 +135,9 @@ public sealed class AnnouncementHandler(SatelliteManager Satellites, ITextToSpee
         }));
         var Played = Results.Where(Item => Item.Played).Select(Item => Name(Item.Id)).ToArray();
         var Failed = Results.Where(Item => !Item.Played).Select(Item => Name(Item.Id)).ToArray();
-        return (Played.Length > 0 ? "Announced on " + string.Join(", ", Played) + "." : "")
+        return new((Played.Length > 0 ? "Announced on " + string.Join(", ", Played) + "." : "")
             + (Queued.Length > 0 ? " Queued for " + string.Join(", ", Queued.Select(Id => Name(Id))) + " after this response." : "")
-            + (Failed.Length > 0 ? " Could not announce on " + string.Join(", ", Failed) + "; unavailable, busy, volume unknown or unsupported, or playback failed." : "");
+            + (Failed.Length > 0 ? " Could not announce on " + string.Join(", ", Failed) + "; unavailable, busy, volume unknown or unsupported, or playback failed." : ""), Failed.Length > 0 ? "failed" : "succeeded");
     }
 }
 

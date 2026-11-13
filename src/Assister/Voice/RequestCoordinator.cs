@@ -61,11 +61,8 @@ public sealed class RequestCoordinator(IIntentEngine Classifier, IEntityResolver
         }
         if (Satellites is not null && await Satellites.AcknowledgeAsync(Request.SatelliteId, Request.Message, CancellationToken))
             return Result("Acknowledged.", "succeeded", "satellite-acknowledgement");
-        if (Announcements is not null && await Announcements.TryHandleAsync(Request, DeviceContext, CancellationToken) is { } AnnouncementResponse)
-            return Result(AnnouncementResponse,
-                AnnouncementResponse.Contains("Which satellite") || AnnouncementResponse.Contains("Which client") || AnnouncementResponse.Contains("What would you like") ? "ambiguous"
-                : AnnouncementResponse.Contains("Could not announce") ? "failed"
-                : AnnouncementResponse.Contains("no connected satellites") ? "unavailable" : "succeeded", "satellite-announcement");
+        if (Announcements is not null && await Announcements.TryHandleResultAsync(Request, DeviceContext, CancellationToken) is { } Announcement)
+            return Result(Announcement.Response, Announcement.Outcome, "satellite-announcement");
         if (StopCommands.IsStop(Request.Message))
         {
             var Stopped = Satellites is not null && await Satellites.StopAsync(Request.SatelliteId, CancellationToken);

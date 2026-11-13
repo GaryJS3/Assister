@@ -7,6 +7,9 @@ namespace Assister.Speech.Wyoming;
 // ReadExactlyAsync handles fragmented TCP frames; remaining bytes stay buffered.
 public sealed class WyomingEventReader(Stream Stream)
 {
+    // Buffer only the read side: streaming TTS sends concurrently through the raw stream.
+    // The connection/caller owns the underlying stream and its lifetime.
+    private readonly BufferedStream Input = new(Stream, 8192);
     public const int MaxHeaderBytes = 65536;
     public const int MaxDataBytes = 1048576;
     public const int MaxPayloadBytes = 4194304;
@@ -17,7 +20,7 @@ public sealed class WyomingEventReader(Stream Stream)
         var Byte = new byte[1];
         while (true)
         {
-            var Count = await Stream.ReadAsync(Byte, CancellationToken);
+            var Count = await Input.ReadAsync(Byte, CancellationToken);
             if (Count == 0)
             {
                 if (Header.Length == 0)
@@ -50,7 +53,7 @@ public sealed class WyomingEventReader(Stream Stream)
         if (DataLength > 0)
         {
             var Bytes = new byte[DataLength];
-            await Stream.ReadExactlyAsync(Bytes, CancellationToken);
+            await Input.ReadExactlyAsync(Bytes, CancellationToken);
             var Extra = JsonNode.Parse(Bytes)?.AsObject()
                 ?? throw new InvalidDataException("Invalid Wyoming data.");
             foreach (var Pair in Extra)
@@ -59,7 +62,7 @@ public sealed class WyomingEventReader(Stream Stream)
             }
         }
         var Payload = new byte[PayloadLength];
-        await Stream.ReadExactlyAsync(Payload, CancellationToken);
+        await Input.ReadExactlyAsync(Payload, CancellationToken);
         return new WyomingEvent(Type, JsonSerializer.SerializeToElement(Data), Payload);
     }
 

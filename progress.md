@@ -418,3 +418,18 @@ Remaining-time questions, including How much left on the timer, use persisted As
 - Created the separately authenticated `pixel-8-pro` client under owner `gary`; its protocol request succeeds. Its token and the administrator token were saved outside the repositories in the user's private Codex directory and were not logged or placed in source. Server administrator file permissions verified as mode 0600, UID 1654. Existing web and upload tokens were preserved.
 - Phone still needs its new bearer token entered in Android Settings and Save and connect. Physical phone registration as `pixel-8-pro` is not claimed yet. No Android rebuild or publication required.
 - Local non-secret rollout snapshots and live screenshot: `.codex-local/client-token-deploy/`.
+
+## November 13 runtime review
+
+- Reviewed runtime architecture and project goals; detailed findings and next steps are in [runtime-review-2026-11-13.md](docs/runtime-review-2026-11-13.md).
+- Implemented incremental HA entity snapshots, bounded independent queued announcements, read buffering for Wyoming, and a SQLite index for rich-client pending work.
+- Added eleven regression tests. Validation passed: 634 unit/component, 78 integration, and 20 browser-script tests; `git diff --check` passed.
+- Controlled Release microbenchmark with 1,000 entities: 1,000 event-plus-snapshot operations decreased from a median 941.28 ms to 3.85 ms; allocated bytes decreased from 1,074,792,040 to 8,840,040. This measures local cache work, not physical or end-to-end voice performance.
+- Updated the roadmap to distinguish implemented reminder/Calendar features from remaining concurrency, recovery, extensibility, and physical acceptance work. Existing unrelated changes were preserved. This review performed no commit, deployment, or live device controls.
+
+### November 13 review follow-ups
+
+- Added conversation-lock serialization, database reload, and originating-run checks for playback completion. Added read-only observer retries with bounded backoff and cancellation.
+- Bounded Calendar/OAuth responses and request lifetimes; isolated account refresh and concurrent Calendar/speaker work with independent database scopes and delivery limits.
+- Added registered tool-selection contributors and typed announcement outcomes, retaining existing string wrappers.
+- Added fourteen regression tests. Final validation: 645 unit/component tests, 81 integration tests, 20 browser-script tests, and git diff --check pass. See docs/runtime-followups-2026-11-13.md for contracts, measurements scope, and remaining work. No commit or deployment performed.

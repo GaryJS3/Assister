@@ -29,10 +29,9 @@ public sealed record HomeAssistantCacheStatus(bool IsStale, int EntityCount, lon
 public sealed class HomeAssistantStateCache
 {
     private readonly object Gate = new();
-    private Dictionary<string, JsonElement> States = new();
-    private JsonElement EntityRegistry;
-    private JsonElement DeviceRegistry;
-    private JsonElement AreaRegistry;
+    private Dictionary<string, HomeAssistantEntity> Entities = new();
+    private HomeAssistantEntityIndex Index = new(default, default, default);
+    private IReadOnlyList<HomeAssistantEntity>? SnapshotEntities;
     private JsonElement Services;
     private bool IsStale = true;
     private long StateEventCount;
@@ -42,11 +41,13 @@ public sealed class HomeAssistantStateCache
     {
         lock (Gate)
         {
-            States = NewStates.EnumerateArray().ToDictionary(Item => Item.GetProperty("entity_id").GetString()!, Item => Item.Clone());
+            var NewIndex = new HomeAssistantEntityIndex(Entities, Devices, Areas);
+            var NewEntities = NewStates.EnumerateArray().Select(State => NewIndex.Resolve(State.Clone()))
+                .ToDictionary(Entity => Entity.EntityId);
+            Index = NewIndex;
+            this.Entities = NewEntities;
+            SnapshotEntities = null;
             Services = NewServices.Clone();
-            EntityRegistry = Entities.Clone();
-            DeviceRegistry = Devices.Clone();
-            AreaRegistry = Areas.Clone();
         }
     }
 
@@ -54,9 +55,12 @@ public sealed class HomeAssistantStateCache
     {
         lock (Gate)
         {
-            EntityRegistry = Entities.Clone();
-            DeviceRegistry = Devices.Clone();
-            AreaRegistry = Areas.Clone();
+            var NewIndex = new HomeAssistantEntityIndex(Entities, Devices, Areas);
+            var NewEntities = this.Entities.Values.Select(Entity => NewIndex.Resolve(Entity.State))
+                .ToDictionary(Entity => Entity.EntityId);
+            Index = NewIndex;
+            this.Entities = NewEntities;
+            SnapshotEntities = null;
         }
     }
 
@@ -71,8 +75,9 @@ public sealed class HomeAssistantStateCache
         {
             var Id = Data.GetProperty("entity_id").GetString()!;
             var State = Data.GetProperty("new_state");
-            if (State.ValueKind == JsonValueKind.Null) { States.Remove(Id); }
-            else { States[Id] = State.Clone(); }
+            if (State.ValueKind == JsonValueKind.Null) { Entities.Remove(Id); }
+            else { Entities[Id] = Index.Resolve(State.Clone()); }
+            SnapshotEntities = null;
             StateEventCount++;
             LastStateEventAt = DateTimeOffset.UtcNow;
         }
@@ -82,7 +87,7 @@ public sealed class HomeAssistantStateCache
     {
         lock (Gate)
         {
-            return new(IsStale, States.Count, StateEventCount, LastStateEventAt);
+            return new(IsStale, Entities.Count, StateEventCount, LastStateEventAt);
         }
     }
 
@@ -90,39 +95,53 @@ public sealed class HomeAssistantStateCache
     {
         lock (Gate)
         {
-            return new(IsStale, HomeAssistantEntityIndex.Build(States.Values, EntityRegistry, DeviceRegistry, AreaRegistry), Services);
+            // Readers share an immutable view until an event or registry reload changes it.
+            // State events resolve only the changed entity against the existing registry maps.
+            SnapshotEntities ??= Array.AsReadOnly(Entities.Values.ToArray());
+            return new(IsStale, SnapshotEntities, Services);
         }
     }
 }
 
-public static class HomeAssistantEntityIndex
+public sealed class HomeAssistantEntityIndex
 {
+    private readonly Dictionary<string, JsonElement> EntityMap;
+    private readonly Dictionary<string, JsonElement> DeviceMap;
+    private readonly Dictionary<string, JsonElement> AreaMap;
+
+    public HomeAssistantEntityIndex(JsonElement Entities, JsonElement Devices, JsonElement Areas)
+    {
+        EntityMap = Map(Entities, "entity_id");
+        DeviceMap = Map(Devices, "id");
+        AreaMap = Map(Areas, "area_id");
+    }
+
     private static string? Text(JsonElement Item, string Key) => Item.ValueKind == JsonValueKind.Object && Item.TryGetProperty(Key, out var Value) && Value.ValueKind == JsonValueKind.String ? Value.GetString() : null;
-    private static Dictionary<string, JsonElement> Map(JsonElement Items, string Key) => Items.ValueKind == JsonValueKind.Array ? Items.EnumerateArray().ToDictionary(Item => Text(Item, Key)!, Item => Item) : new();
+    private static Dictionary<string, JsonElement> Map(JsonElement Items, string Key) => Items.ValueKind == JsonValueKind.Array ? Items.Clone().EnumerateArray().ToDictionary(Item => Text(Item, Key)!, Item => Item) : new();
 
     public static IReadOnlyList<HomeAssistantEntity> Build(IEnumerable<JsonElement> States, JsonElement Entities, JsonElement Devices, JsonElement Areas)
     {
-        var EntityMap = Map(Entities, "entity_id");
-        var DeviceMap = Map(Devices, "id");
-        var AreaMap = Map(Areas, "area_id");
-        return States.Select(State =>
+        var Index = new HomeAssistantEntityIndex(Entities, Devices, Areas);
+        return Array.AsReadOnly(States.Select(Index.Resolve).ToArray());
+    }
+
+    public HomeAssistantEntity Resolve(JsonElement State)
+    {
+        var Id = Text(State, "entity_id")!;
+        EntityMap.TryGetValue(Id, out var Entity);
+        DeviceMap.TryGetValue(Text(Entity, "device_id") ?? "", out var Device);
+        var AreaId = Text(Entity, "area_id") ?? Text(Device, "area_id");
+        AreaMap.TryGetValue(AreaId ?? "", out var Area);
+        var Name = Text(Entity, "name") ?? Text(State.GetProperty("attributes"), "friendly_name") ?? Text(Entity, "original_name") ?? Id;
+        var Aliases = Entity.ValueKind == JsonValueKind.Object && Entity.TryGetProperty("aliases", out var Values)
+            && Values.ValueKind == JsonValueKind.Array ? Values.EnumerateArray().Where(Value => Value.ValueKind == JsonValueKind.String).Select(Value => Value.GetString()!).ToArray() : [];
+        return new HomeAssistantEntity(Id, Name, AreaId, Text(Area, "name"), State)
         {
-            var Id = Text(State, "entity_id")!;
-            EntityMap.TryGetValue(Id, out var Entity);
-            DeviceMap.TryGetValue(Text(Entity, "device_id") ?? "", out var Device);
-            var AreaId = Text(Entity, "area_id") ?? Text(Device, "area_id");
-            AreaMap.TryGetValue(AreaId ?? "", out var Area);
-            var Name = Text(Entity, "name") ?? Text(State.GetProperty("attributes"), "friendly_name") ?? Text(Entity, "original_name") ?? Id;
-            var Aliases = Entity.ValueKind == JsonValueKind.Object && Entity.TryGetProperty("aliases", out var Values)
-                && Values.ValueKind == JsonValueKind.Array ? Values.EnumerateArray().Where(Value => Value.ValueKind == JsonValueKind.String).Select(Value => Value.GetString()!).ToArray() : [];
-            return new HomeAssistantEntity(Id, Name, AreaId, Text(Area, "name"), State)
-            {
-                Aliases = Aliases,
-                DeviceId = Text(Entity, "device_id"),
-                Platform = Text(Entity, "platform"),
-                OriginalName = Text(Entity, "original_name"),
-                DeviceName = Text(Device, "name_by_user") ?? Text(Device, "name")
-            };
-        }).ToArray();
+            Aliases = Array.AsReadOnly(Aliases),
+            DeviceId = Text(Entity, "device_id"),
+            Platform = Text(Entity, "platform"),
+            OriginalName = Text(Entity, "original_name"),
+            DeviceName = Text(Device, "name_by_user") ?? Text(Device, "name")
+        };
     }
 }

@@ -14,6 +14,7 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
     SatelliteManager Satellites, ILogger<CalendarScheduler> Logger, NotificationStore? Notifications = null,
     CalendarRecipients? Recipients = null) : BackgroundService
 {
+    private readonly SemaphoreSlim DeliverySlots = new(4, 4);
     public string? LastError { get; private set; }
     public DateTimeOffset? LastChecked { get; private set; }
     protected override async Task ExecuteAsync(CancellationToken Ct)
@@ -21,12 +22,15 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
         while (!Ct.IsCancellationRequested)
         {
             LastError = null;
-            foreach (var Account in Settings.Snapshot())
-                foreach (var Calendar in Account.Calendars.Where(C => C.Enabled && C.Announce))
-                    try { await Tick(Account.Id, Calendar, DateTimeOffset.UtcNow, Ct); }
-                    catch (OperationCanceledException) when (Ct.IsCancellationRequested) { return; }
+            await Parallel.ForEachAsync(Settings.Snapshot().SelectMany(Account => Account.Calendars.Where(C => C.Enabled && C.Announce).Select(Calendar => (Account, Calendar))),
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = Ct }, async (Item, WorkerToken) =>
+                {
+                    var (Account, Calendar) = Item;
+                    try { await Tick(Account.Id, Calendar, DateTimeOffset.UtcNow, WorkerToken); }
+                    catch (OperationCanceledException) when (Ct.IsCancellationRequested) { throw; }
                     catch (Exception Error)
                     { LastError = "Calendar polling or announcement failed. Check credentials, sharing and satellite connectivity."; Logger.LogWarning("Calendar polling failed ({FailureType}).", Error.GetType().Name); }
+                });
             LastChecked = DateTimeOffset.UtcNow;
             try { await Task.Delay(TimeSpan.FromSeconds(30), Ct); } catch (OperationCanceledException) when (Ct.IsCancellationRequested) { return; }
         }
@@ -148,22 +152,28 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
                     return true; // Persisted for the client to receive; never a claim of display/playback.
                 });
             }
-            foreach (var Target in SatelliteTargets)
+            await Parallel.ForEachAsync(SatelliteTargets, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = Ct }, async (Target, DeliveryToken) =>
             {
                 // Keep the original key shape so a migrated single-target subscription cannot replay delivery.
                 var Key = AgendaKey is null
                     ? System.Text.Json.JsonSerializer.Serialize(new { Account, Calendar.Id, Event = EventId, At, Minutes, SatelliteId = Target })
                     : System.Text.Json.JsonSerializer.Serialize(new { AgendaKey, Part, SatelliteId = Target });
                 await Deliver(Key, async () => Satellites.ConnectedIds.Contains(Target) && !Satellites.IsBusy(Target)
-                    && await Satellites.AnnounceAsync(Target, Text, Speech, Ct));
-            }
+                    && await Satellites.AnnounceAsync(Target, Text, Speech, DeliveryToken));
+            });
 
             async Task Deliver(string Key, Func<Task<bool>> Send)
             {
-                if ((await Store.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) return;
+                await using var DeliveryScope = Scopes.CreateAsyncScope();
+                var DeliveryStore = DeliveryScope.ServiceProvider.GetRequiredService<LocalStore>();
+                if ((await DeliveryStore.QueryAsync("SELECT DeliveryKey FROM GoogleCalendarDeliveries WHERE DeliveryKey=$p0", Ct, Key)).Count != 0) return;
                 try
                 {
-                    if (await Send()) await Store.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
+                    await DeliverySlots.WaitAsync(Ct);
+                    bool Sent;
+                    try { Sent = await Send(); }
+                    finally { DeliverySlots.Release(); }
+                    if (Sent) await DeliveryStore.ExecuteAsync("INSERT OR IGNORE INTO GoogleCalendarDeliveries VALUES($p0,$p1)", Ct, Key, At.AddDays(1).ToUnixTimeSeconds());
                 }
                 catch (OperationCanceledException) when (Ct.IsCancellationRequested) { throw; }
                 catch (Exception Error)

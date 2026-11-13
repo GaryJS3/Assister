@@ -116,7 +116,7 @@ public static class InteractionEndpoints
             if (Report.State == "completed" && Changed && Coordinator is Assister.Conversations.ConversationCoordinator Conversations)
             {
                 if (Store.RoutingConversation(Id) is { } ConversationId)
-                    await Conversations.MarkResponseFinishedAsync(ConversationId, Http.RequestAborted, ClientId);
+                    await Conversations.MarkResponseFinishedAsync(ConversationId, Http.RequestAborted, ClientId, Store.Get(Id)!.RunId);
             }
             return Results.Ok();
         });

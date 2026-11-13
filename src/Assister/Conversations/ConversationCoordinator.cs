@@ -113,6 +113,7 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
             var Result = await Coordinator.ProcessWithHistoryAsync(Request with { ConversationId = Conversation.Id }, History, CancellationToken,
                 OnText is null ? null : Deliver, DeviceContext);
             if (OnText is not null && !Emitted) { await OnText(AuthoritativeText ? Result.Response : Result.SpokenResponse ?? VoiceFormatter.Format(Result.Response), CancellationToken); }
+            DeviceContext.LastResponseRunId = Result.TraceId;
             DeviceContext.ResponseFinishedAt = UtcNow;
             Conversation.UpdatedAt = DeviceContext.ResponseFinishedAt.Value.ToUnixTimeSeconds();
             Conversation.DeviceContextJson = JsonSerializer.Serialize(DeviceContext);
@@ -124,15 +125,30 @@ public sealed class ConversationCoordinator(AssisterDbContext Database, RequestC
         finally { Gate.Release(); }
     }
 
-    public async Task MarkResponseFinishedAsync(Guid ConversationId, CancellationToken Token, string? ExpectedDeviceId = null)
+    public async Task MarkResponseFinishedAsync(Guid ConversationId, CancellationToken Token, string? ExpectedDeviceId = null,
+        Guid? ExpectedRunId = null)
     {
-        var Conversation = await Database.Conversations.FindAsync([ConversationId], Token);
-        if (Conversation is null) return;
-        var Context = JsonSerializer.Deserialize<DeviceConversationContext>(Conversation.DeviceContextJson) ?? new();
-        if (ExpectedDeviceId is not null && Context.SourceDeviceId != ExpectedDeviceId) return;
-        Context.ResponseFinishedAt = UtcNow;
-        Conversation.UpdatedAt = UtcNow.ToUnixTimeSeconds();
-        Conversation.DeviceContextJson = JsonSerializer.Serialize(Context);
-        await Database.SaveChangesAsync(Token);
+        var Satellite = await Database.Conversations.AsNoTracking().Where(Row => Row.Id == ConversationId)
+            .Select(Row => Row.SatelliteId).SingleOrDefaultAsync(Token);
+        if (Satellite is null) return;
+        var Gate = Locks.For(Satellite);
+        await Gate.WaitAsync(Token);
+        try
+        {
+            var Conversation = await Database.Conversations.FindAsync([ConversationId], Token);
+            if (Conversation is null) return;
+            await Database.Entry(Conversation).ReloadAsync(Token);
+            if (Database.Entry(Conversation).State == EntityState.Detached) return;
+            DeviceConversationContext Context;
+            try { Context = JsonSerializer.Deserialize<DeviceConversationContext>(Conversation.DeviceContextJson) ?? new(); }
+            catch (JsonException) { return; }
+            if (ExpectedDeviceId is not null && Context.SourceDeviceId != ExpectedDeviceId) return;
+            if (Context.LastResponseRunId is not null && Context.LastResponseRunId != ExpectedRunId) return;
+            Context.ResponseFinishedAt = UtcNow;
+            Conversation.UpdatedAt = Context.ResponseFinishedAt.Value.ToUnixTimeSeconds();
+            Conversation.DeviceContextJson = JsonSerializer.Serialize(Context);
+            await Database.SaveChangesAsync(Token);
+        }
+        finally { Gate.Release(); }
     }
 }

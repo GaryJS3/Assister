@@ -13,6 +13,15 @@ namespace Assister.Tests;
 
 public sealed class AnnouncementTests
 {
+    [Fact]
+    public async Task TypedOutcomesDistinguishClarificationValidationAndUnavailableDestination()
+    {
+        var Handler = new AnnouncementHandler(new SatelliteManager(), new Speech());
+        Assert.Equal("ambiguous", (await Handler.ExecuteResultAsync("", null, new(), default)).Outcome);
+        Assert.Equal("invalid-request", (await Handler.ExecuteResultAsync(new string('x', 501), null, new(), default)).Outcome);
+        Assert.Equal("unavailable", (await Handler.ExecuteResultAsync("Hello", "all", new(), default)).Outcome);
+        Assert.Null(await Handler.TryHandleResultAsync(new("what time is it", "test"), new(), default));
+    }
     [Theory]
     [InlineData("acknowledge", true)]
     [InlineData("acknowledge alerts", true)]

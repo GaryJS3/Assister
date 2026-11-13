@@ -353,7 +353,7 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             await Satellite.SendEventAsync(new("finished", SessionId: Session.Id), Timeout.Token);
             Satellites.Stage(Satellite.SatelliteId, Session.Id, VoiceSessionState.Complete);
             if (Coordinator is Assister.Conversations.ConversationCoordinator Conversations && Result.ConversationId is { } CompletedConversation)
-                await Conversations.MarkResponseFinishedAsync(CompletedConversation, Timeout.Token);
+                await Conversations.MarkResponseFinishedAsync(CompletedConversation, Timeout.Token, ExpectedRunId: Result.TraceId);
             Run.Complete(Result.Outcome);
             return new(Session, Result, Result.Outcome);
         }

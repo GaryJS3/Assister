@@ -65,6 +65,7 @@ public static class ServiceRegistration
         Services.AddTransient<RequestCoordinator>();
         Services.AddSingleton<ConversationLocks>();
         Services.AddScoped<IRequestCoordinator, ConversationCoordinator>();
+        Services.AddSingleton<IToolSelectionPolicy, BuiltInToolSelectionPolicy>();
         Services.AddTransient<ToolLoop>();
         Services.AddTransient<ToolBroker>();
         Services.AddTransient<ToolRegistry>();

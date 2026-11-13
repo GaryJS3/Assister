@@ -13,7 +13,7 @@ public sealed class ControlNotConfirmedException(string? Response = null) : Inva
 public sealed class DeviceSearchFailedException : InvalidOperationException;
 public sealed class DeviceClarificationRequiredException(string Response) : InvalidOperationException(Response);
 
-public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBroker Broker, IConfiguration Configuration)
+public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBroker Broker, IConfiguration Configuration, IEnumerable<IToolSelectionPolicy>? SelectionPolicies = null)
 {
     public async Task<string> RespondAsync(UserRequest Request, IReadOnlyList<LlmMessage> History, CancellationToken CancellationToken, Guid TraceId = default,
         Func<string, CancellationToken, Task>? OnText = null, DeviceConversationContext? DeviceContext = null)
@@ -32,14 +32,9 @@ public sealed class ToolLoop(ILanguageModel Model, ToolRegistry Registry, ToolBr
         var CalendarChangeConfirmed = false;
         var CalendarDeletePrepared = false;
         string? CalendarDeleteDescription = null;
-        var Selected = Registry.All.Keys.Where(Name => Name.StartsWith("ha_", StringComparison.Ordinal)
-            || Name.StartsWith("calendar_", StringComparison.Ordinal) && CalendarRequest
-            || Name is "satellite_set_volume" or "satellite_announce"
-            || Name == "chat_history" || (Name.StartsWith("reminder_", StringComparison.Ordinal) && !CalendarRequest && ReminderTool.Relevant(Request.Message))
-            || Name == "memory_search" && Memory
-            || Name == "memory_store" && MemoryAuthorization.CanStore(Request.Message)
-            || Name == "memory_delete" && MemoryAuthorization.CanDelete(Request.Message)
-            || Name == "weather_forecast" && Weather == WeatherRequestKind.Forecast).ToHashSet();
+        var SelectionContext = new ToolSelectionContext(Request.Message, CalendarRequest, Memory, Weather);
+        var Policies = SelectionPolicies?.ToArray() ?? [new BuiltInToolSelectionPolicy()];
+        var Selected = Registry.All.Keys.Where(Name => Policies.Any(Policy => Policy.Includes(Name, SelectionContext))).ToHashSet();
         var Tools = Selected.Select(Name => Registry.All[Name].Definition).ToArray();
         var HistoryNeeded = Home && Regex.IsMatch(Request.Message, @"\b(?:history|historical|yesterday|earlier|afternoon|(?:this|last) (?:morning|evening|night|week|month))\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));

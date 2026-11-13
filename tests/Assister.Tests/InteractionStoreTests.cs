@@ -6,6 +6,51 @@ namespace Assister.Tests;
 
 public sealed class InteractionStoreTests
 {
+    [Fact]
+    public void ExistingDatabaseGainsIndexedPendingQueriesWithoutChangingQueuedWork()
+    {
+        var Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString());
+        var Config = Configuration(Path);
+        Guid PendingId;
+        using (var Store = new InteractionStore(Config))
+        {
+            var Conversation = Store.CreateConversation("owner");
+            var Completed = Store.Submit(Conversation.Id, "owner", new("finished", "first"));
+            Store.Append(Completed.Id, "interaction.completed", new { }, "completed");
+            PendingId = Store.Submit(Conversation.Id, "owner", new("waiting", "second")).Id;
+        }
+        using var Database = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+        { DataSource = System.IO.Path.Combine(Path, "interactions.db") }.ToString());
+        Database.Open();
+        using (var RemoveIndex = Database.CreateCommand())
+        {
+            RemoveIndex.CommandText = "DROP INDEX IX_Interactions_Status_CreatedAt";
+            RemoveIndex.ExecuteNonQuery();
+        }
+        using var Reopened = new InteractionStore(Config);
+        Assert.Equal(PendingId, Assert.Single(Reopened.Pending()));
+        // Refresh this observer connection's schema after the store's upgrade.
+        using (var Schema = Database.CreateCommand())
+        {
+            Schema.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='IX_Interactions_Status_CreatedAt'";
+            Assert.Equal(1L, Schema.ExecuteScalar());
+        }
+        foreach (var Sql in new[]
+        {
+            "SELECT Id FROM Interactions WHERE Status='created' ORDER BY CreatedAt LIMIT 64",
+            "SELECT COUNT(*) FROM Interactions WHERE Status IN ('created','transcribing','running','responding')"
+        })
+        {
+            using var Explain = Database.CreateCommand();
+            Explain.CommandText = "EXPLAIN QUERY PLAN " + Sql;
+            using var Reader = Explain.ExecuteReader();
+            var Plan = new List<string>();
+            while (Reader.Read()) Plan.Add(Reader.GetString(3));
+            Assert.Contains(Plan, Step => Step.Contains("SEARCH Interactions USING", StringComparison.Ordinal));
+            Assert.DoesNotContain(Plan, Step => Step.Contains("TEMP B-TREE", StringComparison.Ordinal));
+        }
+    }
+
     private static IConfiguration Configuration(string Path) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Assister:DataPath"] = Path }).Build();
     [Fact]
     public void ContextUpdatesPersistSeparatelyAndInspectionIsBoundedAndRedacted()

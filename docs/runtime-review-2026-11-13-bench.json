@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-13",
+  "baselineCommit": "8c27748bd513b1b5466a5e0c45807160ed71afb0",
+  "sdk": "10.0.302",
+  "configuration": "Release",
+  "scope": "Offline cache microbenchmark; not end-to-end voice latency",
+  "warmupOperationsPerScenario": 100,
+  "rounds": 5,
+  "entityCount": 1000,
+  "iterations": 1000,
+  "results": [
+    {
+      "name": "before-read",
+      "elapsedMilliseconds": 1164.7617,
+      "allocatedBytes": 1074749416
+    },
+    {
+      "name": "after-read",
+      "elapsedMilliseconds": 0.0545,
+      "allocatedBytes": 48040
+    },
+    {
+      "name": "before-event-and-read",
+      "elapsedMilliseconds": 941.2782,
+      "allocatedBytes": 1074792040
+    },
+    {
+      "name": "after-event-and-read",
+      "elapsedMilliseconds": 8.6532,
+      "allocatedBytes": 8840040
+    },
+    {
+      "name": "before-read",
+      "elapsedMilliseconds": 1284.959,
+      "allocatedBytes": 1074744040
+    },
+    {
+      "name": "after-read",
+      "elapsedMilliseconds": 0.0712,
+      "allocatedBytes": 48040
+    },
+    {
+      "name": "before-event-and-read",
+      "elapsedMilliseconds": 921.117,
+      "allocatedBytes": 1074792040
+    },
+    {
+      "name": "after-event-and-read",
+      "elapsedMilliseconds": 14.4457,
+      "allocatedBytes": 8840040
+    },
+    {
+      "name": "before-read",
+      "elapsedMilliseconds": 901.5622,
+      "allocatedBytes": 1074744040
+    },
+    {
+      "name": "after-read",
+      "elapsedMilliseconds": 1.2541,
+      "allocatedBytes": 48040
+    },
+    {
+      "name": "before-event-and-read",
+      "elapsedMilliseconds": 932.6691,
+      "allocatedBytes": 1074792040
+    },
+    {
+      "name": "after-event-and-read",
+      "elapsedMilliseconds": 3.5786,
+      "allocatedBytes": 8840040
+    },
+    {
+      "name": "before-read",
+      "elapsedMilliseconds": 947.504,
+      "allocatedBytes": 1074744040
+    },
+    {
+      "name": "after-read",
+      "elapsedMilliseconds": 0.04,
+      "allocatedBytes": 48040
+    },
+    {
+      "name": "before-event-and-read",
+      "elapsedMilliseconds": 957.5262,
+      "allocatedBytes": 1074792040
+    },
+    {
+      "name": "after-event-and-read",
+      "elapsedMilliseconds": 3.8532,
+      "allocatedBytes": 8840040
+    },
+    {
+      "name": "before-read",
+      "elapsedMilliseconds": 994.9384,
+      "allocatedBytes": 1074744040
+    },
+    {
+      "name": "after-read",
+      "elapsedMilliseconds": 0.047,
+      "allocatedBytes": 48040
+    },
+    {
+      "name": "before-event-and-read",
+      "elapsedMilliseconds": 957.2282,
+      "allocatedBytes": 1074792040
+    },
+    {
+      "name": "after-event-and-read",
+      "elapsedMilliseconds": 3.8236,
+      "allocatedBytes": 8840040
+    }
+  ]
+}

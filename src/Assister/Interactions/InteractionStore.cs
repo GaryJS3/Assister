@@ -42,6 +42,7 @@ public sealed class InteractionStore : IDisposable
                 PRIMARY KEY(InteractionId,Sequence));
             CREATE INDEX IF NOT EXISTS IX_Interactions_Conversation ON Interactions(ConversationId,CreatedAt);
             CREATE INDEX IF NOT EXISTS IX_Interactions_RunId ON Interactions(RunId);
+            CREATE INDEX IF NOT EXISTS IX_Interactions_Status_CreatedAt ON Interactions(Status,CreatedAt);
             CREATE TABLE IF NOT EXISTS ClientAttachments(Id TEXT PRIMARY KEY, Owner TEXT NOT NULL, Metadata TEXT NOT NULL, Content BLOB NOT NULL, ExtractedText TEXT);
             CREATE TABLE IF NOT EXISTS InteractionAttachments(InteractionId TEXT NOT NULL REFERENCES Interactions(Id), AttachmentId TEXT NOT NULL REFERENCES ClientAttachments(Id), Position INTEGER NOT NULL,
                 PRIMARY KEY(InteractionId,AttachmentId));

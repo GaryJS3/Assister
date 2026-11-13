@@ -1,6 +1,21 @@
 # Assister roadmap
 
-Updated: October 12, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
+Updated: November 13, 2026. Follow the milestone order in [PROJECT.md](PROJECT.md). Use [progress.md](progress.md) for completed work.
+
+## Current review and next implementation work
+
+The [November 13 runtime review](docs/runtime-review-2026-11-13.md) records four locally verified
+improvements: incremental HA cache snapshots, independent bounded announcement delivery,
+buffered Wyoming reads, and indexed rich-client queue polling. Current checkout validation:
+645 unit/component tests, 81 integration tests, and 20 browser-script tests pass. Deployment
+and physical-device performance for these changes remain unverified.
+
+The [follow-up implementation](docs/runtime-followups-2026-11-13.md) adds conversation/playback locking and response correlation, client read recovery, bounded independent Calendar I/O/delivery, typed announcement outcomes, and registered tool-selection policies.
+Next priorities are compiled intent caching, notification-driven interaction scheduling, diagnostic lock profiling, and further typed-module/prompt-policy migration.
+
+Use the [S0–S6 voice speedup plan](docs/voice-speedup-plan.md) for streaming/endpointing status.
+Keep physical first-useful-audio timing and cancellation/coexistence acceptance separate from
+server benchmarks. Active S3 and speculative S4 work still depend on their existing quality gates.
 
 ## Architectural rules
 
@@ -8,14 +23,15 @@ Use C#, .NET 10 and one ASP.NET Core application with logical modules. Use nativ
 
 ## Reminder follow-up
 
-Daily/weekly reminders, dashboard CRUD, and gated AI tools are deployed at 6918741
-(October 12). See [reminder reference](docs/reminders.md) and [progress](progress.md)
-for current behavior and validation. Next reminder work: physical announcement acceptance,
-one-time/relative schedules, snooze/acknowledgement, pause/resume, delivery selection,
-all-satellite announcement/notification, and command replay. External calendar integration
-remains deferred.
+The current implementation includes one-time/relative and daily/weekly reminders, dashboard
+CRUD, gated AI tools, all-satellite delivery tracking, and announcement acknowledgement.
+Google Calendar subscriptions, event tools, agendas, and notifications are also implemented.
+See the [reminder reference](docs/reminders.md), [Calendar reference](docs/google-calendars.md),
+and [progress](progress.md) for behavior and historical deployment evidence. Further work
+includes physical acceptance, snooze, pause/resume, and recorded-command replay. Existing
+implementation does not by itself establish deployed or hardware behavior.
 
-## Next: reliability and latency acceptance
+## Historical reliability and latency checkpoint
 
 The October 5 production checkpoint was `c48745f` (October 5): 207 tests pass. Assister was
 redeployed with environment and data mounts preserved; EchoMuse and the bridge were unchanged.

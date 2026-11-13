@@ -48,7 +48,7 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
         var Seen = new HashSet<Guid>();
         while (true)
         {
-            var Due = await GetNotificationsAsync(true, Token) ?? [];
+            var Due = await RecoverReadAsync(() => GetNotificationsAsync(true, Token), Token) ?? [];
             Seen.IntersectWith(Due.Select(Item => Item.Id));
             foreach (var Item in Due)
                 if (Seen.Add(Item.Id)) yield return Item;
@@ -111,7 +111,12 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
         {
             Token.ThrowIfCancellationRequested();
             // HTTP checks fail visibly for revoked credentials, invalid cursors and missing interactions.
-            using (var Check = await Http.GetAsync($"api/client/interactions/{InteractionId}/events?afterSequence={Cursor}", Token)) Check.EnsureSuccessStatusCode();
+                        await RecoverReadAsync(async () =>
+            {
+                using var Check = await Http.GetAsync($"api/client/interactions/{InteractionId}/events?afterSequence={Cursor}", Token);
+                Check.EnsureSuccessStatusCode();
+                return true;
+            }, Token);
             var Uri = new UriBuilder(new Uri(Base, $"api/client/interactions/{InteractionId}/stream?afterSequence={Cursor}&followPlayback={FollowPlayback.ToString().ToLowerInvariant()}"))
             { Scheme = Base.Scheme == "https" ? "wss" : "ws" }.Uri;
             WebSocket Socket;
@@ -141,10 +146,24 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
                 }
             }
             // A caller may resume from the terminal sequence itself; no new events will arrive in that case.
-            var Snapshot = await GetAsync(InteractionId, Token);
+            var Snapshot = await RecoverReadAsync(() => GetAsync(InteractionId, Token), Token);
             if (!FollowPlayback && Snapshot is not null && Snapshot.LastSequence <= Cursor && Snapshot.Status is "completed" or "failed" or "cancelled") yield break;
             await Task.Delay(500, Token);
             ConnectionState?.Invoke("reconnecting");
+        }
+    }
+    private async Task<T> RecoverReadAsync<T>(Func<Task<T>> Read, CancellationToken Token)
+    {
+        for (var Attempt = 0; ; Attempt++)
+        {
+            Token.ThrowIfCancellationRequested();
+            try { return await Read(); }
+            catch (HttpRequestException Error) when (Attempt < 5 && (Error.StatusCode is null
+                || Error.StatusCode is System.Net.HttpStatusCode.RequestTimeout or System.Net.HttpStatusCode.TooManyRequests
+                || (int)Error.StatusCode.Value >= 500)) { }
+            catch (OperationCanceledException) when (!Token.IsCancellationRequested && Attempt < 5) { }
+            ConnectionState?.Invoke("reconnecting");
+            await Task.Delay(Math.Min(5000, 200 * (1 << Attempt)) + Random.Shared.Next(100), Token);
         }
     }
     private async Task<WebSocket> OpenAsync(Uri Uri, CancellationToken Token)
@@ -164,7 +183,7 @@ public sealed class AssisterClient(HttpClient Http, Func<Uri, CancellationToken,
         while (true)
         {
             Token.ThrowIfCancellationRequested();
-            var Pending = await GetDeviceRequestsAsync(Token) ?? [];
+            var Pending = await RecoverReadAsync(() => GetDeviceRequestsAsync(Token), Token) ?? [];
             Seen.IntersectWith(Pending.Select(Request => Request.RequestId));
             WebSocket Socket;
             ConnectionState?.Invoke("connecting");
