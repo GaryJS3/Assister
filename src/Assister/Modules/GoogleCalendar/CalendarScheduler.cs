@@ -90,6 +90,7 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
         if (LeadTimes is null || LeadTimes.Length != 0)
         {
             var LookAhead = LeadTimes is null ? 40320 : LeadTimes.Max();
+            var Zone = TimeZoneInfo.FindSystemTimeZoneById(ZoneId);
             foreach (var Item in await Events(Now.AddMinutes(-5), Now.AddMinutes(LookAhead).AddMinutes(1)))
             {
                 if (Item["status"]?.GetValue<string>() == "cancelled" || Start(Item, ZoneId) is not { } At || At < Now.AddMinutes(-5)) continue;
@@ -101,8 +102,16 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
                     if (Due > Now || Due < Now.AddMinutes(-5)) continue;
                     var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
                     if (Title.Length > 500) Title = Title[..500];
-                    var StableText = "Upcoming event: " + Title + ". Starts " + At.ToString("MMMM d, yyyy 'at' h:mm tt zzz", CultureInfo.InvariantCulture) + ".";
-                    var Text = Minutes >= 60 ? StableText : "Upcoming event: " + Title + (Minutes == 0 ? ". Starting now." : $". Starts in {Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes))} minutes.");
+                    var Local = TimeZoneInfo.ConvertTime(At, Zone);
+                    var AllDay = Item["start"]?["date"]?.GetValue<string>();
+                    var Date = AllDay is null ? DateOnly.FromDateTime(Local.DateTime)
+                        : DateOnly.ParseExact(AllDay, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    var Day = CalendarSpeech.Date(Date, IncludeYear: true);
+                    var When = AllDay is null ? Day + " at " + CalendarSpeech.Time(Local) : Day + ", all day";
+                    var StableText = "Upcoming event: " + Title + ". Starts " + When + ".";
+                    var Remaining = Math.Max(1, (int)Math.Ceiling((At - Now).TotalMinutes));
+                    var Text = Minutes >= 60 ? StableText : "Upcoming event: " + Title + (Minutes == 0 ? ". Starting now."
+                        : $". Starts in {Remaining} {(Remaining == 1 ? "minute" : "minutes")}.");
                     await SendToRecipients(Item["id"]!.GetValue<string>(), At, Minutes, Text, StableText, Due, Minutes == 0 ? At.AddMinutes(5) : At);
                 }
             }
@@ -133,7 +142,7 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
                 {
                     if (Notifications is null || Recipients?.Available(Target) != true) return false;
                     var RetryKey = "calendar:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Key)));
-                    Notifications.Create(Target.Owner, new("reminder", StableText, RetryKey, DueAt: Due,
+                    Notifications.CreateCalendarNotification(Target.Owner, new("reminder", StableText, RetryKey, DueAt: Due,
                         ExpiresAt: Expires, TargetClientId: Target.ClientId));
                     await Task.CompletedTask;
                     return true; // Persisted for the client to receive; never a claim of display/playback.
@@ -174,7 +183,10 @@ public sealed class CalendarScheduler(CalendarStore Settings, GoogleCalendarClie
             var At = Start(Item, Zone.Id);
             if (At is null) continue;
             var Local = TimeZoneInfo.ConvertTime(At.Value, Zone);
-            var When = Item["start"]?["date"] is not null ? "All day" : Local.ToString(DateOnly.FromDateTime(Local.DateTime) == Date ? "h:mm tt" : "MMM d 'at' h:mm tt", CultureInfo.InvariantCulture);
+            var StartDate = DateOnly.FromDateTime(Local.DateTime);
+            var When = Item["start"]?["date"] is not null ? "All day"
+                : StartDate == Date ? "At " + CalendarSpeech.Time(Local)
+                : CalendarSpeech.Date(StartDate, IncludeYear: StartDate.Year != Date.Year) + " at " + CalendarSpeech.Time(Local);
             var Title = Item["summary"]?.GetValue<string>() ?? "Untitled event";
             Lines.Add(When + ": " + Title[..Math.Min(Title.Length, 500)] + ".");
         }

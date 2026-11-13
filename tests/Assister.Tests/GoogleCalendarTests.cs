@@ -163,6 +163,11 @@ public sealed class GoogleCalendarTests : IDisposable
         await Scheduler().Tick(A.Id,Calendar,Now.AddMinutes(1),default);await Scheduler().Tick(A.Id,Calendar,Now.AddMinutes(1).AddSeconds(30),default);
         var Items=Notices.List("alice","phone");Assert.Equal(2,Items.Length);Assert.All(Items,N=>Assert.Equal(Now.AddMinutes(1),N.DueAt));
         Assert.Contains(Items,N=>N.Text.Contains("No reminder"));
+        Assert.All(Items, N =>
+        {
+            Assert.Contains(Handler.EventStart!.Value.ToString("dddd, MMMM", System.Globalization.CultureInfo.InvariantCulture), N.Text);
+            Assert.DoesNotContain("+00:00", N.Text);
+        });
     }
     [Fact]
     public async Task DailyAgendaIncludesEveryPageAndEarlierAllDayEventsAndKeepsStableSnapshotForRetries()
@@ -188,6 +193,26 @@ public sealed class GoogleCalendarTests : IDisposable
         var Tomorrow=CalendarNotificationSettings.LocalTime(Date.AddDays(1),TimeOnly.Parse(Time),Zone);
         await Scheduler().Tick(A.Id,Calendar,Tomorrow.AddSeconds(30),default);
         Assert.Equal(2,Notices.List("alice","phone").Length);Assert.Contains(Notices.List("alice","phone"),N=>N.Text.Contains("No events today"));
+    }
+    [Fact]
+    public void AgendaUsesSpokenTimesAndDatesInItsConfiguredZone()
+    {
+        JsonObject Timed(string Title, string Start) => new()
+        {
+            ["summary"] = Title,
+            ["start"] = new JsonObject { ["dateTime"] = Start }
+        };
+        var Events = new[]
+        {
+            Timed("Overnight shift", "2026-11-04T04:05:00Z"),
+            Timed("Dentist", "2026-11-04T14:05:00Z"),
+            Timed("Lunch", "2026-11-04T17:00:00Z")
+        };
+        var Text = Assert.Single(CalendarScheduler.AgendaParts("Family", Events,
+            TimeZoneInfo.FindSystemTimeZoneById("America/New_York"), new(2026, 11, 4)));
+        Assert.Contains("Tuesday, November 3rd at 11 oh 5 in the evening: Overnight shift.", Text);
+        Assert.Contains("At 9 oh 5 in the morning: Dentist.", Text);
+        Assert.Contains("At noon: Lunch.", Text);
     }
     [Fact]
     public void LongAgendasAreSplitWithoutDroppingEventsAndSchedulesHandleDst()

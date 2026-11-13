@@ -53,7 +53,13 @@ public sealed partial class NotificationStore : IDisposable
         }
     }
 
-    public ClientNotification Create(string Owner, CreateNotification Request)
+    public ClientNotification Create(string Owner, CreateNotification Request) => Create(Owner, Request, KeepCalendarText: false);
+
+    // An accepted calendar delivery can outlive the scheduler process or its text formatter.
+    internal ClientNotification CreateCalendarNotification(string Owner, CreateNotification Request) =>
+        Create(Owner, Request, KeepCalendarText: true);
+
+    private ClientNotification Create(string Owner, CreateNotification Request, bool KeepCalendarText)
     {
         var Now = Clock.GetUtcNow();
         if (Request.Kind is not ("timer" or "alarm" or "reminder" or "announcement" or "notification")
@@ -70,8 +76,12 @@ public sealed partial class NotificationStore : IDisposable
             using (var Reader = Existing.ExecuteReader())
                 if (Reader.Read())
                 {
-                    if (Reader.GetString(0) != Encoded) throw new InvalidOperationException("notification_conflict");
-                    return Read(Reader.GetString(1));
+                    var SavedRequest = Reader.GetString(0);
+                    var Accepted = Read(Reader.GetString(1));
+                    if (SavedRequest != Encoded && (!KeepCalendarText
+                        || JsonSerializer.Serialize(Request with { Text = Accepted.Text }, Json) != SavedRequest))
+                        throw new InvalidOperationException("notification_conflict");
+                    return Accepted;
                 }
             var Due = Request.DueAt ?? Now;
             if (Due > Now.AddDays(365)) throw new ArgumentException("invalid_notification_schedule");
