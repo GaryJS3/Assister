@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
 using Assister.Contracts;
+using Assister.Diagnostics;
 using Assister.Satellites;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -73,6 +74,7 @@ public sealed class EchoMuseProviderTests
         foreach (var Device in new[] { "first", "second" })
         {
             await Send(Socket, new { type = "turn_start", deviceId = Device, sessionId = "shared-session-id", wakeWord = "jarvis",
+                trigger = "wakeword", wakeScore = Device == "first" ? 0.98 : 1.0, wakeThreshold = 0.975, noiseFloor = 0.012,
                 audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
             await Send(Socket, new { type = "audio", deviceId = Device, sessionId = "shared-session-id", data = "AAA=" });
             await Send(Socket, new { type = "audio_end", deviceId = Device, sessionId = "shared-session-id", reason = "speech_end" });
@@ -116,7 +118,8 @@ public sealed class EchoMuseProviderTests
         Assert.Equal(Tones ? 6 : 0, CueCount);
         Assert.Equal(2, Targets.Count); Assert.Equal(1, Logins); Assert.Equal(1, Connections);
         // No idle wait: the real controller starts continuation immediately after its completion messages.
-        await Send(Socket, new { type = "turn_start", deviceId = "second", sessionId = "immediate-continuation",
+        await Send(Socket, new { type = "turn_start", deviceId = "second", sessionId = "immediate-continuation", trigger = "continuation",
+            wakeScore = "invalid", wakeThreshold = 2, noiseFloor = -1,
             audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });
         await Send(Socket, new { type = "audio", deviceId = "second", sessionId = "immediate-continuation", data = "AAA=" });
         await Send(Socket, new { type = "audio_end", deviceId = "second", sessionId = "immediate-continuation", reason = "speech_end" });
@@ -128,6 +131,24 @@ public sealed class EchoMuseProviderTests
         await Send(Socket, new { type = "turn_finished", deviceId = "second", sessionId = "immediate-continuation", outcome = "ok" });
         while (Manager.ActiveSessionCount != 0) await Task.Delay(10, Timeout.Token);
         Assert.Equal(VoiceOwnership.OwnedByAssister, Manager.State("echomuse-first").VoiceOwnership);
+        var Store = Factory.Services.GetRequiredService<RunStore>();
+        JsonElement Activation(string Device, string Session) => Store.Snapshot()
+            .Where(Run => Run.SatelliteId == "echomuse-" + Device)
+            .SelectMany(Run => Store.Get(Run.RunId)!.Steps).Where(Step => Step.Name == "Voice activation")
+            .Select(Step => Step.Metadata!.Value).Single(Meta => Meta.GetProperty("transportSessionId").GetString() == Session);
+        foreach (var Device in Targets)
+        {
+            var Meta = Activation(Device, "shared-session-id");
+            Assert.Equal("wakeword", Meta.GetProperty("trigger").GetString());
+            Assert.Equal(Device == "first" ? 0.98 : 1.0, Meta.GetProperty("wakeScore").GetDouble());
+            Assert.Equal(0.975, Meta.GetProperty("wakeThreshold").GetDouble());
+            Assert.Equal(0.012, Meta.GetProperty("noiseFloor").GetDouble());
+        }
+        var FollowUp = Activation("second", "immediate-continuation");
+        Assert.Equal("continuation", FollowUp.GetProperty("trigger").GetString());
+        Assert.Equal(JsonValueKind.Null, FollowUp.GetProperty("wakeScore").ValueKind);
+        Assert.Equal(JsonValueKind.Null, FollowUp.GetProperty("wakeThreshold").ValueKind);
+        Assert.Equal(JsonValueKind.Null, FollowUp.GetProperty("noiseFloor").ValueKind);
         // Cancel through the public API during capture, then prove the next turn can play.
         await Send(Socket, new { type = "turn_start", deviceId = "first", sessionId = "capture-to-cancel",
             audio = new { sampleRate = 16000, sampleWidth = 2, channels = 1, encoding = "pcm_s16le" } });

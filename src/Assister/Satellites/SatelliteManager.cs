@@ -7,7 +7,9 @@ using System.Runtime.CompilerServices;
 namespace Assister.Satellites;
 
 public sealed record SatelliteEvent(string Type, string? Text = null, Guid? SessionId = null, Guid? ConversationId = null);
-public sealed record VoiceActivation(string TransportSessionId, string? WakeWord, DateTimeOffset ReceivedAt, bool AcknowledgementOnly = false);
+public sealed record VoiceTriggerDetails(string? Trigger, double? WakeScore, double? WakeThreshold, double? NoiseFloor);
+public sealed record VoiceActivation(string TransportSessionId, string? WakeWord, DateTimeOffset ReceivedAt,
+    bool AcknowledgementOnly = false, VoiceTriggerDetails? Details = null);
 public interface IVoiceActivationContext
 {
     VoiceActivation? Activation { get; }

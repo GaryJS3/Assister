@@ -66,7 +66,8 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             await Request.Finished.Task.WaitAsync(TimeSpan.FromSeconds(5), Token);
         }
     }
-    public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
+    public Turn? Start(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null,
+        VoiceTriggerDetails? Details = null)
     {
         lock (Gate)
         {
@@ -74,10 +75,11 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             // Pipeline cleanup may finish just before the provider releases its old turn.
             if (Voice is { } Previous && (Previous.IsCancelled || Previous.PipelineFinished) && !Manager.IsBusy(SatelliteId)) { Voice = null; }
             if (Voice is not null || Announcement is not null || Manager.IsBusy(SatelliteId)) { return null; }
-            return Voice = new(this, SessionId, WakeWord, Token, AcknowledgementRequestId);
+            return Voice = new(this, SessionId, WakeWord, Token, AcknowledgementRequestId, Details);
         }
     }
-    public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
+    public async Task<Turn?> StartAsync(string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null,
+        VoiceTriggerDetails? Details = null)
     {
         Task? PreviousRelease;
         lock (Gate)
@@ -94,7 +96,7 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
             try { await PreviousRelease.WaitAsync(TimeSpan.FromSeconds(5), Token); }
             catch (TimeoutException) { return null; }
         }
-        return Start(SessionId, WakeWord, Token, AcknowledgementRequestId);
+        return Start(SessionId, WakeWord, Token, AcknowledgementRequestId, Details);
     }
     public void Release(Turn Turn)
     {
@@ -263,13 +265,14 @@ public sealed class EchoMuseConnection(string DeviceId, string Id, string Label,
         private bool PlaybackStarted;
         private TaskCompletionSource<bool>? InputEndRequest;
         private string? InputEndRequestId;
-        public Turn(EchoMuseConnection Owner, string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null)
+        public Turn(EchoMuseConnection Owner, string SessionId, string? WakeWord, CancellationToken Token, string? AcknowledgementRequestId = null,
+            VoiceTriggerDetails? Details = null)
         {
             this.Owner = Owner; this.SessionId = SessionId;
             Lifetime = CancellationTokenSource.CreateLinkedTokenSource(Token);
             Lifetime.CancelAfter(TimeSpan.FromSeconds(120));
             this.AcknowledgementRequestId = AcknowledgementRequestId;
-            Activation = new(SessionId, WakeWord, DateTimeOffset.UtcNow, AcknowledgementRequestId is not null);
+            Activation = new(SessionId, WakeWord, DateTimeOffset.UtcNow, AcknowledgementRequestId is not null, Details);
             _ = InputDeadlineAsync();
         }
         public string SessionId { get; }

@@ -30,6 +30,8 @@ public sealed class VoicePipeline(ISpeechToTextProvider Stt, ITextToSpeechProvid
             var Observed = (Satellite as IVoiceActivationContext)?.Activation;
             Activation.Metadata(new { voiceSessionId = Session.Id, ConversationId,
                 transportSessionId = Observed?.TransportSessionId, wakeWord = Observed?.WakeWord,
+                trigger = Observed?.Details?.Trigger, wakeScore = Observed?.Details?.WakeScore,
+                wakeThreshold = Observed?.Details?.WakeThreshold, noiseFloor = Observed?.Details?.NoiseFloor,
                 activationReceivedAt = Observed?.ReceivedAt, sessionCreatedAt = Session.StartedAt,
                 dispatchLatencyMilliseconds = Observed is null ? (double?)null : Math.Max(0, (Session.StartedAt - Observed.ReceivedAt).TotalMilliseconds) });
             Activation.Complete();

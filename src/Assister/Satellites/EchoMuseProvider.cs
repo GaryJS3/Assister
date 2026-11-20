@@ -129,9 +129,13 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
                 { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 bool Full; lock (Tasks) { Full = Tasks.Count(Task => !Task.IsCompleted) >= 32; }
                 if (Full) { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
+                var Sanitizer = new Diagnostics.DiagnosticSanitizer(Configuration);
                 var WakeWord = EchoMuseConnection.Text(Message, "wakeWord");
-                WakeWord = WakeWord is null ? null : new Diagnostics.DiagnosticSanitizer(Configuration).Text(WakeWord, 128);
-                var Turn = await Device.StartAsync(Session, WakeWord, Lifetime.Token, EchoMuseConnection.Text(Message, "acknowledgementRequestId"));
+                WakeWord = WakeWord is null ? null : Sanitizer.Text(WakeWord, 128);
+                var Trigger = EchoMuseConnection.Text(Message, "trigger");
+                var Details = new VoiceTriggerDetails(Trigger is null ? null : Sanitizer.Text(Trigger, 64),
+                    UnitInterval(Message, "wakeScore"), UnitInterval(Message, "wakeThreshold"), UnitInterval(Message, "noiseFloor"));
+                var Turn = await Device.StartAsync(Session, WakeWord, Lifetime.Token, EchoMuseConnection.Text(Message, "acknowledgementRequestId"), Details);
                 if (Turn is null)
                 { await Send(new { type = "turn_cancel", sessionId = Session, deviceId = DeviceId }, Lifetime.Token); continue; }
                 Manager.Update(Device.SatelliteId, State => State with { WakeWord = WakeWord ?? State.WakeWord });
@@ -257,6 +261,9 @@ public sealed class EchoMuseProvider(IConfiguration Configuration, IServiceScope
         }
     }
     private static bool True(JsonElement Item, string Name) => Item.TryGetProperty(Name, out var Value) && Value.ValueKind == JsonValueKind.True;
+    private static double? UnitInterval(JsonElement Item, string Name) =>
+        Item.TryGetProperty(Name, out var Value) && Value.ValueKind == JsonValueKind.Number
+        && Value.TryGetDouble(out var Number) && Number is >= 0 and <= 1 ? Number : null;
     private sealed class OwnershipConflict : IOException;
     public static bool ValidAudio(JsonElement Message) => Message.TryGetProperty("audio", out var Format) &&
         Format.TryGetProperty("sampleRate", out var Rate) && Rate.TryGetInt32(out var RateValue) && RateValue == 16000 &&
